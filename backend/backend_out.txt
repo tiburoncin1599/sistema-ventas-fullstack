@@ -1,0 +1,61 @@
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +83ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:52 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmCoreModule dependencies initialized[39m[38;5;3m +1014ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +5ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mUsuariosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mInventarioModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCategoriasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mClientesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPedidosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/auth}:[39m[38;5;3m +41ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/auth/registro, POST} route[39m[38;5;3m +5ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/auth/login, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mUsuariosController {/usuarios}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/usuarios, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/usuarios/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductosController {/productos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/productos, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/productos/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/productos, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/productos/:id, PUT} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/productos/:id, DELETE} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/productos/upload/:id, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mInventarioController {/inventario}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/inventario, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/inventario/alertas, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/inventario/:productoId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/inventario/:productoId, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPedidosController {/pedidos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos/usuario/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:53 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos/:id/factura, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos/:id/factura/pdf, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos/:id/factura/qr, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/pedidos/:id/estado, PUT} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCategoriasController {/categorias}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/categorias, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/categorias/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/categorias, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/categorias/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mClientesController {/clientes}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/clientes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/clientes/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/clientes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/clientes/:id, PUT} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/clientes/:id, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16900  - [39m13/05/2026, 11:00:54 a.m. [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +4ms[39m
