@@ -5,7 +5,7 @@ const protectedRoutes = ['/cuenta', '/checkout'];
 const adminRoutes = ['/admin'];
 const adminRoles = ['admin', 'inventario', 'ventas'];
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('token')?.value;
   const usuarioStr = request.cookies.get('usuario')?.value;
