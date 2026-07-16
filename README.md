@@ -46,31 +46,31 @@ sistema-ventas-fullstack
 
 ## Landing
 
-![Landing](docs/Screenshots/landing.png)
+![Landing](docs/screenshots/landing.png)
 
 ---
 
 ## Dashboard
 
-![Dashboard](docs/Screenshots/dashboard.png)
+![Dashboard](docs/screenshots/dashboard.png)
 
 ---
 
 ## Productos
 
-![Productos](docs/Screenshots/products.png)
+![Productos](docs/screenshots/products.png)
 
 ---
 
 ## Inventario
 
-![Inventario](docs/Screenshots/stock.png)
+![Inventario](docs/screenshots/stock.png)
 
 ---
 
 ## Usuarios
 
-![Usuarios](docs/Screenshots/users.png)
+![Usuarios](docs/screenshots/users.png)
 
 ---
 
@@ -78,23 +78,23 @@ sistema-ventas-fullstack
 
 ### Dashboard
 
-![Dashboard App](docs/Screenshots/app-dashboard.png)
+![Dashboard App](docs/screenshots/app-dashboard.png)
 
 ### Productos
 
-![Productos App](docs/Screenshots/app-products.png)
+![Productos App](docs/screenshots/app-products.png)
 
 ### Pedidos
 
-![Pedidos](docs/Screenshots/app-orders.png)
+![Pedidos](docs/screenshots/app-orders.png)
 
 ### Inventario
 
-![Inventario App](docs/Screenshots/app-stock.png)
+![Inventario App](docs/screenshots/app-stock.png)
 
 ### Clientes
 
-![Clientes](docs/Screenshots/client.png)
+![Clientes](docs/screenshots/client.png)
 
 ---
 
