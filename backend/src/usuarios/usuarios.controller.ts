@@ -8,7 +8,9 @@ import {
   Body,
   Query,
   UseGuards,
+  Req,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UsuariosService } from './usuarios.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,8 +34,16 @@ export class UsuariosController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
-  findOne(@Param('id') id: string) {
-    return this.usuariosService.findOne(+id);
+  async findOne(
+    @Param('id') id: string,
+    @Req() req: { user?: { id: number; rol: string } },
+  ) {
+    const user = req.user as { id: number; rol: string };
+    if (user.rol !== 'admin' && user.id !== +id) {
+      throw new ForbiddenException('No tienes acceso a este usuario');
+    }
+    const usuario = await this.usuariosService.findOne(+id);
+    return omitPassword(usuario);
   }
 
   private get adminEmails(): string[] {

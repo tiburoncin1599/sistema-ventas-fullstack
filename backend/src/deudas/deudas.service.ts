@@ -70,27 +70,42 @@ export class DeudasService {
   }
 
   async pagar(id: number, montoPago: number) {
-    const deuda = await this.findOne(id);
+    if (!(montoPago > 0)) {
+      throw new BadRequestException('El monto a pagar debe ser mayor a 0');
+    }
 
+    const deuda = await this.findOne(id);
     if (deuda.estado === 'pagado') {
       throw new BadRequestException('Esta deuda ya está pagada');
     }
 
-    const nuevoPagado = deuda.monto_pagado + montoPago;
+    // Incremento atómico: evita que dos pagos simultáneos se pisen
+    const result = await this.deudasRepo
+      .createQueryBuilder()
+      .update(Deuda)
+      .set({
+        monto_pagado: () => `monto_pagado + :monto`,
+        estado: () =>
+          `CASE WHEN monto_pagado + :monto >= monto THEN 'pagado' ELSE 'parcial' END`,
+        fecha_pago: () =>
+          `CASE WHEN monto_pagado + :monto >= monto THEN NOW() ELSE fecha_pago END`,
+      })
+      .where('id = :id AND estado != :pagada AND monto_pagado + :monto <= monto', {
+        id,
+        pagada: 'pagado',
+      })
+      .setParameters({ monto: montoPago })
+      .execute();
 
-    if (nuevoPagado > deuda.monto) {
+    if (result.affected === 0) {
+      const actual = await this.findOne(id);
+      if (actual.estado === 'pagado') {
+        throw new BadRequestException('Esta deuda ya está pagada');
+      }
       throw new BadRequestException(
         'El monto a pagar excede el saldo pendiente',
       );
     }
-
-    const estaPagada = nuevoPagado >= deuda.monto;
-
-    await this.deudasRepo.update(id, {
-      monto_pagado: nuevoPagado,
-      estado: estaPagada ? 'pagado' : 'parcial',
-      fecha_pago: estaPagada ? new Date() : undefined,
-    });
 
     return this.findOne(id);
   }
@@ -102,19 +117,23 @@ export class DeudasService {
   }
 
   async resumen() {
-    const deudas = await this.findAll();
-    const totalPendiente = deudas
-      .filter((d) => d.estado !== 'pagado')
-      .reduce((sum, d) => sum + (d.monto - d.monto_pagado), 0);
-    const totalPagado = deudas
-      .filter((d) => d.estado === 'pagado')
-      .reduce((sum, d) => sum + d.monto_pagado, 0);
+    // Agregado en BD: no depende del límite de paginación de findAll()
+    const rows: Record<string, unknown>[] = await this.deudasRepo.query(`
+      SELECT
+        COUNT(*)::int AS total_deudas,
+        COALESCE(SUM(CASE WHEN estado != 'pagado' THEN monto - monto_pagado ELSE 0 END), 0) AS total_pendiente,
+        COALESCE(SUM(CASE WHEN estado = 'pagado' THEN monto_pagado ELSE 0 END), 0) AS total_pagado,
+        COUNT(*) FILTER (WHERE estado != 'pagado')::int AS deudas_pendientes,
+        COUNT(*) FILTER (WHERE estado = 'pagado')::int AS deudas_pagadas
+      FROM deudas
+    `);
+    const r = rows[0];
     return {
-      total_deudas: deudas.length,
-      total_pendiente: totalPendiente,
-      total_pagado: totalPagado,
-      deudas_pendientes: deudas.filter((d) => d.estado !== 'pagado').length,
-      deudas_pagadas: deudas.filter((d) => d.estado === 'pagado').length,
+      total_deudas: Number(r.total_deudas),
+      total_pendiente: Number(r.total_pendiente),
+      total_pagado: Number(r.total_pagado),
+      deudas_pendientes: Number(r.deudas_pendientes),
+      deudas_pagadas: Number(r.deudas_pagadas),
     };
   }
 }

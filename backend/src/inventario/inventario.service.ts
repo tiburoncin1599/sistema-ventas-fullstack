@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Inventario } from './inventario.entity';
 
 @Injectable()
@@ -13,6 +13,10 @@ export class InventarioService {
     @InjectRepository(Inventario)
     private inventarioRepo: Repository<Inventario>,
   ) {}
+
+  private repo(manager?: EntityManager) {
+    return manager ? manager.getRepository(Inventario) : this.inventarioRepo;
+  }
 
   findAll(page = 1, limit = 50) {
     return this.inventarioRepo.find({
@@ -53,8 +57,9 @@ export class InventarioService {
     return this.inventarioRepo.save(nuevo);
   }
 
-  async descontar(productoId: number, cantidad: number) {
-    const result = await this.inventarioRepo
+  async descontar(productoId: number, cantidad: number, manager?: EntityManager) {
+    const repo = this.repo(manager);
+    const result = await repo
       .createQueryBuilder()
       .update(Inventario)
       .set({ cantidad: () => `cantidad - :cantidad` })
@@ -65,7 +70,7 @@ export class InventarioService {
       .setParameters({ cantidad })
       .execute();
     if (result.affected === 0) {
-      const exists = await this.inventarioRepo.findOne({
+      const exists = await repo.findOne({
         where: { producto_id: productoId },
       });
       if (!exists) {
@@ -73,11 +78,12 @@ export class InventarioService {
       }
       throw new BadRequestException('Stock insuficiente');
     }
-    return this.inventarioRepo.findOne({ where: { producto_id: productoId } });
+    return repo.findOne({ where: { producto_id: productoId } });
   }
 
-  async devolver(productoId: number, cantidad: number) {
-    const result = await this.inventarioRepo
+  async devolver(productoId: number, cantidad: number, manager?: EntityManager) {
+    const repo = this.repo(manager);
+    const result = await repo
       .createQueryBuilder()
       .update(Inventario)
       .set({ cantidad: () => `cantidad + :cantidad` })
@@ -89,6 +95,21 @@ export class InventarioService {
         'Inventario no encontrado para devolver stock',
       );
     }
-    return this.inventarioRepo.findOne({ where: { producto_id: productoId } });
+    return repo.findOne({ where: { producto_id: productoId } });
+  }
+
+  async incrementar(productoId: number, cantidad: number, manager?: EntityManager): Promise<number> {
+    const repo = this.repo(manager);
+    const result = await repo
+      .createQueryBuilder()
+      .update(Inventario)
+      .set({ cantidad: () => `cantidad + :cantidad` })
+      .where('producto_id = :productoId', { productoId })
+      .setParameters({ cantidad })
+      .returning('cantidad')
+      .execute();
+    if (result.raw?.length) return Number(result.raw[0].cantidad);
+    await repo.save(repo.create({ producto_id: productoId, cantidad }));
+    return cantidad;
   }
 }

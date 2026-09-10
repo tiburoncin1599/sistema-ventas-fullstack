@@ -23,7 +23,9 @@ export class AuthController {
   private readonly COOKIE_OPTIONS = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax' as const,
+    // Frontend (Vercel) y backend (Railway) son sitios distintos: se necesita
+    // SameSite=None para que el navegador envíe la cookie en el refresh cross-site
+    sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
     path: '/auth',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
   };
@@ -50,22 +52,24 @@ export class AuthController {
     res.clearCookie(this.REFRESH_COOKIE, { path: '/auth' });
   }
 
+  private entregarSesion(res: Response, result: { token: string; refreshToken: string; usuario: unknown }) {
+    this.setRefreshCookie(res, result.refreshToken);
+    const { refreshToken: _rt, ...data } = result;
+    return data;
+  }
+
   @Post('registro')
   @Throttle({ short: { limit: 2, ttl: 60000 } })
   async registro(@Body() body: RegistroDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.registro(body.nombre, body.email, body.password);
-    this.setRefreshCookie(res, result.refreshToken);
-    const { refreshToken, ...data } = result;
-    return data;
+    return this.entregarSesion(res, result);
   }
 
   @Post('login')
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(body.email, body.password);
-    this.setRefreshCookie(res, result.refreshToken);
-    const { refreshToken, ...data } = result;
-    return data;
+    return this.entregarSesion(res, result);
   }
 
   @Post('refresh')
@@ -75,14 +79,10 @@ export class AuthController {
       const token = req.body?.refreshToken;
       if (!token) throw new UnauthorizedException('Refresh token requerido');
       const result = await this.authService.refresh(token);
-      this.setRefreshCookie(res, result.refreshToken);
-      const { refreshToken: rt, ...data } = result;
-      return data;
+      return this.entregarSesion(res, result);
     }
     const result = await this.authService.refresh(refreshToken);
-    this.setRefreshCookie(res, result.refreshToken);
-    const { refreshToken: rt, ...data } = result;
-    return data;
+    return this.entregarSesion(res, result);
   }
 
   @Post('logout')
@@ -154,6 +154,8 @@ export class AuthController {
         googleUser.name,
       );
 
+      // La sesión de Google también recibe su refresh token en cookie httpOnly
+      this.setRefreshCookie(res, result.refreshToken);
       res.redirect(
         `${FRONTEND_URL}/auth/google/callback?token=${result.token}&usuario=${encodeURIComponent(JSON.stringify(result.usuario))}`,
       );

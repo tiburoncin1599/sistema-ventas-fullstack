@@ -16,9 +16,21 @@ export class AuditInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const method = request.method;
     const url = request.route?.path || request.url;
-    const user = request.user as { id?: number; nombre?: string; rol?: string } | undefined;
+    const user = request.user as
+      | { id?: number; nombre?: string; rol?: string }
+      | undefined;
 
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      return next.handle();
+    }
+
+    // Los pings periódicos de ubicación no se auditan para no saturar la tabla
+    if (method === 'POST' && url === '/ubicaciones') {
+      return next.handle();
+    }
+
+    // Las respuestas de auth contienen tokens JWT: no se persisten en auditoría
+    if (url.startsWith('/auth')) {
       return next.handle();
     }
 
@@ -27,25 +39,37 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap((responseBody: Record<string, unknown>) => {
         const body = responseBody as Record<string, unknown> | undefined;
-        const params = context.switchToHttp().getRequest().params as Record<string, string> | undefined;
+        const params = context.switchToHttp().getRequest().params as
+          | Record<string, string>
+          | undefined;
         const entidadId =
           (params?.id ? Number(params.id) : undefined) ??
           body?.id ??
           (body?.pedido as Record<string, unknown> | undefined)?.id ??
           (body?.deuda as Record<string, unknown> | undefined)?.id;
 
-        this.auditService.registrar({
-          accion: method === 'POST' ? 'crear' : method === 'DELETE' ? 'eliminar' : 'actualizar',
-          entidad,
-          entidad_id: entidadId ? Number(entidadId) : undefined,
-          valor_nuevo: method !== 'DELETE' ? (body as Record<string, unknown>) : undefined,
-          usuario_id: user?.id,
-          usuario_nombre: user?.nombre,
-          usuario_rol: user?.rol,
-          ip: request.ip,
-        }).catch((err) => {
-          console.error('Error al registrar auditoría:', err);
-        });
+        this.auditService
+          .registrar({
+            accion:
+              method === 'POST'
+                ? 'crear'
+                : method === 'DELETE'
+                  ? 'eliminar'
+                  : 'actualizar',
+            entidad,
+            entidad_id: entidadId ? Number(entidadId) : undefined,
+            valor_nuevo:
+              method !== 'DELETE'
+                ? (body as Record<string, unknown>)
+                : undefined,
+            usuario_id: user?.id,
+            usuario_nombre: user?.nombre,
+            usuario_rol: user?.rol,
+            ip: request.ip,
+          })
+          .catch((err) => {
+            console.error('Error al registrar auditoría:', err);
+          });
       }),
     );
   }

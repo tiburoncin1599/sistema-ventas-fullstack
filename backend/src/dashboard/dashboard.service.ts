@@ -6,7 +6,7 @@ import { DataSource } from 'typeorm';
 export class DashboardService {
   constructor(@InjectDataSource() private dataSource: DataSource) {}
 
-  async obtenerMetricas() {
+  async obtenerMetricas(rol: string) {
     const hoy = new Date();
     const inicioHoy = new Date(hoy);
     inicioHoy.setHours(0, 0, 0, 0);
@@ -16,46 +16,37 @@ export class DashboardService {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const inicioAnio = new Date(hoy.getFullYear(), 0, 1);
 
-    const [
-      ventasHoy,
-      ventasSemana,
-      ventasMes,
-      totales,
-      productosMasVendidos,
-      stockBajo,
-      ultimosPedidos,
-      clientesRecientes,
-      ventasPorMes,
-    ] = await Promise.all([
-      this.ventasEnRango(inicioHoy, hoy),
-      this.ventasEnRango(inicioSemana, hoy),
-      this.ventasEnRango(inicioMes, hoy),
-      this.totalesGlobales(),
-      this.productosMasVendidos(),
-      this.stockBajo(),
-      this.ultimosPedidos(),
-      this.clientesRecientes(),
-      this.ventasPorMes(),
-    ]);
-
-    return {
-      ventasHoy,
-      ventasSemana,
-      ventasMes,
-      totales,
-      productosMasVendidos,
-      stockBajo,
-      ultimosPedidos,
-      clientesRecientes,
-      ventasPorMes,
+    const componentes: Record<string, Promise<unknown>> = {
+      ventasHoy: this.ventasEnRango(inicioHoy, hoy),
+      ventasSemana: this.ventasEnRango(inicioSemana, hoy),
+      ventasMes: this.ventasEnRango(inicioMes, hoy),
+      totales: this.totalesGlobales(),
+      productosMasVendidos: this.productosMasVendidos(),
+      stockBajo: this.stockBajo(),
+      ultimosPedidos: this.ultimosPedidos(),
+      clientesRecientes: this.clientesRecientes(),
+      ventasPorMes: this.ventasPorMes(),
     };
+
+    const claves =
+      rol === 'ventas'
+        ? ['ventasHoy', 'ventasSemana', 'ventasMes', 'productosMasVendidos', 'ultimosPedidos', 'clientesRecientes', 'ventasPorMes']
+        : rol === 'inventario'
+          ? ['productosMasVendidos', 'stockBajo', 'ultimosPedidos']
+          : Object.keys(componentes);
+
+    const resultados = await Promise.all(
+      claves.map((clave) => componentes[clave]),
+    );
+
+    return Object.fromEntries(claves.map((clave, i) => [clave, resultados[i]]));
   }
 
   private async ventasEnRango(desde: Date, hasta: Date) {
     const result = await this.dataSource.query(
       `SELECT
         COUNT(*)::int AS total_pedidos,
-        COALESCE(SUM(total), 0) AS total_vendido,
+        COALESCE(SUM(total) FILTER (WHERE estado != 'cancelado'), 0) AS total_vendido,
         COUNT(*) FILTER (WHERE estado = 'pendiente')::int AS pendientes,
         COUNT(*) FILTER (WHERE estado = 'cancelado')::int AS cancelados
       FROM pedidos

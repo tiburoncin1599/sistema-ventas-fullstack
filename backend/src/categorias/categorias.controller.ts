@@ -21,7 +21,10 @@ export class CategoriasController {
 
   @Get()
   findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.categoriasService.findAll(Number(page) || 1, Number(limit) || 50);
+    return this.categoriasService.findAll(
+      Math.max(1, Number(page) || 1),
+      Math.min(100, Math.max(1, Number(limit) || 50)),
+    );
   }
 
   @Get(':id')

@@ -2,10 +2,11 @@ import {
   Controller,
   Get,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ReportesService } from './reportes.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -71,6 +72,24 @@ export class ReportesController {
     @Query('hasta') hasta?: string,
   ) {
     return this.reportesService.ventasPorFecha(desde, hasta);
+  }
+
+  @Get('ventas-personal-por-dia')
+  ventasPersonalPorDia(
+    @Req() req: Request,
+    @Query('usuarioId') usuarioId?: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    const user = req.user as { id: number; rol: string };
+    // Un vendedor solo puede consultar su propio rendimiento: se ignora
+    // cualquier usuarioId recibido desde el cliente.
+    const uid = user.rol === 'ventas' ? String(user.id) : usuarioId;
+    return this.reportesService.ventasPersonalPorDia(
+      uid ? +uid : undefined,
+      desde,
+      hasta,
+    );
   }
 
   @Get('ventas-por-producto')

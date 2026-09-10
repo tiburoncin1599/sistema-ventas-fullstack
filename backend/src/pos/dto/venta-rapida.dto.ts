@@ -40,6 +40,7 @@ export class VentaRapidaDto {
   @ApiProperty({ description: 'Monto recibido (efectivo)', required: false })
   @IsOptional()
   @IsNumber()
+  @Min(0)
   montoRecibido?: number;
 
   @ApiProperty({ description: 'ID del usuario que procesa', required: false })

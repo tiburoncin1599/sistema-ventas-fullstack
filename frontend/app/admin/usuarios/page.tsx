@@ -230,7 +230,7 @@ export default function AdminUsuariosPage() {
               <input type="text" placeholder="Nombre" value={form.nombre}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
                 className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-              <input type="password" placeholder="Nueva contrase\u00F1a (dejar vacío para no cambiar)" value={form.password}
+              <input type="password" placeholder="Nueva contraseña (dejar vacío para no cambiar)" value={form.password}
                 onChange={e => setForm({ ...form, password: e.target.value })}
                 className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
               {modalUsuario.email === ADMIN_EMAIL ? (

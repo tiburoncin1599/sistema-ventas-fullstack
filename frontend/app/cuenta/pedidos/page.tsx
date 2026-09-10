@@ -18,7 +18,10 @@ export default function MisPedidos() {
   const router = useRouter();
 
   useEffect(() => {
-    const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+    let usuario: { id?: number } = {};
+    try {
+      usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+    } catch {}
     if (!usuario.id) {
       router.push('/auth');
       return;
@@ -41,7 +44,7 @@ export default function MisPedidos() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       alert('Error al descargar la factura');
     }

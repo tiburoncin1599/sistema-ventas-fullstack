@@ -24,7 +24,10 @@ export class ProveedoresController {
 
   @Get()
   findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.proveedoresService.findAll(Number(page) || 1, Number(limit) || 50);
+    return this.proveedoresService.findAll(
+      Math.max(1, Number(page) || 1),
+      Math.min(100, Math.max(1, Number(limit) || 50)),
+    );
   }
 
   @Get(':id')

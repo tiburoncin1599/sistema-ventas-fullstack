@@ -10,6 +10,8 @@ export class InventarioController {
   constructor(private readonly inventarioService: InventarioService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'inventario', 'ventas')
   findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.inventarioService.findAll(Number(page) || 1, Number(limit) || 50);
   }

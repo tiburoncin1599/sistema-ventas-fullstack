@@ -1,4 +1,10 @@
-import { IsOptional, IsString, MinLength, IsIn } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MinLength,
+  IsIn,
+  IsBoolean,
+} from 'class-validator';
 
 export class ActualizarUsuarioDto {
   @IsOptional()
@@ -17,5 +23,6 @@ export class ActualizarUsuarioDto {
   rol?: string;
 
   @IsOptional()
+  @IsBoolean()
   activo?: boolean;
 }

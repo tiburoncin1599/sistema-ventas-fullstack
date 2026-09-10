@@ -60,7 +60,22 @@ export class ClientesService {
 
   async actualizar(id: number, data: Partial<Usuario>) {
     await this.findOne(id);
-    await this.usuariosRepo.update(id, data);
+    if (data.email) {
+      const existe = await this.usuariosRepo.findOne({
+        where: { email: data.email },
+      });
+      if (existe && existe.id !== id) {
+        throw new BadRequestException('El email ya está registrado');
+      }
+    }
+    try {
+      await this.usuariosRepo.update(id, data);
+    } catch (err) {
+      if ((err as { code?: string })?.code === '23505') {
+        throw new BadRequestException('El email ya está registrado');
+      }
+      throw err;
+    }
     return this.findOne(id);
   }
 

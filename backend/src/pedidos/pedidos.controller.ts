@@ -21,6 +21,7 @@ import { ActualizarItemDto } from './dto/actualizar-item.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { ROLES } from '../auth/roles.constant';
 import { Response, Request } from 'express';
 import * as QRCode from 'qrcode';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
@@ -35,23 +36,37 @@ export class PedidosController {
     private readonly jwtService: JwtService,
   ) {}
 
+  /** Un cliente solo puede acceder a sus propios pedidos; el personal, a todos. */
+  private async verificarAcceso(pedidoId: number, user: { id: number; rol: string }) {
+    if (user.rol === 'cliente') {
+      const pedido = await this.pedidosService.findOne(pedidoId);
+      if (pedido.usuario_id !== user.id) {
+        throw new ForbiddenException('No tienes acceso a este pedido');
+      }
+    }
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'inventario', 'ventas')
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async findAll(
     @Query('estado') estado?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const p = Number(page) || 1;
-    const l = Number(limit) || 50;
+    const p = Math.max(1, Number(page) || 1);
+    const l = Math.min(100, Math.max(1, Number(limit) || 50));
     if (estado) return this.pedidosService.findAllByEstado(estado, p, l);
     return this.pedidosService.findAll(p, l);
   }
 
   @Get('usuario/:id')
   @UseGuards(JwtAuthGuard)
-  findByUsuario(@Param('id') id: string) {
+  async findByUsuario(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as { id: number; rol: string };
+    if (user.rol === 'cliente' && user.id !== +id) {
+      throw new ForbiddenException('No tienes acceso a estos pedidos');
+    }
     return this.pedidosService.findByUsuario(+id);
   }
 
@@ -69,29 +84,32 @@ export class PedidosController {
 
   @Get(':id/factura')
   @UseGuards(JwtAuthGuard)
-  async factura(@Param('id') id: string) {
+  async factura(@Param('id') id: string, @Req() req: Request) {
+    await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     return this.pedidosService.findFactura(+id);
   }
 
   @Get(':id/factura/pdf')
   async facturaPDF(
     @Param('id') id: string,
-    @Query('token') qToken: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ) {
     try {
       const authHeader = req.headers.authorization;
-      const token = authHeader?.replace('Bearer ', '') || qToken || '';
+      const token = authHeader?.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : '';
       if (!token) {
         return res.status(401).json({
           statusCode: 401,
           message: 'Token de autenticación requerido',
         });
       }
+      let payload: { id: number; rol: string };
       try {
-        const payload = this.jwtService.verify(token);
-        (req as any).user = payload;
+        payload = this.jwtService.verify<{ id: number; rol: string }>(token);
+        (req as unknown as { user: unknown }).user = payload;
       } catch {
         return res.status(401).json({
           statusCode: 401,
@@ -99,6 +117,7 @@ export class PedidosController {
         });
       }
       const data = await this.pedidosService.findFactura(+id);
+      await this.verificarAcceso(+id, payload);
       const configuracion = await this.configuracionService.obtener();
       const pdfBuffer = await this.facturaService.generarFacturaPDF({
         ...data,
@@ -122,32 +141,33 @@ export class PedidosController {
 
   @Get(':id/factura/qr')
   @UseGuards(JwtAuthGuard)
-  async facturaQR(@Param('id') id: string, @Req() req: Request) {
+  async facturaQR(@Param('id') id: string) {
     const baseUrl =
       process.env.API_URL || 'https://web-production-c811d.up.railway.app';
-    const token = req.headers.authorization?.replace('Bearer ', '') || '';
-    const pdfUrl = token
-      ? `${baseUrl}/pedidos/${id}/factura/pdf?token=${encodeURIComponent(token)}`
-      : `${baseUrl}/pedidos/${id}/factura/pdf`;
+    const pdfUrl = `${baseUrl}/pedidos/${id}/factura/pdf`;
     const qr = await QRCode.toDataURL(pdfUrl);
     return { qr, pdf_url: pdfUrl, pedido_id: id };
   }
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  crear(@Body() body: CrearPedidoDto) {
+  crear(@Body() body: CrearPedidoDto, @Req() req: Request) {
+    const user = req.user as { id: number; rol: string };
+    // El usuario y el procesador se determinan en el servidor, no en el cliente
+    const usuarioId = user.rol === 'cliente' ? user.id : body.usuarioId || user.id;
+    const procesadoPor = user.rol === 'cliente' ? undefined : body.procesadoPor || user.id;
     return this.pedidosService.crear(
-      body.usuarioId,
+      usuarioId,
       body.direccion,
       body.items,
       body.notas,
-      body.procesadoPor,
+      procesadoPor,
     );
   }
 
   @Get('ventas/personal')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'inventario', 'ventas')
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async ventasPersonal(
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
@@ -160,36 +180,49 @@ export class PedidosController {
 
   @Put(':id/estado')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'inventario')
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   actualizarEstado(@Param('id') id: string, @Body() body: ActualizarEstadoDto) {
     return this.pedidosService.actualizarEstado(+id, body.estado);
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   eliminar(@Param('id') id: string) {
     return this.pedidosService.eliminar(+id);
   }
 
   @Post(':id/items')
   @UseGuards(JwtAuthGuard)
-  agregarItems(@Param('id') id: string, @Body() body: AgregarItemsDto) {
+  async agregarItems(
+    @Param('id') id: string,
+    @Body() body: AgregarItemsDto,
+    @Req() req: Request,
+  ) {
+    await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     return this.pedidosService.agregarItems(+id, body.items);
   }
 
   @Delete(':id/items/:itemId')
   @UseGuards(JwtAuthGuard)
-  eliminarItem(@Param('id') id: string, @Param('itemId') itemId: string) {
+  async eliminarItem(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Req() req: Request,
+  ) {
+    await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     return this.pedidosService.eliminarItem(+id, +itemId);
   }
 
   @Put(':id/items/:itemId')
   @UseGuards(JwtAuthGuard)
-  actualizarItemCantidad(
+  async actualizarItemCantidad(
     @Param('id') id: string,
     @Param('itemId') itemId: string,
     @Body() body: ActualizarItemDto,
+    @Req() req: Request,
   ) {
+    await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     return this.pedidosService.actualizarItemCantidad(
       +id,
       +itemId,

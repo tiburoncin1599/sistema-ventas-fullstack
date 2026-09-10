@@ -107,8 +107,18 @@ export class AuthService {
   }
 
   async refresh(refreshTokenStr: string) {
+    // Revocación atómica: si dos requests usan el mismo token en paralelo,
+    // solo la primera logra revocarlo (protege la rotación de tokens)
+    const revocacion = await this.refreshTokenRepo.update(
+      { token: refreshTokenStr, revocado: false },
+      { revocado: true },
+    );
+    if (!revocacion.affected) {
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
     const record = await this.refreshTokenRepo.findOne({
-      where: { token: refreshTokenStr, revocado: false },
+      where: { token: refreshTokenStr },
       relations: ['usuario'],
     });
 
@@ -119,9 +129,9 @@ export class AuthService {
     }
 
     const usuario = await this.usuariosService.findOne(record.usuario_id);
-    if (!usuario) throw new UnauthorizedException('Usuario no encontrado');
-
-    await this.refreshTokenRepo.update(record.id, { revocado: true });
+    if (!usuario || !usuario.activo) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
 
     const accessToken = this.generarAccessToken(usuario);
     const newRefreshToken = await this.generarRefreshToken(usuario.id);

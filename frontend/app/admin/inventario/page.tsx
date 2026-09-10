@@ -1,7 +1,10 @@
 'use client';
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
+import GraficoBarras from '@/components/charts/GraficoBarras';
+import { aFechaISO, rangoSemana, rangoMes, listaDias } from '@/components/charts/chart-utils';
 
 interface ItemInventario {
   id: number;
@@ -44,6 +47,14 @@ interface Pedido {
   usuario: { nombre: string };
 }
 
+interface DiaVenta {
+  fecha: string;
+  total_pedidos: number;
+  total_vendido: number;
+}
+
+type Periodo = 'semana' | 'mes';
+
 export default function AdminInventario() {
   const [inventario, setInventario] = useState<ItemInventario[]>([]);
   const [modalItem, setModalItem] = useState<ItemInventario | null>(null);
@@ -51,21 +62,73 @@ export default function AdminInventario() {
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [deudas, setDeudas] = useState<Deuda[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [ventasPersonal, setVentasPersonal] = useState<{ usuario_id: number; usuario_nombre: string; total_pedidos: number; total_vendido: number }[]>([]);
+  const [periodoRend, setPeriodoRend] = useState<Periodo>('semana');
+  const [datosRend, setDatosRend] = useState<DiaVenta[]>([]);
+  const [cargandoRend, setCargandoRend] = useState(false);
 
   useEffect(() => {
     api.get('/inventario').then(res => setInventario(res.data)).catch(() => {});
     api.get('/deudas').then(res => setDeudas(res.data)).catch(() => {});
     api.get('/pedidos').then(res => setPedidos(res.data)).catch(() => {});
+    api.get('/pedidos/ventas/personal').then(res => setVentasPersonal(res.data || [])).catch(() => {});
   }, []);
 
+  const { desde: desdeRend, hasta: hastaRend, dias: diasRend } = useMemo(() => {
+    const r = periodoRend === 'semana' ? rangoSemana() : rangoMes();
+    return { ...r, dias: listaDias(r.desde, r.hasta, periodoRend) };
+  }, [periodoRend]);
+
+  useEffect(() => {
+    setCargandoRend(true);
+    api.get('/reportes/ventas-personal-por-dia', {
+      params: { desde: aFechaISO(desdeRend), hasta: aFechaISO(hastaRend) },
+    })
+      .then(res => setDatosRend(res.data || []))
+      .catch(() => setDatosRend([]))
+      .finally(() => setCargandoRend(false));
+  }, [periodoRend, desdeRend, hastaRend]);
+
+  const serieRend = useMemo(() => {
+    const mapa = new Map(datosRend.map(d => [String(d.fecha).slice(0, 10), d]));
+    return diasRend.map(({ fecha, etiqueta }) => {
+      const regla = mapa.get(fecha);
+      return {
+        fecha,
+        etiqueta,
+        valor: Number(regla?.total_vendido || 0),
+        pedidos: Number(regla?.total_pedidos || 0),
+      };
+    });
+  }, [datosRend, diasRend]);
+
+  const resumenRend = useMemo(() => {
+    const totalVendido = serieRend.reduce((s, d) => s + d.valor, 0);
+    const totalPedidos = serieRend.reduce((s, d) => s + d.pedidos, 0);
+    const mejorDia = serieRend.reduce(
+      (mejor, d) => (d.valor > mejor.valor ? d : mejor),
+      serieRend[0] || { fecha: '', valor: 0, pedidos: 0, etiqueta: '' },
+    );
+    return { totalVendido, totalPedidos, mejorDia };
+  }, [serieRend]);
+
   const actualizar = async (productoId: number) => {
-    await api.put(`/inventario/${productoId}`, { cantidad: +nuevaCantidad });
-    const res = await api.get('/inventario');
-    setInventario(res.data);
-    setEditandoId(null);
-    setNuevaCantidad('');
-    if (modalItem?.producto_id === productoId) {
-      setModalItem(res.data.find((i: ItemInventario) => i.producto_id === productoId) || null);
+    const cantidad = Number(nuevaCantidad);
+    if (nuevaCantidad === '' || Number.isNaN(cantidad) || cantidad < 0) {
+      alert('Ingresá una cantidad válida (número mayor o igual a 0)');
+      return;
+    }
+    try {
+      await api.put(`/inventario/${productoId}`, { cantidad });
+      const res = await api.get('/inventario');
+      setInventario(res.data);
+      setEditandoId(null);
+      setNuevaCantidad('');
+      if (modalItem?.producto_id === productoId) {
+        setModalItem(res.data.find((i: ItemInventario) => i.producto_id === productoId) || null);
+      }
+    } catch {
+      alert('Error al actualizar el inventario');
     }
   };
 
@@ -209,6 +272,113 @@ export default function AdminInventario() {
               Mostrando 10 de {pedidos.length} pedidos
             </p>
           )}
+        </div>
+      </details>
+
+      {/* Rendimiento del Personal */}
+      <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
+        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📊</span>
+            <span className="font-bold text-lg dark:text-white">Rendimiento del Personal</span>
+          </div>
+          <Link href="/admin/personal" className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">Ver gráficas completas →</Link>
+        </summary>
+        <div className="p-6">
+          <div className="flex gap-2 mb-4">
+            {([['semana', 'Esta semana'], ['mes', 'Este mes']] as const).map(([p, etiqueta]) => (
+              <button
+                key={p}
+                onClick={() => setPeriodoRend(p)}
+                className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+                  periodoRend === p
+                    ? 'bg-[#005a24] text-white'
+                    : 'bg-white dark:bg-gray-800 border dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Total vendido</p>
+              <p className="text-xl font-bold mt-1">{formatCurrency(resumenRend.totalVendido)}</p>
+              <p className="text-xs text-gray-400 mt-1">Todo el personal</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Pedidos</p>
+              <p className="text-xl font-bold mt-1">{resumenRend.totalPedidos}</p>
+              <p className="text-xs text-gray-400 mt-1">{periodoRend === 'semana' ? 'esta semana' : 'este mes'}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Mejor día</p>
+              <p className="text-xl font-bold mt-1">{formatCurrency(resumenRend.mejorDia?.valor || 0)}</p>
+              <p className="text-xs text-gray-400 mt-1">{resumenRend.mejorDia?.fecha || '—'}</p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
+            <h3 className="font-bold mb-3 text-sm">
+              Ventas por día ·{' '}
+              <span className="text-gray-500 dark:text-gray-400 font-normal">
+                {aFechaISO(desdeRend)} al {aFechaISO(hastaRend)}
+              </span>
+            </h3>
+            {cargandoRend ? (
+              <p className="text-center py-12 text-gray-400">Cargando…</p>
+            ) : (
+              <div className="text-gray-900 dark:text-gray-100">
+                <GraficoBarras datos={serieRend} />
+              </div>
+            )}
+          </div>
+
+          {ventasPersonal.length > 0 && (
+            <div className="mt-4">
+              <h3 className="font-bold mb-2 text-sm dark:text-white">Detalle por vendedor</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-t dark:border-gray-700">
+                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Vendedor</th>
+                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Pedidos</th>
+                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Total vendido</th>
+                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Promedio/pedido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ventasPersonal.map(v => (
+                      <tr key={v.usuario_id} className="border-t dark:border-gray-700 dark:text-white">
+                        <td className="px-4 py-3 font-medium text-sm">{v.usuario_nombre}</td>
+                        <td className="px-4 py-3 text-sm">{v.total_pedidos}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400">{formatCurrency(v.total_vendido)}</td>
+                        <td className="px-4 py-3 text-sm">{formatCurrency(v.total_pedidos > 0 ? v.total_vendido / v.total_pedidos : 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </details>
+
+      {/* Seguimiento en Tiempo Real */}
+      <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden">
+        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📍</span>
+            <span className="font-bold text-lg dark:text-white">Seguimiento en Tiempo Real</span>
+          </div>
+          <Link href="/admin/ubicaciones" className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">Ver mapa completo →</Link>
+        </summary>
+        <div className="p-6 text-center">
+          <p className="text-gray-500 dark:text-gray-400 mb-4">Visualiza la ubicación actual de los vendedores en el mapa.</p>
+          <Link href="/admin/ubicaciones" className="inline-block bg-green-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-green-700 transition-colors">
+            Abrir mapa de seguimiento
+          </Link>
         </div>
       </details>
 

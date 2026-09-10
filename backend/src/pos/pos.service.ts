@@ -53,18 +53,46 @@ export class POSService {
     montoRecibido?: number;
     procesadoPor?: number;
   }) {
+    // Fusionar items duplicados del mismo producto
+    const cantidades = new Map<number, number>();
+    for (const item of params.items) {
+      cantidades.set(
+        item.producto_id,
+        (cantidades.get(item.producto_id) || 0) + item.cantidad,
+      );
+    }
+    const itemsUnicos = [...cantidades.entries()].map(([producto_id, cantidad]) => ({
+      producto_id,
+      cantidad,
+    }));
+
     const productos: any[] = await this.dataSource.query(
       `SELECT id, nombre, precio FROM productos WHERE id = ANY($1) AND activo = true`,
-      [params.items.map((i) => i.producto_id)],
+      [itemsUnicos.map((i) => i.producto_id)],
     );
 
-    if (productos.length !== params.items.length) {
+    if (productos.length !== itemsUnicos.length) {
       throw new BadRequestException('Uno o más productos no encontrados');
     }
 
     const precioMap = new Map(productos.map((p) => [p.id, Number(p.precio)]));
 
-    const itemsPedido = params.items.map((item) => ({
+    const totalEstimado = itemsUnicos.reduce(
+      (sum, i) => sum + (precioMap.get(i.producto_id) || 0) * i.cantidad,
+      0,
+    );
+
+    if (
+      params.metodoPago === 'efectivo' &&
+      params.montoRecibido !== undefined &&
+      params.montoRecibido < totalEstimado
+    ) {
+      throw new BadRequestException(
+        'El monto recibido es menor al total de la venta',
+      );
+    }
+
+    const itemsPedido = itemsUnicos.map((item) => ({
       producto_id: item.producto_id,
       cantidad: item.cantidad,
       precio: precioMap.get(item.producto_id) || 0,

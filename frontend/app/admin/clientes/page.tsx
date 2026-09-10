@@ -160,7 +160,7 @@ export default function AdminClientes() {
               <input placeholder="Ubicación / Dirección" value={form.ubicacion}
                 onChange={e => setForm({ ...form, ubicacion: e.target.value })}
                 className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-              <p className="text-xs text-gray-400 dark:text-gray-500">Contraseña generada autom\u00E1ticamente: cliente123</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Contraseña generada automáticamente: cliente123</p>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={guardar}

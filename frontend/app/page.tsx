@@ -11,6 +11,19 @@ interface Producto {
   imagen_url: string;
 }
 
+function ImagenProducto({ src, alt }: { src: string; alt: string }) {
+  const [fallo, setFallo] = useState(false);
+  if (fallo) return <span className="text-5xl">🧴</span>;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="object-contain w-full h-full group-hover:scale-105 transition-transform"
+      onError={() => setFallo(true)}
+    />
+  );
+}
+
 export default function Home() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [error, setError] = useState(false);
@@ -107,9 +120,7 @@ export default function Home() {
                   className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-shadow group min-w-[180px] md:min-w-[220px] w-[180px] md:w-[220px] flex-shrink-0">
                   <div className="aspect-square bg-gray-50 dark:bg-gray-700 flex items-center justify-center p-4">
                     {p.imagen_url
-                      ? <img src={`${API_URL}${p.imagen_url}`} alt={p.nombre}
-                          className="object-contain w-full h-full group-hover:scale-105 transition-transform"
-                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class=text-5xl>🧴</span>'; }} />
+                      ? <ImagenProducto src={`${API_URL}${p.imagen_url}`} alt={p.nombre} />
                       : <span className="text-5xl">🧴</span>
                     }
                   </div>

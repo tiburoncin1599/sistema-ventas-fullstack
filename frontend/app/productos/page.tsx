@@ -32,6 +32,12 @@ export default function ProductosPage() {
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  const agregarRapido = (producto: Producto, cantidad: number, texto: string) => {
+    agregar({ ...producto, cantidad });
+    setMensaje({ id: producto.id, texto });
+    setTimeout(() => setMensaje(null), 1500);
+  };
+
   return (
     <main className="max-w-6xl mx-auto px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-8">Productos</h1>
@@ -66,15 +72,13 @@ export default function ProductosPage() {
                     </p>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={(e) => { e.stopPropagation(); agregar({ ...producto, cantidad: 3 }); setMensaje({ id: producto.id, texto: '¡+3 agregado!' }); setTimeout(() => setMensaje(null), 1500); }}
-                    className="flex-1 bg-green-700 text-white text-sm font-bold py-2 rounded-lg hover:bg-green-800 transition-colors">
-                    +3
-                  </button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); agregar({ ...producto, cantidad: 6 }); setMensaje({ id: producto.id, texto: '¡+6 agregado!' }); setTimeout(() => setMensaje(null), 1500); }}
-                    className="flex-1 bg-green-700 text-white text-sm font-bold py-2 rounded-lg hover:bg-green-800 transition-colors">
-                    +6
-                  </button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); agregar({ ...producto, cantidad: 12 }); setMensaje({ id: producto.id, texto: '¡Docena agregada!' }); setTimeout(() => setMensaje(null), 2000); }}
+                  {([3, 6] as const).map(cant => (
+                    <button key={cant} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarRapido(producto, cant, `¡+${cant} agregado!`); }}
+                      className="flex-1 bg-green-700 text-white text-sm font-bold py-2 rounded-lg hover:bg-green-800 transition-colors">
+                      +{cant}
+                    </button>
+                  ))}
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarRapido(producto, 12, '¡Docena agregada!'); }}
                     className="flex-1 bg-yellow-500 text-black text-sm font-bold py-2 rounded-lg hover:bg-yellow-600 transition-colors">
                     Docena
                   </button>

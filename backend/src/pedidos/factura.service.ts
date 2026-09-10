@@ -261,9 +261,11 @@ export class FacturaService {
         doc.text('Subtotal:', 40, doc.y, { width: 100 });
         doc.text(`${moneda}${subtotal.toFixed(2)}`, 440, doc.y, { width: 100, align: 'right' });
 
-        // Impuesto
-        if (impuestoPct > 0) {
-          const impuesto = subtotal * (impuestoPct / 100);
+        // El TOTAL mostrado SIEMPRE coincide con el total registrado del pedido
+        const totalRegistrado = Number(data.pedido.total);
+
+        if (impuestoPct > 0 && totalRegistrado > subtotal) {
+          const impuesto = totalRegistrado - subtotal;
           doc.moveDown(0.5);
           doc.fontSize(11).fillColor('#333');
           doc.text(`Impuesto (${impuestoPct}%):`, 40, doc.y, { width: 150 });
@@ -276,11 +278,17 @@ export class FacturaService {
 
           doc.fillColor(green).font('Helvetica-Bold').fontSize(14);
           doc.text('TOTAL:', 40, doc.y, { width: 100 });
-          doc.text(`${moneda}${(subtotal + impuesto).toFixed(2)}`, 440, doc.y, {
+          doc.text(`${moneda}${totalRegistrado.toFixed(2)}`, 440, doc.y, {
             width: 100,
             align: 'right',
           });
         } else {
+          if (impuestoPct > 0) {
+            doc.moveDown(0.5);
+            doc.fontSize(11).fillColor('#333');
+            doc.text(`Impuesto incluido (${impuestoPct}%)`, 40, doc.y, { width: 200 });
+          }
+
           doc.moveDown(0.5);
           doc.strokeColor(green).lineWidth(1.5);
           doc.moveTo(340, doc.y).lineTo(550, doc.y).stroke();
@@ -288,7 +296,10 @@ export class FacturaService {
 
           doc.fillColor(green).font('Helvetica-Bold').fontSize(14);
           doc.text('TOTAL:', 40, doc.y, { width: 100 });
-          doc.text(`${moneda}${subtotal.toFixed(2)}`, 440, doc.y, { width: 100, align: 'right' });
+          doc.text(`${moneda}${totalRegistrado.toFixed(2)}`, 440, doc.y, {
+            width: 100,
+            align: 'right',
+          });
         }
 
         // Estado

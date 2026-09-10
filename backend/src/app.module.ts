@@ -19,27 +19,34 @@ import { ReportesModule } from './reportes/reportes.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { POSModule } from './pos/pos.module';
+import { UbicacionesModule } from './ubicaciones/ubicaciones.module';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{
-      name: 'short',
-      ttl: 1000,
-      limit: 3,
-    }, {
-      name: 'medium',
-      ttl: 10000,
-      limit: 20,
-    }, {
-      name: 'long',
-      ttl: 60000,
-      limit: 100,
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000,
+        limit: 20,
+      },
+      {
+        name: 'medium',
+        ttl: 10000,
+        limit: 100,
+      },
+      {
+        name: 'long',
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? '')
+        ? false
+        : { rejectUnauthorized: false },
       autoLoadEntities: true,
       synchronize: false,
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
@@ -60,6 +67,13 @@ import { POSModule } from './pos/pos.module';
     ProveedoresModule,
     NotificacionesModule,
     POSModule,
+    UbicacionesModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

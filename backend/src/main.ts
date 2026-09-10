@@ -18,6 +18,8 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  app.set('trust proxy', 1);
+
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads',
   });
@@ -43,7 +45,9 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Sistema Ventas ERP API')
-    .setDescription('API completa del sistema de ventas — módulos: auth, productos, pedidos, inventario, clientes, deudas, categorías, usuarios, dashboard, reportes, proveedores, auditoría, configuración, notificaciones, movimientos de inventario')
+    .setDescription(
+      'API completa del sistema de ventas — módulos: auth, productos, pedidos, inventario, clientes, deudas, categorías, usuarios, dashboard, reportes, proveedores, auditoría, configuración, notificaciones, movimientos de inventario',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .addCookieAuth('refresh_token')
@@ -62,6 +66,7 @@ async function bootstrap() {
     .addTag('Configuración', 'Configuración global del sistema')
     .addTag('Auditoría', 'Registro de actividades del sistema')
     .addTag('Notificaciones', 'Alertas y notificaciones')
+    .addTag('Ubicaciones', 'Seguimiento en tiempo real de vendedores')
     .addTag('Health', 'Estado del servidor')
     .build();
 

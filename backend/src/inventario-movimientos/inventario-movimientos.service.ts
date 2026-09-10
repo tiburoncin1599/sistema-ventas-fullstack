@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { InventarioMovimiento } from './inventario-movimiento.entity';
 import { InventarioService } from '../inventario/inventario.service';
 
@@ -12,20 +12,24 @@ export class InventarioMovimientosService {
     private inventarioService: InventarioService,
   ) {}
 
-  async registrar(params: {
-    producto_id: number;
-    tipo: string;
-    cantidad: number;
-    cantidad_anterior?: number;
-    cantidad_nueva?: number;
-    costo_unitario?: number;
-    motivo?: string;
-    referencia_id?: number;
-    referencia_tipo?: string;
-    usuario_id?: number;
-  }) {
-    const movimiento = this.movimientosRepo.create(params);
-    return this.movimientosRepo.save(movimiento);
+  async registrar(
+    params: {
+      producto_id: number;
+      tipo: string;
+      cantidad: number;
+      cantidad_anterior?: number;
+      cantidad_nueva?: number;
+      costo_unitario?: number;
+      motivo?: string;
+      referencia_id?: number;
+      referencia_tipo?: string;
+      usuario_id?: number;
+    },
+    manager?: EntityManager,
+  ) {
+    const repo = manager ? manager.getRepository(InventarioMovimiento) : this.movimientosRepo;
+    const movimiento = repo.create(params);
+    return repo.save(movimiento);
   }
 
   async listar(page = 1, limit = 50) {
@@ -59,13 +63,14 @@ export class InventarioMovimientosService {
     const inventario = await this.inventarioService.findOne(params.producto_id).catch(() => null);
     const cantAnterior = inventario?.cantidad ?? 0;
 
-    await this.inventarioService.actualizar(params.producto_id, cantAnterior + params.cantidad);
+    // Incremento atómico: evita que dos entradas concurrentes se pisen
+    const cantNueva = await this.inventarioService.incrementar(params.producto_id, params.cantidad);
 
     return this.registrar({
       ...params,
       tipo: 'entrada',
       cantidad_anterior: cantAnterior,
-      cantidad_nueva: cantAnterior + params.cantidad,
+      cantidad_nueva: cantNueva,
       referencia_tipo: 'manual',
     });
   }

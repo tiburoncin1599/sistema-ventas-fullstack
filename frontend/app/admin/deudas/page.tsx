@@ -43,6 +43,13 @@ export default function AdminDeudas() {
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
 
+  const [rolActual] = useState(() =>
+    typeof window !== 'undefined'
+      ? (JSON.parse(localStorage.getItem('usuario') || 'null') as { rol?: string } | null)?.rol
+      : undefined,
+  );
+  const puedeEditar = rolActual === 'admin' || rolActual === 'inventario';
+
   const cargar = async (filtroDesde?: string, filtroHasta?: string) => {
     const params: any = {};
     const d = filtroDesde || desde;
@@ -68,28 +75,40 @@ export default function AdminDeudas() {
 
   const crearDeuda = async () => {
     if (!formDeuda.usuarioId || !formDeuda.monto) return;
-    await api.post('/deudas', {
-      usuarioId: formDeuda.usuarioId,
-      monto: parseFloat(formDeuda.monto),
-      descripcion: formDeuda.descripcion,
-    });
-    setShowCrear(false);
-    setFormDeuda({ usuarioId: 0, monto: '', descripcion: '' });
-    cargar(desde, hasta);
+    try {
+      await api.post('/deudas', {
+        usuarioId: formDeuda.usuarioId,
+        monto: parseFloat(formDeuda.monto),
+        descripcion: formDeuda.descripcion,
+      });
+      setShowCrear(false);
+      setFormDeuda({ usuarioId: 0, monto: '', descripcion: '' });
+      cargar(desde, hasta);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al crear la deuda';
+      alert(msg);
+    }
   };
 
   const pagarDeuda = async () => {
     if (!showPagar || !montoPago) return;
-    await api.put(`/deudas/${showPagar.id}/pagar`, { monto: parseFloat(montoPago) });
-    setShowPagar(null);
-    setMontoPago('');
-    cargar(desde, hasta);
+    try {
+      await api.put(`/deudas/${showPagar.id}/pagar`, { monto: parseFloat(montoPago) });
+      setShowPagar(null);
+      setMontoPago('');
+      cargar(desde, hasta);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al registrar el pago';
+      alert(msg);
+    }
   };
 
   const eliminarDeuda = async (id: number) => {
     if (!confirm('¿Eliminar esta deuda?')) return;
-    await api.delete(`/deudas/${id}`);
-    cargar(desde, hasta);
+    try {
+      await api.delete(`/deudas/${id}`);
+      cargar(desde, hasta);
+    } catch { alert('Error al eliminar la deuda'); }
   };
 
   const descargarFactura = async (id: number) => {
@@ -100,7 +119,7 @@ export default function AdminDeudas() {
       a.href = url;
       a.download = `factura-deuda-${id}.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       alert('Error al descargar la factura');
     }
@@ -126,9 +145,11 @@ export default function AdminDeudas() {
           <h1 className="text-3xl font-bold dark:text-white">Gestión de Deudas</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Registro de deudas del personal con la empresa</p>
         </div>
-        <button onClick={() => setShowCrear(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700">
-          + Nueva deuda
-        </button>
+        {puedeEditar && (
+          <button onClick={() => setShowCrear(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700">
+            + Nueva deuda
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border dark:border-gray-700">
@@ -244,7 +265,7 @@ export default function AdminDeudas() {
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex gap-2">
-                                {d.estado !== 'pagado' && (
+                                {puedeEditar && d.estado !== 'pagado' && (
                                   <button onClick={() => { setShowPagar(d); setMontoPago(String(saldoPendiente(d))); }} className="text-green-600 dark:text-green-400 hover:underline text-xs font-medium">
                                     Pagar
                                   </button>
@@ -254,9 +275,11 @@ export default function AdminDeudas() {
                                     Factura
                                   </button>
                                 )}
-                                <button onClick={() => eliminarDeuda(d.id)} className="text-red-600 dark:text-red-400 hover:underline text-xs font-medium">
-                                  Eliminar
-                                </button>
+                                {puedeEditar && (
+                                  <button onClick={() => eliminarDeuda(d.id)} className="text-red-600 dark:text-red-400 hover:underline text-xs font-medium">
+                                    Eliminar
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -333,7 +356,7 @@ export default function AdminDeudas() {
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPagar(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-2 dark:text-white">Registrar Pago</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">Deuda #{showPagar.id} \u2014 {showPagar.usuario?.nombre}</p>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">Deuda #{showPagar.id} {'—'} {showPagar.usuario?.nombre}</p>
             <div className="space-y-3 mb-6">
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-400">Monto total:</span>

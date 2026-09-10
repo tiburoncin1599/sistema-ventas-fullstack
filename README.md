@@ -1,6 +1,6 @@
 # 🛒 Sistema de Ventas Full Stack
 
-Sistema Full Stack para la gestión de ventas e inventario desarrollado con arquitectura moderna. El proyecto está compuesto por una aplicación web, una API REST y una aplicación móvil para la gestión comercial.
+Sistema Full Stack para la gestión de ventas e inventario desarrollado con arquitectura moderna. El proyecto está compuesto por una aplicación web y una API REST.
 
 ---
 
@@ -19,10 +19,6 @@ Sistema Full Stack para la gestión de ventas e inventario desarrollado con arqu
 - JWT
 - Swagger
 
-## Mobile
-- React Native
-- Expo
-
 ## Base de Datos
 - PostgreSQL
 
@@ -35,7 +31,6 @@ sistema-ventas-fullstack
 │
 ├── frontend
 ├── backend
-├── mobile
 └── docs
     └── Screenshots
 ```
@@ -74,30 +69,6 @@ sistema-ventas-fullstack
 
 ---
 
-# 📱 Aplicación móvil
-
-### Dashboard
-
-![Dashboard App](docs/screenshots/app-dashboard.png)
-
-### Productos
-
-![Productos App](docs/screenshots/app-products.png)
-
-### Pedidos
-
-![Pedidos](docs/screenshots/app-orders.png)
-
-### Inventario
-
-![Inventario App](docs/screenshots/app-stock.png)
-
-### Clientes
-
-![Clientes](docs/screenshots/client.png)
-
----
-
 # ✨ Funcionalidades
 
 - Inicio de sesión
@@ -110,7 +81,6 @@ sistema-ventas-fullstack
 - Pedidos
 - Reportes
 - API REST
-- Aplicación móvil
 - Responsive Design
 
 ---
@@ -141,16 +111,6 @@ npm run dev
 cd backend
 npm install
 npm run start:dev
-```
-
----
-
-## Mobile
-
-```bash
-cd mobile
-npm install
-npx expo start
 ```
 
 ---

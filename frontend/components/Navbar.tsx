@@ -1,9 +1,9 @@
 'use client';
-'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCarrito } from '@/store/carrito';
+import { cerrarSesion } from '@/lib/api';
 import DarkModeToggle from './DarkModeToggle';
 
 function getUsuarioFromStorage(): { nombre: string; rol: string } | null {
@@ -42,12 +42,8 @@ export default function Navbar() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  const cerrarSesion = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('usuario');
-    document.cookie = 'token=; path=/; max-age=0';
-    document.cookie = 'usuario=; path=/; max-age=0';
-    window.dispatchEvent(new Event('auth-change'));
+  const cerrarSesionHandler = async () => {
+    await cerrarSesion();
     router.push('/');
   };
 
@@ -95,11 +91,11 @@ export default function Navbar() {
                   </div>
                 </Link>
                 {(usuario.rol === 'admin' || usuario.rol === 'inventario' || usuario.rol === 'ventas') && (
-                  <Link href="/admin" className="bg-[#ffd600] text-[#005a24] px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-yellow-400">
+                  <Link href={usuario.rol === 'ventas' ? '/ventas' : '/admin'} className="bg-[#ffd600] text-[#005a24] px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-yellow-400">
                     {usuario.rol === 'admin' ? 'ADMIN' : 'PANEL'}
                   </Link>
                 )}
-                <button onClick={cerrarSesion} className="text-red-200 hover:text-red-100 text-xs font-semibold bg-red-800/30 px-2.5 py-1 rounded-lg">
+                <button onClick={cerrarSesionHandler} className="text-red-200 hover:text-red-100 text-xs font-semibold bg-red-800/30 px-2.5 py-1 rounded-lg">
                   Cerrar sesión
                 </button>
               </>
@@ -153,11 +149,11 @@ export default function Navbar() {
             <>
               <p className="font-bold text-gray-800 dark:text-gray-100">Hola, {usuario.nombre}</p>
               {(usuario.rol === 'admin' || usuario.rol === 'inventario' || usuario.rol === 'ventas') && (
-                <Link href="/admin" className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Panel Admin</Link>
+                <Link href={usuario.rol === 'ventas' ? '/ventas' : '/admin'} className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Panel Admin</Link>
               )}
               <Link href="/cuenta/pedidos" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Mis pedidos</Link>
               <Link href="/carrito" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Carrito ({cantidadItems})</Link>
-              <button onClick={cerrarSesion} className="block py-2 text-red-600 dark:text-red-400 font-medium">Cerrar sesión</button>
+              <button onClick={cerrarSesionHandler} className="block py-2 text-red-600 dark:text-red-400 font-medium">Cerrar sesión</button>
             </>
           ) : (
             <>

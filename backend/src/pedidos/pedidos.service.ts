@@ -4,9 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { In, Repository, DataSource } from 'typeorm';
 import { Pedido } from './pedido.entity';
 import { DetallePedido } from './detalle-pedido.entity';
+import { Producto } from '../productos/producto.entity';
 import { InventarioService } from '../inventario/inventario.service';
 import { InventarioMovimientosService } from '../inventario-movimientos/inventario-movimientos.service';
 
@@ -95,6 +96,26 @@ export class PedidosService {
     return { pedido, detalles };
   }
 
+  /**
+   * Resuelve los precios desde la BD: el cliente NUNCA define el precio.
+   * Debe llamarse dentro de la transacción del pedido.
+   */
+  private async preciosDesdeBD(
+    manager: import('typeorm').EntityManager,
+    items: ItemPedido[],
+  ): Promise<Map<number, number>> {
+    const idsUnicos = [...new Set(items.map((i) => i.producto_id))];
+    const productos = await manager.find(Producto, {
+      where: { id: In(idsUnicos), activo: true },
+    });
+    if (productos.length !== idsUnicos.length) {
+      throw new BadRequestException(
+        'Uno o más productos no existen o están inactivos',
+      );
+    }
+    return new Map(productos.map((p) => [p.id, Number(p.precio)]));
+  }
+
   async crear(
     usuarioId: number,
     direccion: string | undefined,
@@ -106,7 +127,11 @@ export class PedidosService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const total = items.reduce((sum, i) => sum + i.precio * i.cantidad, 0);
+      const precios = await this.preciosDesdeBD(queryRunner.manager, items);
+      const total = items.reduce(
+        (sum, i) => sum + (precios.get(i.producto_id) ?? 0) * i.cantidad,
+        0,
+      );
 
       const pedido = queryRunner.manager.create(Pedido, {
         usuario_id: usuarioId,
@@ -119,19 +144,23 @@ export class PedidosService {
       const pedidoGuardado = await queryRunner.manager.save(pedido);
 
       for (const item of items) {
-        await this.inventarioService.descontar(item.producto_id, item.cantidad);
+        await this.inventarioService.descontar(
+          item.producto_id,
+          item.cantidad,
+          queryRunner.manager,
+        );
         await this.inventarioMovimientosService.registrar({
           producto_id: item.producto_id,
           tipo: 'venta',
           cantidad: item.cantidad,
           referencia_tipo: 'pedido',
           referencia_id: pedidoGuardado.id,
-        }).catch(() => {});
+        }, queryRunner.manager).catch(() => {});
         const detalle = queryRunner.manager.create(DetallePedido, {
           pedido_id: pedidoGuardado.id,
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: item.precio,
+          precio_unitario: precios.get(item.producto_id) ?? 0,
         });
         await queryRunner.manager.save(detalle);
       }
@@ -172,8 +201,44 @@ export class PedidosService {
         `No se puede cambiar de "${pedido.estado}" a "${estado}". Transiciones permitidas: ${(permitidos || []).join(', ')}`,
       );
     }
-    await this.pedidosRepo.update(id, { estado });
-    return this.findOne(id);
+
+    if (estado !== 'cancelado') {
+      await this.pedidosRepo.update(id, { estado });
+      return this.findOne(id);
+    }
+
+    // Al cancelar se devuelve el stock, dentro de una transacción
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const detalles = await queryRunner.manager.find(DetallePedido, {
+        where: { pedido_id: id },
+      });
+      for (const detalle of detalles) {
+        await this.inventarioService.devolver(
+          detalle.producto_id,
+          detalle.cantidad,
+          queryRunner.manager,
+        );
+        await this.inventarioMovimientosService.registrar({
+          producto_id: detalle.producto_id,
+          tipo: 'devolucion',
+          cantidad: detalle.cantidad,
+          referencia_tipo: 'pedido',
+          referencia_id: id,
+          motivo: 'Pedido cancelado',
+        }, queryRunner.manager).catch(() => {});
+      }
+      await queryRunner.manager.update(Pedido, id, { estado });
+      await queryRunner.commitTransaction();
+      return this.findOne(id);
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async agregarItems(pedidoId: number, items: ItemPedido[]) {
@@ -188,13 +253,19 @@ export class PedidosService {
         );
       }
 
+      const precios = await this.preciosDesdeBD(queryRunner.manager, items);
+
       for (const item of items) {
-        await this.inventarioService.descontar(item.producto_id, item.cantidad);
+        await this.inventarioService.descontar(
+          item.producto_id,
+          item.cantidad,
+          queryRunner.manager,
+        );
         const detalle = queryRunner.manager.create(DetallePedido, {
           pedido_id: pedidoId,
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: item.precio,
+          precio_unitario: precios.get(item.producto_id) ?? 0,
         });
         await queryRunner.manager.save(detalle);
       }
@@ -237,6 +308,7 @@ export class PedidosService {
       await this.inventarioService.devolver(
         detalle.producto_id,
         detalle.cantidad,
+        queryRunner.manager,
       );
       await this.inventarioMovimientosService.registrar({
         producto_id: detalle.producto_id,
@@ -245,7 +317,7 @@ export class PedidosService {
         referencia_tipo: 'pedido',
         referencia_id: pedidoId,
         motivo: 'Eliminación de item del pedido',
-      }).catch(() => {});
+      }, queryRunner.manager).catch(() => {});
       await queryRunner.manager.delete(DetallePedido, itemId);
 
       const detalles = await this.findDetallesConManager(queryRunner.manager, pedidoId);
@@ -273,21 +345,27 @@ export class PedidosService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      const pedido = await this.findOne(id);
+      // Un pedido entregado ya se vendió: no devuelve stock
+      const devolverStock = pedido.estado !== 'entregado';
       const detalles = await this.findDetalles(id);
 
-      for (const detalle of detalles) {
-        await this.inventarioService.devolver(
-          detalle.producto_id,
-          detalle.cantidad,
-        );
-        await this.inventarioMovimientosService.registrar({
-          producto_id: detalle.producto_id,
-          tipo: 'devolucion',
-          cantidad: detalle.cantidad,
-          referencia_tipo: 'pedido',
-          referencia_id: id,
-          motivo: 'Pedido eliminado',
-        }).catch(() => {});
+      if (devolverStock) {
+        for (const detalle of detalles) {
+          await this.inventarioService.devolver(
+            detalle.producto_id,
+            detalle.cantidad,
+            queryRunner.manager,
+          );
+          await this.inventarioMovimientosService.registrar({
+            producto_id: detalle.producto_id,
+            tipo: 'devolucion',
+            cantidad: detalle.cantidad,
+            referencia_tipo: 'pedido',
+            referencia_id: id,
+            motivo: 'Pedido eliminado',
+          }, queryRunner.manager).catch(() => {});
+        }
       }
 
       await queryRunner.manager.delete(DetallePedido, { pedido_id: id });
@@ -327,11 +405,16 @@ export class PedidosService {
 
       const diff = nuevaCantidad - detalle.cantidad;
       if (diff > 0) {
-        await this.inventarioService.descontar(detalle.producto_id, diff);
+        await this.inventarioService.descontar(
+          detalle.producto_id,
+          diff,
+          queryRunner.manager,
+        );
       } else if (diff < 0) {
         await this.inventarioService.devolver(
           detalle.producto_id,
           Math.abs(diff),
+          queryRunner.manager,
         );
       }
 

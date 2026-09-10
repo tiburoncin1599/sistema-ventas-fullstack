@@ -29,6 +29,7 @@ export default function DetalleProducto() {
     if (!id) return;
     api.get(`/productos/${id}`)
       .then(res => setProducto(res.data))
+      .catch(() => {})
       .finally(() => setCargando(false));
   }, [id]);
 

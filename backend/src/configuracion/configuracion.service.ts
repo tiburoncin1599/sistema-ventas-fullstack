@@ -13,8 +13,12 @@ export class ConfiguracionService {
   async obtener(): Promise<Configuracion> {
     let config = await this.configRepo.findOne({ where: { id: 1 } });
     if (!config) {
-      config = this.configRepo.create({ id: 1 });
-      config = await this.configRepo.save(config);
+      try {
+        config = await this.configRepo.save(this.configRepo.create({ id: 1 }));
+      } catch {
+        // Otra request la creó en paralelo: reintentar lectura
+        config = await this.configRepo.findOneOrFail({ where: { id: 1 } });
+      }
     }
     return config;
   }

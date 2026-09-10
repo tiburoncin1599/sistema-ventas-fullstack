@@ -8,8 +8,10 @@ import {
   Body,
   Query,
   UseGuards,
+  Req,
   Res,
   Header,
+  ForbiddenException,
 } from '@nestjs/common';
 import { DeudasService } from './deudas.service';
 import { CrearDeudaDto } from './dto/crear-deuda.dto';
@@ -87,14 +89,29 @@ export class DeudasController {
 
   @Get('usuario/:id')
   @UseGuards(JwtAuthGuard)
-  findByUsuario(@Param('id') id: string) {
+  async findByUsuario(
+    @Param('id') id: string,
+    @Req() req: { user?: { id: number; rol: string } },
+  ) {
+    const user = req.user as { id: number; rol: string };
+    if (user.rol === 'cliente' && user.id !== +id) {
+      throw new ForbiddenException('No tienes acceso a estas deudas');
+    }
     return this.deudasService.findByUsuario(+id);
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
-  findOne(@Param('id') id: string) {
-    return this.deudasService.findOne(+id);
+  async findOne(
+    @Param('id') id: string,
+    @Req() req: { user?: { id: number; rol: string } },
+  ) {
+    const deuda = await this.deudasService.findOne(+id);
+    const user = req.user as { id: number; rol: string };
+    if (user.rol === 'cliente' && deuda.usuario_id !== user.id) {
+      throw new ForbiddenException('No tienes acceso a esta deuda');
+    }
+    return deuda;
   }
 
   @Post()
@@ -123,6 +140,8 @@ export class DeudasController {
   }
 
   @Get(':id/factura/pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'inventario', 'ventas')
   @Header('Content-Type', 'application/pdf')
   @Header('Content-Disposition', 'attachment; filename=factura-deuda.pdf')
   async facturaPDF(@Param('id') id: string, @Res() res: Response) {

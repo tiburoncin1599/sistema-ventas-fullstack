@@ -5,18 +5,23 @@ import { api } from '@/lib/api';
 
 function getUsuarioFromStorage(): { nombre: string; rol: string } | null {
   if (typeof window === 'undefined') return null;
-  const u = localStorage.getItem('usuario');
-  return u ? JSON.parse(u) : null;
+  try {
+    const u = localStorage.getItem('usuario');
+    return u ? JSON.parse(u) : null;
+  } catch { return null; }
 }
 
 const seccionesAdmin = [
   { href: '/admin/productos', titulo: 'Productos', desc: 'Crear, editar y desactivar productos del catálogo', roles: ['admin', 'inventario'] },
   { href: '/admin/inventario', titulo: 'Inventario', desc: 'Controlar stock y cantidades mínimas', roles: ['admin', 'inventario'] },
   { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Administrar pedidos de clientes', roles: ['admin', 'inventario'] },
+  { href: '/ventas', titulo: 'Mi Portal de Ventas', desc: 'Registrar clientes con GPS y gestionar tus pedidos', roles: ['ventas'] },
   { href: '/admin/ventas', titulo: 'Ventas', desc: 'Historial de ventas del personal', roles: ['admin', 'inventario', 'ventas'] },
+  { href: '/admin/personal', titulo: 'Rendimiento del Personal', desc: 'Gráficas semanales y mensuales de ventas por vendedor', roles: ['admin'] },
   { href: '/admin/deudas', titulo: 'Deudas', desc: 'Deudas del personal y generación de facturas', roles: ['admin', 'inventario', 'ventas'] },
   { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestionar empleados y asignar roles (ventas, inventario)', roles: ['admin'] },
   { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registrar y administrar clientes', roles: ['admin'] },
+  { href: '/admin/ubicaciones', titulo: 'Seguimiento en Tiempo Real', desc: 'Ver la ubicación de los vendedores en el mapa', roles: ['admin', 'inventario'] },
 ];
 
 export default function AdminDashboard() {
@@ -27,6 +32,7 @@ export default function AdminDashboard() {
     usuarios: 0,
   });
   const [cargando, setCargando] = useState(true);
+  const [errorConexion, setErrorConexion] = useState(false);
   const [usuario, setUsuario] = useState<{ nombre: string; rol: string } | null>(null);
   const esAdmin = usuario?.rol === 'admin';
 
@@ -36,8 +42,10 @@ export default function AdminDashboard() {
     const peticiones: Promise<any>[] = [
       api.get('/productos'),
       api.get('/pedidos'),
-      api.get('/inventario/alertas'),
     ];
+    if (u?.rol === 'admin' || u?.rol === 'inventario') {
+      peticiones.push(api.get('/inventario/alertas'));
+    }
     if (u?.rol === 'admin') {
       peticiones.push(api.get('/usuarios'));
     }
@@ -45,10 +53,10 @@ export default function AdminDashboard() {
       setStats({
         productos: productos.data.length,
         pedidos: pedidos.data.length,
-        alertas: alertas.data.length,
+        alertas: alertas ? alertas.data.length : 0,
         usuarios: usuarios ? usuarios.data.length : 0,
       });
-    }).finally(() => setCargando(false));
+    }).catch(() => setErrorConexion(true)).finally(() => setCargando(false));
   }, []);
 
   const secciones = seccionesAdmin.filter(s => usuario && s.roles.includes(usuario.rol));
@@ -58,6 +66,13 @@ export default function AdminDashboard() {
   return (
     <main className="max-w-6xl mx-auto px-8 py-12">
       <h1 className="text-3xl font-bold mb-8 dark:text-white">Panel de Administración</h1>
+
+      {errorConexion && (
+        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-2xl p-4 mb-8 text-sm text-red-700 dark:text-red-300">
+          <strong>No se pudo conectar con el servidor.</strong> Verificá que el backend esté corriendo
+          (en su terminal debe decir <em>&quot;Nest application successfully started&quot;</em>) y refrescá esta página.
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 ${esAdmin ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-6 mb-12`}>
         <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">

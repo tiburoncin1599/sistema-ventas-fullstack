@@ -34,13 +34,25 @@ export default function AdminProductos() {
     setCategorias(cats.data);
   };
 
-  useEffect(() => { cargarDatos(); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    cargarDatos().catch(() => {}); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
+
+  const limpiarArchivo = () => {
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const cerrarModal = () => {
+    setModalProducto(null);
+    setCreando(false);
+    limpiarArchivo();
+  };
 
   const abrirNuevo = () => {
     setCreando(true);
     setModalProducto(null);
     setForm({ nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
+    limpiarArchivo();
   };
 
   const abrirEditar = (p: Producto) => {
@@ -53,6 +65,7 @@ export default function AdminProductos() {
       precio_costo: p.precio_costo ? String(parseCurrency(p.precio_costo)) : '',
       categoria_id: String(p.categoria_id || ''),
     });
+    limpiarArchivo();
   };
 
   const guardar = async () => {
@@ -82,7 +95,7 @@ export default function AdminProductos() {
 
       setModalProducto(null);
       setCreando(false);
-      if (fileRef.current) fileRef.current.value = '';
+      limpiarArchivo();
       await cargarDatos();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al guardar';
@@ -92,13 +105,17 @@ export default function AdminProductos() {
 
   const desactivar = async (id: number) => {
     if (!confirm('¿Desactivar este producto?')) return;
-    await api.delete(`/productos/${id}`);
-    await cargarDatos();
+    try {
+      await api.delete(`/productos/${id}`);
+      await cargarDatos();
+    } catch { alert('Error al desactivar el producto'); }
   };
 
   const activar = async (id: number) => {
-    await api.put(`/productos/${id}`, { activo: true });
-    await cargarDatos();
+    try {
+      await api.put(`/productos/${id}`, { activo: true });
+      await cargarDatos();
+    } catch { alert('Error al activar el producto'); }
   };
 
   const abiertos = productos.filter(p => p.activo);
@@ -158,7 +175,7 @@ export default function AdminProductos() {
       )}
 
       {(modalProducto || creando) && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => { setModalProducto(null); setCreando(false); }}>
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={cerrarModal}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-6 dark:text-white">{creando ? 'Nuevo producto' : 'Editar producto'}</h2>
             <div className="space-y-4">
@@ -194,7 +211,7 @@ export default function AdminProductos() {
                 className="flex-1 bg-green-600 text-white py-3 rounded-xl font-medium hover:bg-green-700">
                 {creando ? 'Crear producto' : 'Guardar cambios'}
               </button>
-              <button onClick={() => { setModalProducto(null); setCreando(false); }}
+              <button onClick={cerrarModal}
                 className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-medium dark:text-white">
                 Cancelar
               </button>

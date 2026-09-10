@@ -17,9 +17,29 @@ export class ReportesService {
       WHERE 1=1
     `;
     const params: unknown[] = [];
-    if (desde) { sql += ` AND creado_en >= $1`; params.push(desde); }
-    if (hasta) { sql += ` AND creado_en <= $2`; params.push(hasta); }
+    let idx = 1;
+    if (desde) { sql += ` AND creado_en >= $${idx++}`; params.push(desde); }
+    if (hasta) { sql += ` AND creado_en < ($${idx++})::date + INTERVAL '1 day'`; params.push(hasta); }
     sql += ` GROUP BY DATE(creado_en) ORDER BY fecha DESC`;
+    return this.dataSource.query(sql, params);
+  }
+
+  /** Ventas por día de un vendedor (o de todo el personal si no se indica usuarioId). */
+  async ventasPersonalPorDia(usuarioId?: number, desde?: string, hasta?: string) {
+    let sql = `
+      SELECT
+        TO_CHAR(DATE(creado_en), 'YYYY-MM-DD') AS fecha,
+        COUNT(*)::int AS total_pedidos,
+        COALESCE(SUM(total), 0) AS total_vendido
+      FROM pedidos
+      WHERE estado != 'cancelado' AND procesado_por IS NOT NULL
+    `;
+    const params: unknown[] = [];
+    let idx = 1;
+    if (usuarioId) { sql += ` AND procesado_por = $${idx++}`; params.push(usuarioId); }
+    if (desde) { sql += ` AND creado_en >= $${idx++}::date`; params.push(desde); }
+    if (hasta) { sql += ` AND creado_en < ($${idx++})::date + INTERVAL '1 day'`; params.push(hasta); }
+    sql += ` GROUP BY DATE(creado_en) ORDER BY fecha ASC`;
     return this.dataSource.query(sql, params);
   }
 
@@ -41,7 +61,7 @@ export class ReportesService {
     const params: unknown[] = [];
     let idx = 1;
     if (desde) { sql += ` AND pe.creado_en >= $${idx++}`; params.push(desde); }
-    if (hasta) { sql += ` AND pe.creado_en <= $${idx++}`; params.push(hasta); }
+    if (hasta) { sql += ` AND pe.creado_en < ($${idx++})::date + INTERVAL '1 day'`; params.push(hasta); }
     if (categoria_id) { sql += ` AND p.categoria_id = $${idx++}`; params.push(categoria_id); }
     sql += ` GROUP BY p.id, p.nombre, p.precio, c.nombre ORDER BY total_ingresos DESC`;
     return this.dataSource.query(sql, params);
@@ -61,8 +81,9 @@ export class ReportesService {
       WHERE 1=1
     `;
     const params: unknown[] = [];
-    if (desde) { sql += ` AND pe.creado_en >= $1`; params.push(desde); }
-    if (hasta) { sql += ` AND pe.creado_en <= $2`; params.push(hasta); }
+    let idxCat = 1;
+    if (desde) { sql += ` AND pe.creado_en >= $${idxCat++}`; params.push(desde); }
+    if (hasta) { sql += ` AND pe.creado_en < ($${idxCat++})::date + INTERVAL '1 day'`; params.push(hasta); }
     sql += ` GROUP BY c.id, c.nombre ORDER BY total_ingresos DESC`;
     return this.dataSource.query(sql, params);
   }
@@ -79,8 +100,9 @@ export class ReportesService {
       WHERE pe.estado != 'cancelado'
     `;
     const params: unknown[] = [];
-    if (desde) { sql += ` AND pe.creado_en >= $1`; params.push(desde); }
-    if (hasta) { sql += ` AND pe.creado_en <= $2`; params.push(hasta); }
+    let idxG = 1;
+    if (desde) { sql += ` AND pe.creado_en >= $${idxG++}`; params.push(desde); }
+    if (hasta) { sql += ` AND pe.creado_en < ($${idxG++})::date + INTERVAL '1 day'`; params.push(hasta); }
     return this.dataSource.query(sql, params);
   }
 

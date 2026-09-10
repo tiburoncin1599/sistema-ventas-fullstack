@@ -16,7 +16,10 @@ export default function CheckoutPage() {
   const router = useRouter();
 
   const confirmar = async () => {
-    const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+    let usuario: { id?: number } = {};
+    try {
+      usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+    } catch {}
     if (!usuario.id) {
       router.push('/auth');
       return;
