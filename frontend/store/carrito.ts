@@ -7,6 +7,7 @@ export interface ProductoCarrito {
   nombre: string;
   precio: number;
   imagen_url?: string;
+  stock?: number;
 }
 
 interface ItemCarrito extends ProductoCarrito {
@@ -29,15 +30,17 @@ export const useCarrito = create<CarritoStore>()(
 
       agregar: (producto) => {
         const qty = producto.cantidad || 1;
-        const datos: ProductoCarrito = { id: producto.id, nombre: producto.nombre, precio: parseCurrency(producto.precio), imagen_url: producto.imagen_url };
+        const stock = typeof producto.stock === 'number' ? producto.stock : undefined;
+        const datos: ProductoCarrito = { id: producto.id, nombre: producto.nombre, precio: parseCurrency(producto.precio), imagen_url: producto.imagen_url, stock };
         const items = get().items;
         const existe = items.find(i => i.id === producto.id);
+        const max = (stock: number | undefined, q: number) => (stock != null ? Math.min(q, stock) : q);
         if (existe) {
           set({ items: items.map(i =>
-            i.id === producto.id ? { ...i, cantidad: i.cantidad + qty } : i
+            i.id === producto.id ? { ...i, cantidad: max(i.stock != null ? i.stock : stock, i.cantidad + qty) } : i
           )});
         } else {
-          set({ items: [...items, { ...datos, cantidad: qty }] });
+          set({ items: [...items, { ...datos, cantidad: max(stock, qty) }] });
         }
       },
 
@@ -49,7 +52,7 @@ export const useCarrito = create<CarritoStore>()(
           return;
         }
         set({ items: get().items.map(i =>
-          i.id === id ? { ...i, cantidad } : i
+          i.id === id ? { ...i, cantidad: i.stock != null ? Math.min(cantidad, i.stock) : cantidad } : i
         )});
       },
 

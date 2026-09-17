@@ -20,6 +20,7 @@ export default function AdminClientes() {
   const [editando, setEditando] = useState(false);
   const [creando, setCreando] = useState(false);
   const [form, setForm] = useState({ nombre: '', telefono: '', carnet: '', ubicacion: '' });
+  const [busqueda, setBusqueda] = useState('');
 
   const cargar = async () => {
     const res = await api.get('/clientes');
@@ -78,24 +79,42 @@ export default function AdminClientes() {
 
   if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando clientes...</p>;
 
-  const activos = clientes.filter(c => c.activo);
-  const inactivos = clientes.filter(c => !c.activo);
+  const q = busqueda.trim().toLowerCase();
+  const todos = q
+    ? clientes.filter(c =>
+        c.nombre.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        (c.telefono || '').includes(q) ||
+        (c.carnet || '').toLowerCase().includes(q),
+      )
+    : clientes;
+  const activos = todos.filter(c => c.activo);
+  const inactivos = todos.filter(c => !c.activo);
 
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
-      <div className="flex items-center justify-between mb-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold dark:text-white">Clientes</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{activos.length} activos, {inactivos.length} inactivos</p>
         </div>
-        <button onClick={abrirNuevo}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700">
-          + Nuevo
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="🔎 Buscar por nombre, email, teléfono o CI..."
+            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
+          />
+          <button onClick={abrirNuevo}
+            className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700">
+            + Nuevo
+          </button>
+        </div>
       </div>
 
       {activos.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">No hay clientes registrados</p>
+        <p className="text-center py-20 text-gray-500 dark:text-gray-400">{q ? 'Sin resultados para tu búsqueda.' : 'No hay clientes registrados'}</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {activos.map(c => (
@@ -143,7 +162,7 @@ export default function AdminClientes() {
 
       {creando && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setCreando(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-6 dark:text-white">Nuevo cliente</h2>
             <div className="space-y-4">
               <input placeholder="Nombre completo" value={form.nombre}
@@ -160,7 +179,7 @@ export default function AdminClientes() {
               <input placeholder="Ubicación / Dirección" value={form.ubicacion}
                 onChange={e => setForm({ ...form, ubicacion: e.target.value })}
                 className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-              <p className="text-xs text-gray-400 dark:text-gray-500">Contraseña generada automáticamente: cliente123</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Se generará una contraseña automática de acceso</p>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={guardar}
@@ -178,7 +197,7 @@ export default function AdminClientes() {
 
       {modalCliente && !editando && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setModalCliente(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-lg">
@@ -231,7 +250,7 @@ export default function AdminClientes() {
 
       {modalCliente && editando && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => { setModalCliente(null); setEditando(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-lg">
                 {modalCliente.nombre.charAt(0).toUpperCase()}

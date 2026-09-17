@@ -15,7 +15,7 @@ function AuthContent() {
 
   useEffect(() => {
     const err = params.get('error');
-    if (err) setError(decodeURIComponent(err));
+    if (err) setError(decodeURIComponent(err)); // eslint-disable-line react-hooks/set-state-in-effect
   }, [params]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -44,7 +44,7 @@ function AuthContent() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md mx-4">
 
         <div className="flex mb-6 border rounded-xl overflow-hidden">
           <button type="button"

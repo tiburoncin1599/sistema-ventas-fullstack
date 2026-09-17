@@ -45,6 +45,13 @@ interface Pedido {
   estado: string;
   creado_en: string;
   usuario: { nombre: string };
+  procesador?: { id: number; nombre: string } | null;
+}
+
+interface Vendedor {
+  id: number;
+  nombre: string;
+  email?: string;
 }
 
 interface DiaVenta {
@@ -66,6 +73,32 @@ export default function AdminInventario() {
   const [periodoRend, setPeriodoRend] = useState<Periodo>('semana');
   const [datosRend, setDatosRend] = useState<DiaVenta[]>([]);
   const [cargandoRend, setCargandoRend] = useState(false);
+  const [rol, setRol] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+  const [pendientes, setPendientes] = useState<Pedido[]>([]);
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+  const [asigSel, setAsigSel] = useState<Record<number, string>>({});
+  const [asignandoId, setAsignandoId] = useState<number | null>(null);
+  const [errorAsig, setErrorAsig] = useState('');
+
+  useEffect(() => {
+    let rolActual = '';
+    try {
+      const u = JSON.parse(localStorage.getItem('usuario') || 'null');
+      if (u?.rol) {
+        rolActual = u.rol;
+        setRol(u.rol); // eslint-disable-line react-hooks/set-state-in-effect
+      }
+    } catch {}
+    if (rolActual === 'admin' || rolActual === 'inventario') {
+      api.get('/pedidos', { params: { sinVendedor: true, limit: 50 } })
+        .then(res => setPendientes(res.data || []))
+        .catch(() => {});
+      api.get('/usuarios/vendedores')
+        .then(res => setVendedores(res.data || []))
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     api.get('/inventario').then(res => setInventario(res.data)).catch(() => {});
@@ -80,14 +113,15 @@ export default function AdminInventario() {
   }, [periodoRend]);
 
   useEffect(() => {
-    setCargandoRend(true);
+    if (rol !== 'admin') return;
+    setCargandoRend(true); // eslint-disable-line react-hooks/set-state-in-effect
     api.get('/reportes/ventas-personal-por-dia', {
       params: { desde: aFechaISO(desdeRend), hasta: aFechaISO(hastaRend) },
     })
       .then(res => setDatosRend(res.data || []))
       .catch(() => setDatosRend([]))
       .finally(() => setCargandoRend(false));
-  }, [periodoRend, desdeRend, hastaRend]);
+  }, [rol, periodoRend, desdeRend, hastaRend]);
 
   const serieRend = useMemo(() => {
     const mapa = new Map(datosRend.map(d => [String(d.fecha).slice(0, 10), d]));
@@ -134,10 +168,39 @@ export default function AdminInventario() {
 
   const alertas = inventario.filter(i => i.cantidad <= i.cantidad_minima);
 
+  const asignar = async (pedidoId: number) => {
+    const vendedorId = Number(asigSel[pedidoId]);
+    if (!vendedorId) {
+      setErrorAsig('Seleccioná un vendedor antes de asignar');
+      return;
+    }
+    setAsignandoId(pedidoId);
+    setErrorAsig('');
+    try {
+      await api.put(`/pedidos/${pedidoId}/asignar-vendedor`, { vendedorId });
+      setPendientes(p => p.filter(x => x.id !== pedidoId));
+      const res = await api.get('/pedidos');
+      setPedidos(res.data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al asignar el vendedor';
+      setErrorAsig(msg);
+    } finally {
+      setAsignandoId(null);
+    }
+  };
+
+  const qBusqueda = busqueda.trim().toLowerCase();
+  const visiblesInv = qBusqueda
+    ? inventario.filter(i =>
+        (i.producto?.nombre || '').toLowerCase().includes(qBusqueda) ||
+        (i.producto?.categoria?.nombre || '').toLowerCase().includes(qBusqueda),
+      )
+    : inventario;
+
   const agrupado = useMemo(() => {
     const map = new Map<string, ItemInventario[]>();
     const sinCat: ItemInventario[] = [];
-    for (const item of inventario) {
+    for (const item of visiblesInv) {
       const cat = item.producto?.categoria?.nombre;
       if (cat) {
         const arr = map.get(cat) || [];
@@ -149,25 +212,97 @@ export default function AdminInventario() {
     }
     const ordenado = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
     return { categorias: ordenado, sinCategoria: sinCat };
-  }, [inventario]);
+  }, [visiblesInv]);
 
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
-      <div className="flex items-center justify-between mb-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold dark:text-white">Inventario</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{inventario.length} productos en stock</p>
         </div>
-        {alertas.length > 0 && (
-          <span className="bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm font-bold">
-            {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="🔎 Buscar producto o categoría..."
+            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
+          />
+          {alertas.length > 0 && (
+            <span className="bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm font-bold">
+              {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Bandeja de asignación de vendedores */}
+      {(rol === 'admin' || rol === 'inventario') && (
+        <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
+          <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">👥</span>
+              <span className="font-bold text-lg dark:text-white">Pedidos pendientes de asignación</span>
+            </div>
+            <span className="text-sm text-gray-400">{pendientes.length} sin vendedor</span>
+          </summary>
+          <div className="overflow-x-auto">
+            {pendientes.length === 0 ? (
+              <p className="text-center py-8 text-gray-500 dark:text-gray-400">No hay pedidos sin vendedor asignado</p>
+            ) : (
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr className="border-t dark:border-gray-700">
+                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">#</th>
+                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Cliente</th>
+                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Total</th>
+                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Fecha</th>
+                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Asignar a</th>
+                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendientes.map(p => (
+                    <tr key={p.id} className="border-t dark:border-gray-700 dark:text-white">
+                      <td className="px-6 py-4 font-bold text-sm">#{p.id}</td>
+                      <td className="px-6 py-4 text-sm">{p.usuario?.nombre}</td>
+                      <td className="px-6 py-4 text-sm font-medium">{formatCurrency(p.total)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{new Date(p.creado_en).toLocaleDateString()}</td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={asigSel[p.id] || ''}
+                          onChange={e => setAsigSel(s => ({ ...s, [p.id]: e.target.value }))}
+                          className="border dark:border-gray-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white w-full sm:w-52"
+                        >
+                          <option value="">— Seleccionar vendedor —</option>
+                          {vendedores.map(v => (
+                            <option key={v.id} value={v.id}>{v.nombre}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => asignar(p.id)}
+                          disabled={asignandoId === p.id}
+                          className="bg-[#005a24] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#003e19] disabled:opacity-50"
+                        >
+                          {asignandoId === p.id ? 'Asignando...' : 'Asignar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {errorAsig && <p className="px-6 py-3 text-sm text-red-600 dark:text-red-400">{errorAsig}</p>}
+          </div>
+        </details>
+      )}
 
       {/* Deudas por empleado ventas */}
       <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex items-center justify-between">
+        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <span className="text-2xl">💰</span>
             <span className="font-bold text-lg dark:text-white">Deudas del personal de ventas</span>
@@ -178,7 +313,7 @@ export default function AdminInventario() {
           {deudas.filter(d => d.usuario?.rol === 'ventas').length === 0 ? (
             <p className="text-center py-8 text-gray-500 dark:text-gray-400">No hay deudas registradas para el personal de ventas</p>
           ) : (
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="border-t dark:border-gray-700">
                   <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Empleado</th>
@@ -220,7 +355,7 @@ export default function AdminInventario() {
 
       {/* Últimos pedidos */}
       <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex items-center justify-between">
+        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <span className="text-2xl">📋</span>
             <span className="font-bold text-lg dark:text-white">Últimos pedidos registrados</span>
@@ -231,7 +366,7 @@ export default function AdminInventario() {
           {pedidos.length === 0 ? (
             <p className="text-center py-8 text-gray-500 dark:text-gray-400">No hay pedidos registrados</p>
           ) : (
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="border-t dark:border-gray-700">
                   <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">#</th>
@@ -275,9 +410,9 @@ export default function AdminInventario() {
         </div>
       </details>
 
-      {/* Rendimiento del Personal */}
+      {rol === 'admin' && (
       <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex items-center justify-between">
+        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <span className="text-2xl">📊</span>
             <span className="font-bold text-lg dark:text-white">Rendimiento del Personal</span>
@@ -339,7 +474,7 @@ export default function AdminInventario() {
             <div className="mt-4">
               <h3 className="font-bold mb-2 text-sm dark:text-white">Detalle por vendedor</h3>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[520px]">
                   <thead>
                     <tr className="border-t dark:border-gray-700">
                       <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Vendedor</th>
@@ -364,26 +499,12 @@ export default function AdminInventario() {
           )}
         </div>
       </details>
-
-      {/* Seguimiento en Tiempo Real */}
-      <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden">
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📍</span>
-            <span className="font-bold text-lg dark:text-white">Seguimiento en Tiempo Real</span>
-          </div>
-          <Link href="/admin/ubicaciones" className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">Ver mapa completo →</Link>
-        </summary>
-        <div className="p-6 text-center">
-          <p className="text-gray-500 dark:text-gray-400 mb-4">Visualiza la ubicación actual de los vendedores en el mapa.</p>
-          <Link href="/admin/ubicaciones" className="inline-block bg-green-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-green-700 transition-colors">
-            Abrir mapa de seguimiento
-          </Link>
-        </div>
-      </details>
+      )}
 
       {inventario.length === 0 ? (
         <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando inventario...</p>
+      ) : visiblesInv.length === 0 ? (
+        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda.</p>
       ) : (
         <div className="space-y-8">
           {agrupado.categorias.map(([cat, items]) => {
@@ -391,7 +512,7 @@ export default function AdminInventario() {
             const alertasCat = items.filter(i => i.cantidad <= i.cantidad_minima).length;
             return (
               <section key={cat}>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-bold dark:text-white">{cat}</h2>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -470,7 +591,7 @@ export default function AdminInventario() {
 
       {modalItem && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => { setModalItem(null); setEditandoId(null); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h2 className="text-xl font-bold dark:text-white">{modalItem.producto?.nombre}</h2>

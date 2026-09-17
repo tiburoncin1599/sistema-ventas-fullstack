@@ -34,6 +34,8 @@ const ADMIN_EMAIL = `admin.e2e.${TS}@test.com`;
 const ADMIN_PASS = 'Admin123456';
 const VENTAS_EMAIL = `ventas.e2e.${TS}@test.com`;
 const VENTAS_PASS = 'Ventas123456';
+const VENTAS2_EMAIL = `ventas2.e2e.${TS}@test.com`;
+const VENTAS2_PASS = 'Ventas2123456';
 const INV_EMAIL = `inv.e2e.${TS}@test.com`;
 const INV_PASS = 'Invent123456';
 const CLIENTE_EMAIL = `cliente.e2e.${TS}@test.com`;
@@ -48,6 +50,8 @@ let adminId: number;
 let ventasId: number;
 let invId: number;
 let clienteId: number;
+let ventas2Id: number;
+let ventas2Token: string;
 
 // ─── HELPER: REQUEST AUTENTICADO ──────────────────────────────────────
 function authReq(
@@ -120,6 +124,20 @@ beforeAll(async () => {
     .post('/auth/login')
     .send({ email: VENTAS_EMAIL, password: VENTAS_PASS });
   ventasToken = ventasLogin.body.token;
+
+  // 4b) Segundo vendedor (para probar separación entre vendedores)
+  const ventas2Res = await authReq('post', '/usuarios', adminToken).send({
+    nombre: 'Ventas2 E2E',
+    email: VENTAS2_EMAIL,
+    password: VENTAS2_PASS,
+    rol: 'ventas',
+  });
+  ventas2Id = ventas2Res.body.id;
+
+  const ventas2Login = await request(app.getHttpServer())
+    .post('/auth/login')
+    .send({ email: VENTAS2_EMAIL, password: VENTAS2_PASS });
+  ventas2Token = ventas2Login.body.token;
 
   // 5) Crear usuario inventario via admin
   const invRes = await authReq('post', '/usuarios', adminToken).send({
@@ -583,6 +601,149 @@ describe('6. Estados de pedidos', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// 6b. PEDIDOS — EDICIÓN CONTROLADA: solo editable en estado "pendiente"
+// ═══════════════════════════════════════════════════════════════════════
+describe('6b. Pedidos — edición controlada por estado', () => {
+  let pendienteId: number;
+  let itemId: number;
+  let cancelId: number;
+
+  beforeAll(async () => {
+    const pRes = await authReq('post', '/productos', adminToken).send({
+      nombre: `Prod Editable ${TS}`,
+      precio: 10,
+    });
+    const pId = pRes.body.id;
+    await authReq('put', `/inventario/${pId}`, invToken).send({
+      cantidad: 100,
+    });
+
+    const crearPedido = async () => {
+      const res = await authReq('post', '/pedidos', clienteToken).send({
+        usuarioId: clienteId,
+        items: [{ producto_id: pId, cantidad: 1, precio: 10 }],
+      });
+      expect(res.status).toBe(201);
+      return res.body.id;
+    };
+
+    pendienteId = await crearPedido();
+    cancelId = await crearPedido();
+
+    const detalle = await authReq(
+      'get',
+      `/pedidos/${pendienteId}`,
+      adminToken,
+    );
+    itemId = detalle.body.detalles[0].id;
+    expect(itemId).toBeDefined();
+  }, 30_000);
+
+  it('pendiente → modificar cantidad de item (200, editable antes de confirmar)', async () => {
+    const res = await authReq(
+      'put',
+      `/pedidos/${pendienteId}/items/${itemId}`,
+      clienteToken,
+    ).send({ cantidad: 2 });
+    expect(res.status).toBe(200);
+    expect(res.body.detalles[0].cantidad).toBe(2);
+    expect(Number(res.body.pedido.total)).toBe(20);
+  });
+
+  it('confirmado → modificar item (400, stock/venta restringidos)', async () => {
+    const estadoRes = await authReq(
+      'put',
+      `/pedidos/${pendienteId}/estado`,
+      adminToken,
+    ).send({ estado: 'confirmado' });
+    expect(estadoRes.status).toBe(200);
+
+    const res = await authReq(
+      'put',
+      `/pedidos/${pendienteId}/items/${itemId}`,
+      adminToken,
+    ).send({ cantidad: 5 });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/pendiente/i);
+  });
+
+  it('enviado → agregar item (400, restringido)', async () => {
+    const estadoRes = await authReq(
+      'put',
+      `/pedidos/${pendienteId}/estado`,
+      adminToken,
+    ).send({ estado: 'enviado' });
+    expect(estadoRes.status).toBe(200);
+
+    const res = await authReq(
+      'post',
+      `/pedidos/${pendienteId}/items`,
+      adminToken,
+    ).send({ items: [{ producto_id: pendienteId, cantidad: 1, precio: 10 }] });
+    expect(res.status).toBe(400);
+  });
+
+  it('cancelado → eliminar item (400, sin edición)', async () => {
+    const estadoRes = await authReq(
+      'put',
+      `/pedidos/${cancelId}/estado`,
+      adminToken,
+    ).send({ estado: 'cancelado' });
+    expect(estadoRes.status).toBe(200);
+
+    const res = await authReq(
+      'delete',
+      `/pedidos/${cancelId}/items/1`,
+      adminToken,
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6c. VENTAS POR PERSONAL: agregados con detalle y valores numéricos
+// ═══════════════════════════════════════════════════════════════════════
+describe('6c. Ventas por personal', () => {
+  beforeAll(async () => {
+    const pRes = await authReq('post', '/productos', adminToken).send({
+      nombre: `Prod VP ${TS}`,
+      precio: 15,
+    });
+    const pId = pRes.body.id;
+    await authReq('put', `/inventario/${pId}`, invToken).send({
+      cantidad: 100,
+    });
+
+    for (let i = 0; i < 2; i++) {
+      const res = await authReq('post', '/pedidos', adminToken).send({
+        usuarioId: clienteId,
+        items: [{ producto_id: pId, cantidad: 1, precio: 15 }],
+      });
+      expect(res.status).toBe(201);
+    }
+  }, 30_000);
+
+  it('GET /pedidos/ventas/personal → fila del vendedor con total numérico y detalle', async () => {
+    const res = await authReq('get', '/pedidos/ventas/personal', adminToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+
+    const fila = res.body.find(
+      (v: { usuario_id: number }) => v.usuario_id === adminId,
+    );
+    expect(fila).toBeDefined();
+    expect(typeof fila.total_vendido).toBe('number');
+    expect(typeof fila.total_pedidos).toBe('number');
+    expect(Array.isArray(fila.pedidos)).toBe(true);
+    expect(fila.pedidos.length).toBeGreaterThanOrEqual(2);
+    expect(fila.pedidos[0]).toHaveProperty('id');
+    expect(fila.pedidos[0]).toHaveProperty('estado');
+    expect(fila.pedidos[0]).toHaveProperty('total');
+    expect(typeof fila.pedidos[0].total).toBe('number');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // 7. INVENTARIO (entradas, salidas, kardex)
 // ═══════════════════════════════════════════════════════════════════════
 describe('7. Inventario (movimientos)', () => {
@@ -783,12 +944,15 @@ describe('8. Deudas y pagos', () => {
     expect(Number(res.body.total_deudas)).toBeGreaterThanOrEqual(1);
   });
 
-  it('POST /deudas con rol ventas → 403 Forbidden', async () => {
+  it('POST /deudas con rol ventas → 201, deuda asignada al vendedor', async () => {
     const res = await authReq('post', '/deudas', ventasToken).send({
       usuarioId: clienteId,
       monto: 100,
+      descripcion: 'Deuda venta a crédito (Ventas)',
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+    expect(res.body.vendedor_id).toBe(ventasId);
+    expect(res.body.estado).toBe('pendiente');
   });
 });
 
@@ -889,5 +1053,550 @@ describe('9. Roles y permisos', () => {
       clienteToken,
     );
     expect(res.status).toBe(403);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 10. REPORTES
+// ═══════════════════════════════════════════════════════════════════════
+describe('10. Reportes', () => {
+  it('GET /reportes/ventas-por-fecha → 200 con series por día', async () => {
+    const res = await authReq('get', '/reportes/ventas-por-fecha', adminToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    const fila = res.body[0];
+    expect(fila).toHaveProperty('fecha');
+    expect(fila).toHaveProperty('total_pedidos');
+    expect(fila).toHaveProperty('total_vendido');
+    expect(fila).toHaveProperty('cancelados');
+    expect(Number(fila.total_vendido)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('GET /reportes/ganancias → 200 con ingresos/costo/ganancia', async () => {
+    const res = await authReq('get', '/reportes/ganancias', adminToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const g = res.body[0] || {};
+    expect(Number(g.ingresos)).toBeGreaterThanOrEqual(0);
+    expect(Number(g.costo)).toBeGreaterThanOrEqual(0);
+    expect(Math.abs(Number(g.ganancia) - (Number(g.ingresos) - Number(g.costo)))).toBeLessThan(0.01);
+  });
+
+  it('GET /reportes/ventas-por-producto y /ventas-por-categoria → 200', async () => {
+    const porProducto = await authReq('get', '/reportes/ventas-por-producto', adminToken);
+    expect(porProducto.status).toBe(200);
+    expect(Array.isArray(porProducto.body)).toBe(true);
+    if (porProducto.body.length > 0) {
+      expect(porProducto.body[0]).toHaveProperty('nombre');
+      expect(porProducto.body[0]).toHaveProperty('unidades_vendidas');
+    }
+
+    const porCategoria = await authReq('get', '/reportes/ventas-por-categoria', adminToken);
+    expect(porCategoria.status).toBe(200);
+    expect(Array.isArray(porCategoria.body)).toBe(true);
+  });
+
+  it('GET /reportes/inventario y /clientes-frecuentes → 200', async () => {
+    const inv = await authReq('get', '/reportes/inventario', adminToken);
+    expect(inv.status).toBe(200);
+    expect(Array.isArray(inv.body)).toBe(true);
+
+    const clientes = await authReq('get', '/reportes/clientes-frecuentes', adminToken);
+    expect(clientes.status).toBe(200);
+    expect(Array.isArray(clientes.body)).toBe(true);
+    if (clientes.body.length > 0) {
+      expect(clientes.body[0]).toHaveProperty('nombre');
+      expect(clientes.body[0]).toHaveProperty('total_compras');
+    }
+  });
+
+  it('Reportes: rol ventas → 200; rol inventario y cliente → 403', async () => {
+    const ventasRes = await authReq('get', '/reportes/ganancias', ventasToken);
+    expect(ventasRes.status).toBe(200);
+
+    const invRes = await authReq('get', '/reportes/ganancias', invToken);
+    expect(invRes.status).toBe(403);
+
+    const clienteRes = await authReq('get', '/reportes/ganancias', clienteToken);
+    expect(clienteRes.status).toBe(403);
+  });
+
+  it('GET /reportes/ventas-personal-por-dia → un vendedor solo ve su propio rendimiento', async () => {
+    const res = await authReq(
+      'get',
+      `/reportes/ventas-personal-por-dia?usuarioId=${adminId}`,
+      ventasToken,
+    );
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('GET /reportes/exportar/csv y /exportar/pdf → 200', async () => {
+    const csv = await authReq(
+      'get',
+      `/reportes/exportar/csv?tipo=ventas-por-fecha&desde=${new Date().toISOString().slice(0, 10)}`,
+      adminToken,
+    );
+    expect(csv.status).toBe(200);
+    expect(String(csv.headers['content-type'])).toContain('text/csv');
+
+    const pdf = await authReq(
+      'get',
+      '/reportes/exportar/pdf?tipo=inventario',
+      adminToken,
+    );
+    expect(pdf.status).toBe(200);
+    expect(String(pdf.headers['content-type'])).toContain('application/pdf');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 11. Stock visible para el cliente (P1) — catálogo + validación backend
+// ══════════════════════════════════════════════════════════════════════════
+describe('11. Stock visible y limitación del cliente', () => {
+  let prodConStockId: number;
+  let prodSinStockId: number;
+
+  beforeAll(async () => {
+    const p1 = await authReq('post', '/productos', adminToken).send({
+      nombre: 'E2E Stock 5',
+      precio: 25,
+      categoria_id: 1,
+    });
+    prodConStockId = p1.body.id;
+    await authReq('put', `/productos/${prodConStockId}/activo`, adminToken).send({ activo: true });
+    await authReq('put', `/inventario/${prodConStockId}`, invToken).send({
+      cantidad: 5,
+    });
+
+    const p2 = await authReq('post', '/productos', adminToken).send({
+      nombre: 'E2E Stock 0',
+      precio: 30,
+      categoria_id: 1,
+    });
+    prodSinStockId = p2.body.id;
+    await authReq('put', `/productos/${prodSinStockId}/activo`, adminToken).send({ activo: true });
+    await authReq('put', `/inventario/${prodSinStockId}`, invToken).send({
+      cantidad: 0,
+    });
+  });
+
+  it('GET /productos (público) → incluye stock y disponible', async () => {
+    const res = await authReq('get', '/productos', clienteToken);
+    expect(res.status).toBe(200);
+    const item = res.body.find((p: any) => p.id === prodConStockId);
+    expect(item).toBeDefined();
+    expect(item.stock).toBe(5);
+    expect(item.disponible).toBe(true);
+  });
+
+  it('GET /productos/:id → stock=0 y disponible=false', async () => {
+    const res = await authReq('get', `/productos/${prodSinStockId}`, clienteToken);
+    expect(res.status).toBe(200);
+    expect(res.body.stock).toBe(0);
+    expect(res.body.disponible).toBe(false);
+  });
+
+  it('POST /pedidos cliente con cantidad mayor al stock → 400', async () => {
+    const res = await authReq('post', '/pedidos', clienteToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodConStockId, cantidad: 999, precio: 25 }],
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.message)).toMatch(/stock/i);
+  });
+
+  it('POST /pedidos cliente con stock=0 → 400', async () => {
+    const res = await authReq('post', '/pedidos', clienteToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodSinStockId, cantidad: 1, precio: 30 }],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /inventario/:id sigue protegido (cliente → 403)', async () => {
+    const res = await authReq('get', `/inventario/${prodConStockId}`, clienteToken);
+    expect(res.status).toBe(403);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 12. Pedidos externos + asignación de vendedor (P2/P3)
+// ══════════════════════════════════════════════════════════════════════════
+describe('12. Pedidos externos y asignación de vendedor', () => {
+  let pedidoClienteId: number;
+
+  beforeAll(async () => {
+    const pRes = await authReq('post', '/productos', adminToken).send({
+      nombre: `Prod Asig ${TS}`,
+      precio: 20,
+    });
+    const pId = pRes.body.id;
+    await authReq('put', `/inventario/${pId}`, invToken).send({
+      cantidad: 50,
+    });
+
+    // cliente crea pedido (queda sin vendedor asignado)
+    const res = await authReq('post', '/pedidos', clienteToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: pId, cantidad: 1, precio: 20 }],
+    });
+    expect(res.status).toBe(201);
+    pedidoClienteId = res.body.id;
+  });
+
+  it('POST /pedidos (cliente) → procesado_por es null', async () => {
+    const res = await authReq('get', `/pedidos/${pedidoClienteId}`, clienteToken);
+    expect(res.status).toBe(200);
+    expect(res.body.procesado_por).toBeFalsy();
+  });
+
+  it('GET /pedidos?sinVendedor=true (inventario) → incluye pedido sin vendedor', async () => {
+    const res = await authReq('get', `/pedidos?sinVendedor=true`, invToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: pedidoClienteId }),
+      ]),
+    );
+  });
+
+  it('GET /usuarios/vendedores (inventario) → lista personal ventas', async () => {
+    const res = await authReq('get', '/usuarios/vendedores', invToken);
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThanOrEqual(2);
+    expect(res.body.some((u: any) => u.email === VENTAS_EMAIL)).toBe(true);
+    expect(res.body.some((u: any) => u.email === VENTAS2_EMAIL)).toBe(true);
+  });
+
+  it('PUT /pedidos/:id/asignar-vendedor (inventario) → 200', async () => {
+    const res = await authReq('put', `/pedidos/${pedidoClienteId}/asignar-vendedor`, invToken)
+      .send({ vendedorId: ventasId });
+    expect(res.status).toBe(200);
+    expect(res.body.procesado_por).toBe(ventasId);
+  });
+
+  it('PUT /pedidos/:id/asignar-vendedor (ya asignado) → 400', async () => {
+    const res = await authReq('put', `/pedidos/${pedidoClienteId}/asignar-vendedor`, invToken)
+      .send({ vendedorId: ventas2Id });
+    expect(res.status).toBe(400);
+  });
+
+  it('Vendedor asignado ve el pedido en su listado', async () => {
+    const res = await authReq('get', '/pedidos', ventasToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: pedidoClienteId }),
+      ]),
+    );
+  });
+
+  it('Otro vendedor NO ve el pedido como propio (GET/:id → 403)', async () => {
+    const res = await authReq('get', `/pedidos/${pedidoClienteId}`, ventas2Token);
+    expect(res.status).toBe(403);
+  });
+
+  it('Otro vendedor NO puede cambiar estado del pedido ajeno', async () => {
+    const res = await authReq('put', `/pedidos/${pedidoClienteId}/estado`, ventas2Token)
+      .send({ estado: 'entregado' });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 13. Deudas por rol — vendedor registra y solo ve las suyas (P4)
+// ══════════════════════════════════════════════════════════════════════════
+describe('13. Deudas por rol — vendedor registra y solo ve las suyas', () => {
+  let deudaVentasId: number;
+
+  it('Ventas crea deuda → vendedor_id = su id', async () => {
+    const res = await authReq('post', '/deudas', ventasToken).send({
+      usuarioId: clienteId,
+      monto: 200,
+      descripcion: 'Venta crédito E2E',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.vendedor_id).toBe(ventasId);
+    expect(res.body.estado).toBe('pendiente');
+    deudaVentasId = res.body.id;
+  });
+
+  it('Ventas ve solo sus deudas (no las de admin)', async () => {
+    const res = await authReq('get', '/deudas', ventasToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    for (const d of res.body) {
+      expect(d.vendedor_id).toBe(ventasId);
+    }
+  });
+
+  it('Admin ve todas las deudas incluyendo la del vendedor', async () => {
+    const res = await authReq('get', '/deudas', adminToken);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: deudaVentasId, vendedor_id: ventasId }),
+      ]),
+    );
+  });
+
+  it('GET /deudas/resumen (ventas) → solo suma de sus deudas', async () => {
+    const res = await authReq('get', '/deudas/resumen', ventasToken);
+    expect(res.status).toBe(200);
+    expect(Number(res.body.total_pendiente)).toBeGreaterThanOrEqual(200);
+  });
+
+  it('Ventas NO puede pagar deuda (rol no permitido → 403)', async () => {
+    const res = await authReq('put', `/deudas/${deudaVentasId}/pagar`, ventasToken)
+      .send({ monto: 50 });
+    expect(res.status).toBe(403);
+  });
+
+  it('Pago parcial → parcial con saldo correcto', async () => {
+    const res = await authReq('put', `/deudas/${deudaVentasId}/pagar`, adminToken)
+      .send({ monto: 150 });
+    expect(res.status).toBe(200);
+    expect(res.body.estado).toBe('parcial');
+    expect(Number(res.body.monto_pagado)).toBe(150);
+  });
+
+  it('Pago excedente → 400', async () => {
+    const res = await authReq('put', `/deudas/${deudaVentasId}/pagar`, adminToken)
+      .send({ monto: 999 });
+    expect(res.status).toBe(400);
+  });
+
+  it('Pago que completa → pagado', async () => {
+    const res = await authReq('put', `/deudas/${deudaVentasId}/pagar`, adminToken)
+      .send({ monto: 50 });
+    expect(res.status).toBe(200);
+    expect(res.body.estado).toBe('pagado');
+  });
+
+  it('Pago sobre deuda ya pagada → 400', async () => {
+    const res = await authReq('put', `/deudas/${deudaVentasId}/pagar`, adminToken)
+      .send({ monto: 1 });
+    expect(res.status).toBe(400);
+  });
+
+  it('Ventas NO puede eliminar deuda → 403', async () => {
+    const res = await authReq('delete', `/deudas/${deudaVentasId}`, ventasToken);
+    expect(res.status).toBe(403);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 14. Historial de ventas por vendedor + gráficas + acceso por URL (P5)
+// ══════════════════════════════════════════════════════════════════════════
+describe('14. Ventas por vendedor, gráficas y acceso por URL', () => {
+  let prodVId: number;
+
+  beforeAll(async () => {
+    const p = await authReq('post', '/productos', adminToken).send({
+      nombre: 'E2E Ventas-Vendedor',
+      precio: 40,
+      categoria_id: 1,
+    });
+    prodVId = p.body.id;
+    await authReq('put', `/productos/${prodVId}/activo`, adminToken).send({ activo: true });
+    await authReq('put', `/inventario/${prodVId}`, invToken).send({
+      cantidad: 50,
+    });
+
+    // ventas2 obtiene ventas: admin registra pedido a nombre del cliente con
+    // procesado_por = ventas2 (el usuario debe existir en la tabla usuarios)
+    const pedidoV2 = await authReq('post', '/pedidos', adminToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodVId, cantidad: 2, precio: 40 }],
+      procesadoPor: ventas2Id,
+    });
+    expect(pedidoV2.status).toBe(201);
+  });
+
+  it('Admin filtra ventas por vendedor → solo filas de ese vendedor', async () => {
+    const res = await authReq('get', `/pedidos/ventas/personal?usuarioId=${ventas2Id}`, adminToken);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    for (const row of res.body) {
+      expect(row.usuario_id).toBe(ventas2Id);
+    }
+  });
+
+  it('GET /pedidos/ventas/personal (ventas) → solo sus filas', async () => {
+    const res = await authReq('get', '/pedidos/ventas/personal', ventasToken);
+    expect(res.status).toBe(200);
+    for (const row of res.body) {
+      expect(row.usuario_id).toBe(ventasId);
+    }
+  });
+
+  it('Ventas no puede acceder al reporte de otro vendedor (parcial)', async () => {
+    const res = await authReq(
+      'get',
+      `/reportes/ventas-personal-por-dia?usuarioId=${ventas2Id}`,
+      ventasToken,
+    );
+    expect(res.status).toBe(200);
+    const totalVentas2 = Number(res.body.reduce((s: number, r: any) => s + Number(r.total_vendido), 0));
+
+    const adminRes = await authReq(
+      'get',
+      `/reportes/ventas-personal-por-dia?usuarioId=${ventas2Id}`,
+      adminToken,
+    );
+    const totalAdmin = Number(adminRes.body.reduce((s: number, r: any) => s + Number(r.total_vendido), 0));
+    expect(totalAdmin).toBeGreaterThanOrEqual(totalVentas2);
+  });
+
+  it('GET /reportes/ventas-por-fecha → 200 (admin)', async () => {
+    const res = await authReq('get', '/reportes/ventas-por-fecha', adminToken);
+    expect(res.status).toBe(200);
+  });
+
+  it('Acceso por URL a portales no autorizados', async () => {
+    const a1 = await authReq('get', '/usuarios', clienteToken);
+    expect(a1.status).toBe(403);
+
+    const a2 = await authReq('get', '/inventario/1', ventasToken);
+    expect(a2.status).toBe(403);
+
+    const a3 = await authReq('get', '/reportes/ventas-por-fecha', invToken);
+    expect(a3.status).toBe(403);
+
+    const a4 = await authReq('post', '/deudas', clienteToken).send({
+      usuarioId: clienteId, monto: 10,
+    });
+    expect(a4.status).toBe(403);
+  });
+
+  it('Dashboard por rol — ventas puede pedidos y deudas propias', async () => {
+    const p = await authReq('get', '/pedidos', ventasToken);
+    expect(p.status).toBe(200);
+
+    const d = await authReq('get', '/deudas', ventasToken);
+    expect(d.status).toBe(200);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 15. Tipo de pago CONTADO/CRÉDITO al registrar ventas (vendedor)
+// ══════════════════════════════════════════════════════════════════════════
+describe('15. Tipo de pago CONTADO/CRÉDITO en el registro de ventas', () => {
+  let prodPagoId: number;
+
+  beforeAll(async () => {
+    const p = await authReq('post', '/productos', adminToken).send({
+      nombre: `E2E TipoPago ${TS}`,
+      precio: 30,
+      categoria_id: 1,
+    });
+    prodPagoId = p.body.id;
+    await authReq('put', `/productos/${prodPagoId}/activo`, adminToken).send({ activo: true });
+    await authReq('put', `/inventario/${prodPagoId}`, invToken).send({
+      cantidad: 50,
+    });
+  });
+
+  it('POST /pedidos (ventas) tipoPago=contado → queda registrado como pagado (entregado)', async () => {
+    const res = await authReq('post', '/pedidos', ventasToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodPagoId, cantidad: 2, precio: 30 }],
+      tipoPago: 'contado',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe('entregado');
+    expect(res.body.procesado_por).toBe(ventasId);
+  });
+
+  it('POST /pedidos (ventas) tipoPago=credito → registra saldo pendiente en deudas', async () => {
+    const res = await authReq('post', '/pedidos', ventasToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodPagoId, cantidad: 2, precio: 30 }],
+      tipoPago: 'credito',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe('pendiente');
+
+    const deudas = await authReq('get', '/deudas', ventasToken);
+    expect(deudas.status).toBe(200);
+    const d = deudas.body.find(
+      (x: any) =>
+        Number(x.monto) === 60 &&
+        x.estado === 'pendiente' &&
+        x.usuario_id === clienteId &&
+        x.vendedor_id === ventasId,
+    );
+    expect(d).toBeDefined();
+    expect(String(d.descripcion)).toMatch(/Venta a crédito/i);
+  });
+
+  it('POST /pedidos (ventas) sin tipoPago → estado pendiente (regresión)', async () => {
+    const res = await authReq('post', '/pedidos', ventasToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodPagoId, cantidad: 1, precio: 30 }],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe('pendiente');
+  });
+
+  it('POST /pedidos (cliente) con tipoPago=contado → se ignora, queda pendiente', async () => {
+    const res = await authReq('post', '/pedidos', clienteToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodPagoId, cantidad: 1, precio: 30 }],
+      tipoPago: 'contado',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe('pendiente');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 16. Validación de stock (backend como validación definitiva)
+// ══════════════════════════════════════════════════════════════════════════
+describe('16. Validación de stock — mensaje con unidades disponibles', () => {
+  let prodStockId: number;
+
+  beforeAll(async () => {
+    const p = await authReq('post', '/productos', adminToken).send({
+      nombre: `E2E StockMsg ${TS}`,
+      precio: 12,
+      categoria_id: 1,
+    });
+    prodStockId = p.body.id;
+    await authReq('put', `/productos/${prodStockId}/activo`, adminToken).send({ activo: true });
+    await authReq('put', `/inventario/${prodStockId}`, invToken).send({
+      cantidad: 3,
+    });
+  });
+
+  it('POST /pedidos cantidad > stock → 400 con mensaje de unidades disponibles', async () => {
+    const res = await authReq('post', '/pedidos', ventasToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodStockId, cantidad: 5, precio: 12 }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'Stock insuficiente. Stock disponible: 3 unidades.',
+    );
+  });
+
+  it('POST /pedidos cantidad = 0 → 400 (validación DTO)', async () => {
+    const res = await authReq('post', '/pedidos', ventasToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodStockId, cantidad: 0, precio: 12 }],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /pedidos cantidad negativa → 400 (validación DTO)', async () => {
+    const res = await authReq('post', '/pedidos', ventasToken).send({
+      usuarioId: clienteId,
+      items: [{ producto_id: prodStockId, cantidad: -3, precio: 12 }],
+    });
+    expect(res.status).toBe(400);
   });
 });

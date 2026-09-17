@@ -20,6 +20,7 @@ interface Producto {
 export default function AdminProductos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>([]);
+  const [busqueda, setBusqueda] = useState('');
   const [modalProducto, setModalProducto] = useState<Producto | null>(null);
   const [creando, setCreando] = useState(false);
   const [form, setForm] = useState({ nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
@@ -121,24 +122,43 @@ export default function AdminProductos() {
   const abiertos = productos.filter(p => p.activo);
   const inactivos = productos.filter(p => !p.activo);
 
+  const q = busqueda.trim().toLowerCase();
+  const visibles = q
+    ? productos.filter(p =>
+        p.nombre.toLowerCase().includes(q) ||
+        (p.categoria?.nombre || '').toLowerCase().includes(q),
+      )
+    : productos;
+
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
-      <div className="flex items-center justify-between mb-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold dark:text-white">Productos</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{abiertos.length} activos, {inactivos.length} inactivos</p>
         </div>
-        <button onClick={abrirNuevo}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700">
-          + Nuevo
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="🔎 Buscar por nombre o categoría..."
+            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
+          />
+          <button onClick={abrirNuevo}
+            className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700">
+            + Nuevo
+          </button>
+        </div>
       </div>
 
       {productos.length === 0 ? (
         <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando productos...</p>
+      ) : visibles.length === 0 ? (
+        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {productos.map(p => (
+          {visibles.map(p => (
               <div
                 key={p.id}
                 onClick={() => abrirEditar(p)}
@@ -176,7 +196,7 @@ export default function AdminProductos() {
 
       {(modalProducto || creando) && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={cerrarModal}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-6 dark:text-white">{creando ? 'Nuevo producto' : 'Editar producto'}</h2>
             <div className="space-y-4">
               <input placeholder="Nombre" value={form.nombre}

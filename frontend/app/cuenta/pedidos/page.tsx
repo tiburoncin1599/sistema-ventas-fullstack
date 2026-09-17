@@ -64,7 +64,7 @@ export default function MisPedidos() {
   if (cargando) return <p className="text-center py-20">Cargando...</p>;
 
   return (
-    <main className="max-w-4xl mx-auto px-8 py-12">
+    <main className="max-w-4xl mx-auto px-4 sm:px-8 py-12">
       <h1 className="text-3xl font-bold mb-8">Mis Pedidos</h1>
 
       {pedidos.length === 0 ? (

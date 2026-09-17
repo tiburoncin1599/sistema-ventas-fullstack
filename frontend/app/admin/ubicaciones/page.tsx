@@ -6,7 +6,7 @@ const MapaSeguimiento = dynamic(
   {
     ssr: false,
     loading: () => (
-      <main className="max-w-6xl mx-auto px-8 py-20 text-center">
+      <main className="max-w-6xl mx-auto px-4 sm:px-8 py-20 text-center">
         <p className="text-gray-500 dark:text-gray-400">Cargando mapa de seguimiento...</p>
       </main>
     ),

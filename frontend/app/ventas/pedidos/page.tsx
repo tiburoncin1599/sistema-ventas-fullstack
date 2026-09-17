@@ -22,6 +22,14 @@ const COLORES_ESTADO: Record<string, string> = {
 
 const ESTADOS = ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado'];
 
+const TRANSICIONES: Record<string, string[]> = {
+  pendiente: ['confirmado', 'cancelado'],
+  confirmado: ['enviado', 'cancelado'],
+  enviado: ['entregado', 'cancelado'],
+  entregado: [],
+  cancelado: [],
+};
+
 export default function VentasPedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -39,7 +47,7 @@ export default function VentasPedidosPage() {
   };
 
   useEffect(() => {
-    cargar();
+cargar(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
 
   const cambiarEstado = async (id: number, estado: string) => {
@@ -130,7 +138,11 @@ export default function VentasPedidosPage() {
                 className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-xs bg-white dark:bg-gray-700 dark:text-white"
               >
                 {ESTADOS.map(e => (
-                  <option key={e} value={e}>
+                  <option
+                    key={e}
+                    value={e}
+                    disabled={e !== p.estado && !(TRANSICIONES[p.estado] || []).includes(e)}
+                  >
                     {e.charAt(0).toUpperCase() + e.slice(1)}
                   </option>
                 ))}

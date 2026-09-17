@@ -76,7 +76,9 @@ export class InventarioService {
       if (!exists) {
         throw new NotFoundException('Inventario no encontrado');
       }
-      throw new BadRequestException('Stock insuficiente');
+      throw new BadRequestException(
+        `Stock insuficiente. Stock disponible: ${Number(exists.cantidad)} unidades.`,
+      );
     }
     return repo.findOne({ where: { producto_id: productoId } });
   }

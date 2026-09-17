@@ -5,7 +5,7 @@ export default function DarkModeToggle() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    setDark(document.documentElement.classList.contains('dark'));
+    setDark(document.documentElement.classList.contains('dark')); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
 
   const toggle = () => {

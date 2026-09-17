@@ -25,6 +25,12 @@ export class UsuariosService {
     return omitPassword(usuario);
   }
 
+  findVendedores() {
+    return this.usuariosRepo
+      .find({ where: { rol: 'ventas' }, order: { nombre: 'ASC' } })
+      .then((lista) => lista.map(omitPassword));
+  }
+
   findByEmail(email: string) {
     return this.usuariosRepo.findOne({ where: { email } });
   }

@@ -31,7 +31,7 @@ export default function MiRendimientoPage() {
   useEffect(() => {
     try {
       const u = JSON.parse(localStorage.getItem('usuario') || 'null');
-      setUsuarioNombre(u?.nombre || '');
+      setUsuarioNombre(u?.nombre || ''); // eslint-disable-line react-hooks/set-state-in-effect
     } catch {}
   }, []);
 
@@ -43,7 +43,7 @@ export default function MiRendimientoPage() {
   useEffect(() => {
     const uid = getUsuarioId();
     if (!uid) return;
-    setCargando(true);
+    setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
     api.get('/reportes/ventas-personal-por-dia', {
       params: { usuarioId: uid, desde: aFechaISO(desde), hasta: aFechaISO(hasta) },
     })

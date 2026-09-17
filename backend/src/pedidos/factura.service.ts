@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import PDFDocument from 'pdfkit';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -78,6 +77,7 @@ export class FacturaService {
   async generarFacturaPDF(
     data: { pedido: any; detalles: any[]; configuracion?: any },
   ): Promise<Buffer> {
+    const PDFDocument = (await import('pdfkit')).default;
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 40, size: 'A4' });
       const chunks: Buffer[] = [];

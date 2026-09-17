@@ -25,6 +25,13 @@ export class Deuda {
   @Column()
   usuario_id!: number;
 
+  @ManyToOne(() => Usuario)
+  @JoinColumn({ name: 'vendedor_id' })
+  vendedor?: Usuario;
+
+  @Column({ nullable: true })
+  vendedor_id?: number;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, transformer: decimal() })
   monto!: number;
 

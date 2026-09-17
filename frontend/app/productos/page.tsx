@@ -12,6 +12,8 @@ interface Producto {
   nombre: string;
   precio: number;
   imagen_url: string;
+  stock: number;
+  disponible: boolean;
 }
 
 export default function ProductosPage() {
@@ -32,6 +34,9 @@ export default function ProductosPage() {
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  const stockDe = (producto: Producto) =>
+    typeof producto.stock === 'number' ? producto.stock : 0;
+
   const agregarRapido = (producto: Producto, cantidad: number, texto: string) => {
     agregar({ ...producto, cantidad });
     setMensaje({ id: producto.id, texto });
@@ -39,7 +44,7 @@ export default function ProductosPage() {
   };
 
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-8">Productos</h1>
 
       <input
@@ -70,16 +75,20 @@ export default function ProductosPage() {
                     <p className="text-blue-700 dark:text-blue-400 font-extrabold text-2xl mt-1">
                       {formatCurrency(producto.precio)}
                     </p>
+                    {stockDe(producto) === 0
+                      ? <span className="inline-block mt-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Agotado</span>
+                      : <span className="inline-block mt-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full">{stockDe(producto)} en stock</span>
+                    }
                 </div>
                 <div className="mt-3 flex gap-2">
                   {([3, 6] as const).map(cant => (
-                    <button key={cant} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarRapido(producto, cant, `¡+${cant} agregado!`); }}
-                      className="flex-1 bg-green-700 text-white text-sm font-bold py-2 rounded-lg hover:bg-green-800 transition-colors">
+                    <button key={cant} type="button" disabled={stockDe(producto) < cant} onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarRapido(producto, cant, `¡+${cant} agregado!`); }}
+                      className="flex-1 bg-green-700 text-white text-sm font-bold py-2 rounded-lg hover:bg-green-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       +{cant}
                     </button>
                   ))}
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarRapido(producto, 12, '¡Docena agregada!'); }}
-                    className="flex-1 bg-yellow-500 text-black text-sm font-bold py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                  <button type="button" disabled={stockDe(producto) < 12} onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarRapido(producto, 12, '¡Docena agregada!'); }}
+                    className="flex-1 bg-yellow-500 text-black text-sm font-bold py-2 rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                     Docena
                   </button>
                 </div>

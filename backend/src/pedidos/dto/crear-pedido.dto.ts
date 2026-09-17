@@ -3,6 +3,7 @@ import {
   IsString,
   IsArray,
   IsOptional,
+  IsIn,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -36,6 +37,10 @@ export class CrearPedidoDto {
   @IsOptional()
   @IsString()
   notas?: string;
+
+  @IsOptional()
+  @IsIn(['contado', 'credito'])
+  tipoPago?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

@@ -11,4 +11,8 @@ export class CrearDeudaDto {
   @IsOptional()
   @IsString()
   descripcion?: string;
+
+  @IsOptional()
+  @IsNumber()
+  vendedorId?: number;
 }

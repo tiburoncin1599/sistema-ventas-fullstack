@@ -18,10 +18,10 @@ const seccionesAdmin = [
   { href: '/ventas', titulo: 'Mi Portal de Ventas', desc: 'Registrar clientes con GPS y gestionar tus pedidos', roles: ['ventas'] },
   { href: '/admin/ventas', titulo: 'Ventas', desc: 'Historial de ventas del personal', roles: ['admin', 'inventario', 'ventas'] },
   { href: '/admin/personal', titulo: 'Rendimiento del Personal', desc: 'Gráficas semanales y mensuales de ventas por vendedor', roles: ['admin'] },
+  { href: '/admin/reportes', titulo: 'Reportes', desc: 'Ventas, ganancias, inventario y clientes destacados con exportación', roles: ['admin'] },
   { href: '/admin/deudas', titulo: 'Deudas', desc: 'Deudas del personal y generación de facturas', roles: ['admin', 'inventario', 'ventas'] },
   { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestionar empleados y asignar roles (ventas, inventario)', roles: ['admin'] },
   { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registrar y administrar clientes', roles: ['admin'] },
-  { href: '/admin/ubicaciones', titulo: 'Seguimiento en Tiempo Real', desc: 'Ver la ubicación de los vendedores en el mapa', roles: ['admin', 'inventario'] },
 ];
 
 export default function AdminDashboard() {
@@ -38,8 +38,8 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const u = getUsuarioFromStorage();
-    setUsuario(u);
-    const peticiones: Promise<any>[] = [
+    setUsuario(u); // eslint-disable-line react-hooks/set-state-in-effect
+    const peticiones: Promise<any>[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
       api.get('/productos'),
       api.get('/pedidos'),
     ];
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
   if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando panel...</p>;
 
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
       <h1 className="text-3xl font-bold mb-8 dark:text-white">Panel de Administración</h1>
 
       {errorConexion && (

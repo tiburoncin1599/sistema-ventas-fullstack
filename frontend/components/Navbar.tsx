@@ -18,7 +18,7 @@ function useAuth() {
   const [usuario, setUsuario] = useState<{ nombre: string; rol: string } | null>(null);
 
   useEffect(() => {
-    setUsuario(getUsuarioFromStorage());
+setUsuario(getUsuarioFromStorage()); // eslint-disable-line react-hooks/set-state-in-effect
     const onAuth = () => setUsuario(getUsuarioFromStorage());
     window.addEventListener('auth-change', onAuth);
     window.addEventListener('storage', onAuth);
@@ -40,7 +40,7 @@ export default function Navbar() {
   const cantidadItems = mounted ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { setMounted(true); }, []); // eslint-disable-line react-hooks/set-state-in-effect
 
   const cerrarSesionHandler = async () => {
     await cerrarSesion();

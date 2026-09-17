@@ -15,6 +15,7 @@ const rutasAdmin: { ruta: string; roles: string[] }[] = [
   { ruta: '/admin/ubicaciones', roles: ['admin', 'inventario'] },
   { ruta: '/admin/ventas', roles: ['admin', 'inventario', 'ventas'] },
   { ruta: '/admin/deudas', roles: ['admin', 'inventario', 'ventas'] },
+  { ruta: '/admin/reportes', roles: ['admin'] },
 ];
 
 const rolesAdminBase = ['admin', 'inventario', 'ventas'];

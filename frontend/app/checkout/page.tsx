@@ -28,6 +28,13 @@ export default function CheckoutPage() {
     setCargando(true);
     setError('');
 
+    const sinStock = items.find(i => typeof i.stock === 'number' && i.cantidad > i.stock!);
+    if (sinStock) {
+      setError(`Stock insuficiente de "${sinStock.nombre}". Solo hay ${sinStock.stock} unidades disponibles.`);
+      setCargando(false);
+      return;
+    }
+
     try {
       const res = await api.post('/pedidos', {
         usuarioId: usuario.id,
@@ -51,7 +58,7 @@ export default function CheckoutPage() {
 
   if (items.length === 0 && !pedidoCreado) {
     return (
-      <main className="max-w-2xl mx-auto px-8 py-20 text-center dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+      <main className="max-w-2xl mx-auto px-4 sm:px-8 py-20 text-center dark:bg-gray-900 dark:text-gray-100 min-h-screen">
         <h1 className="text-3xl font-bold mb-4">No hay productos en el carrito</h1>
       </main>
     );
@@ -62,7 +69,7 @@ export default function CheckoutPage() {
       `¡Hola! Quiero consultar sobre mi pedido #${pedidoId || ''} que realicé en la tienda.`
     );
     return (
-      <main className="max-w-xl mx-auto px-8 py-20 text-center dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+      <main className="max-w-xl mx-auto px-4 sm:px-8 py-20 text-center dark:bg-gray-900 dark:text-gray-100 min-h-screen">
         <div className="text-5xl mb-6">✅</div>
         <h1 className="text-3xl font-bold mb-2">Pedido confirmado</h1>
         <p className="text-gray-500 dark:text-gray-400 mb-8">
@@ -83,7 +90,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+    <main className="max-w-4xl mx-auto px-4 sm:px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-8">Confirmar Pedido</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -93,15 +100,15 @@ export default function CheckoutPage() {
           <h2 className="text-xl font-bold mb-4">Tu pedido</h2>
           <div className="border dark:border-gray-700 rounded-2xl overflow-hidden">
             {items.map(item => (
-              <div key={item.id} className="flex justify-between items-center px-6 py-4 border-b dark:border-gray-700 last:border-0">
-                <div>
-                  <p className="font-medium">{item.nombre}</p>
+              <div key={item.id} className="flex justify-between items-center gap-3 px-4 sm:px-6 py-4 border-b dark:border-gray-700 last:border-0">
+                <div className="min-w-0">
+                  <p className="font-medium break-words">{item.nombre}</p>
                   <p className="text-gray-500 dark:text-gray-400 text-sm">x{item.cantidad}</p>
                 </div>
-                <p className="font-bold">{formatCurrency(parseCurrency(item.precio) * item.cantidad)}</p>
+                <p className="font-bold shrink-0">{formatCurrency(parseCurrency(item.precio) * item.cantidad)}</p>
               </div>
             ))}
-            <div className="flex justify-between items-center px-6 py-4 bg-gray-50 dark:bg-gray-800">
+            <div className="flex justify-between items-center gap-3 px-4 sm:px-6 py-4 bg-gray-50 dark:bg-gray-800">
               <p className="font-bold text-lg">Total</p>
               <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{formatCurrency(total())}</p>
             </div>

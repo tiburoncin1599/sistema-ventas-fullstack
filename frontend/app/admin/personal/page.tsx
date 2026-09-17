@@ -31,7 +31,7 @@ export default function RendimientoPersonalPage() {
   useEffect(() => {
     try {
       const u = JSON.parse(localStorage.getItem('usuario') || 'null');
-      setUsuario(u);
+      setUsuario(u); // eslint-disable-line react-hooks/set-state-in-effect
       if (u?.rol === 'ventas') {
         setSeleccionado(String(u.id));
       }
@@ -53,7 +53,7 @@ export default function RendimientoPersonalPage() {
 
   useEffect(() => {
     if (esVendedor && seleccionado === 'todos') return;
-    setCargando(true);
+    setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
     const params: Record<string, string> = {
       desde: aFechaISO(desde),
       hasta: aFechaISO(hasta),

@@ -32,6 +32,13 @@ export class UsuariosController {
     return this.usuariosService.findAll(Number(page) || 1, Number(limit) || 50);
   }
 
+  @Get('vendedores')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'inventario')
+  vendedores() {
+    return this.usuariosService.findVendedores();
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async findOne(

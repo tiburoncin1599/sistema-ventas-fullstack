@@ -10,7 +10,7 @@ export default function CarritoPage() {
 
   if (items.length === 0) {
     return (
-      <main className="max-w-2xl mx-auto px-8 py-20 text-center dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+      <main className="max-w-2xl mx-auto px-4 sm:px-8 py-20 text-center dark:bg-gray-900 dark:text-gray-100 min-h-screen">
         <h1 className="text-3xl font-bold mb-4">Tu carrito está vacío</h1>
         <p className="text-gray-500 dark:text-gray-400 mb-8">Agregá productos para continuar</p>
         <Link href="/productos"
@@ -22,15 +22,15 @@ export default function CarritoPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+    <main className="max-w-4xl mx-auto px-4 sm:px-8 py-12 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-8">Tu carrito</h1>
 
       <div className="space-y-4 mb-8">
         {items.map(item => (
-          <div key={item.id} className="flex items-center gap-4 border dark:border-gray-700 rounded-xl p-4">
+          <div key={item.id} className="flex flex-wrap items-center gap-3 sm:gap-4 border dark:border-gray-700 rounded-xl p-4">
 
             {/* Imagen */}
-            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
               {item.imagen_url
                 ? <img src={`${API_URL}${item.imagen_url}`} alt={item.nombre} className="w-full h-full object-contain"/>
                 : <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">Sin imagen</div>
@@ -38,55 +38,63 @@ export default function CarritoPage() {
             </div>
 
             {/* Info */}
-            <div className="flex-1">
-              <h3 className="font-semibold">{item.nombre}</h3>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold break-words">{item.nombre}</h3>
               <p className="text-blue-600 dark:text-blue-400 font-bold">{formatCurrency(item.precio)}</p>
             </div>
 
-            {/* Cantidad */}
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex items-center gap-1">
-                <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 3))}
-                  className="w-7 h-7 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">-3</button>
-                <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 6))}
-                  className="w-7 h-7 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">-6</button>
-                <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 12))}
-                  className="w-7 h-7 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">-12</button>
+            {/* Cantidad + subtotal + quitar (en móvil van en su propia línea) */}
+            <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1">
+                  <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 3))}
+                    className="w-8 h-8 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">-3</button>
+                  <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 6))}
+                    className="w-8 h-8 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">-6</button>
+                  <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 12))}
+                    className="w-8 h-8 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">-12</button>
+                </div>
+                <span className="min-w-8 text-center font-bold">{item.cantidad}</span>
+                {typeof item.stock === 'number' && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">máx {item.stock}</span>
+                )}
+                <div className="flex items-center gap-1">
+                  <button onClick={() => cambiarCantidad(item.id, item.cantidad + 3)}
+                    disabled={typeof item.stock === 'number' && item.cantidad >= item.stock}
+                    className="w-8 h-8 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm disabled:opacity-30">+3</button>
+                  <button onClick={() => cambiarCantidad(item.id, item.cantidad + 6)}
+                    disabled={typeof item.stock === 'number' && item.cantidad >= item.stock}
+                    className="w-8 h-8 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm disabled:opacity-30">+6</button>
+                  <button onClick={() => cambiarCantidad(item.id, item.cantidad + 12)}
+                    disabled={typeof item.stock === 'number' && item.cantidad >= item.stock}
+                    className="w-8 h-8 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm disabled:opacity-30">+12</button>
+                </div>
               </div>
-              <span className="w-12 text-center font-bold">{item.cantidad}</span>
-              <div className="flex items-center gap-1">
-                <button onClick={() => cambiarCantidad(item.id, item.cantidad + 3)}
-                  className="w-7 h-7 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">+3</button>
-                <button onClick={() => cambiarCantidad(item.id, item.cantidad + 6)}
-                  className="w-7 h-7 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">+6</button>
-                <button onClick={() => cambiarCantidad(item.id, item.cantidad + 12)}
-                  className="w-7 h-7 rounded-full border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 font-bold text-sm">+12</button>
-              </div>
+
+              {/* Subtotal */}
+              <p className="font-bold text-right">
+                {formatCurrency(parseCurrency(item.precio) * item.cantidad)}
+              </p>
+
+              {/* Quitar */}
+              <button
+                onClick={() => quitar(item.id)}
+                className="text-red-400 hover:text-red-600 font-medium text-sm px-1">
+                Quitar
+              </button>
             </div>
-
-            {/* Subtotal */}
-            <p className="font-bold w-24 text-right">
-              {formatCurrency(parseCurrency(item.precio) * item.cantidad)}
-            </p>
-
-            {/* Quitar */}
-            <button
-              onClick={() => quitar(item.id)}
-              className="text-red-400 hover:text-red-600 font-medium text-sm">
-              Quitar
-            </button>
           </div>
         ))}
       </div>
 
       {/* Total y checkout */}
-      <div className="border-t dark:border-gray-700 pt-6 flex justify-between items-center">
+      <div className="border-t dark:border-gray-700 pt-6 flex flex-wrap justify-between items-center gap-4">
         <div>
           <p className="text-gray-500 dark:text-gray-400">Total</p>
           <p className="text-3xl font-bold">{formatCurrency(total())}</p>
         </div>
         <Link href="/checkout"
-          className="bg-blue-600 text-white px-10 py-4 rounded-xl font-bold hover:bg-blue-700 text-lg">
+          className="bg-blue-600 text-white px-10 py-4 rounded-xl font-bold hover:bg-blue-700 text-lg text-center w-full sm:w-auto">
           Confirmar pedido
         </Link>
       </div>

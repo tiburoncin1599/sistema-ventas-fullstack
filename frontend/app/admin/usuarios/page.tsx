@@ -31,6 +31,8 @@ export default function AdminUsuariosPage() {
   const [creando, setCreando] = useState(false);
   const [form, setForm] = useState({ nombre: '', email: '', password: '', rol: 'inventario' });
   const [error, setError] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroRol, setFiltroRol] = useState('');
 
   const cargar = async () => {
     try {
@@ -109,26 +111,56 @@ export default function AdminUsuariosPage() {
   const activos = usuarios.filter(u => u.activo);
   const inactivos = usuarios.filter(u => !u.activo);
 
+  const qUsuarios = busqueda.trim().toLowerCase();
+  const visibles = usuarios.filter(u =>
+    (!filtroRol || u.rol === filtroRol) &&
+    (!qUsuarios ||
+      u.nombre.toLowerCase().includes(qUsuarios) ||
+      u.email.toLowerCase().includes(qUsuarios) ||
+      u.rol.toLowerCase().includes(qUsuarios)),
+  );
+
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
-      <div className="flex items-center justify-between mb-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold dark:text-white">Usuarios</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{activos.length} activos, {inactivos.length} inactivos</p>
         </div>
-        <button onClick={abrirNuevo}
-          className="bg-[#005a24] text-white px-5 py-2.5 rounded-xl font-bold hover:bg-[#003e19]">
-          + Nuevo usuario
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={filtroRol}
+            onChange={(e) => setFiltroRol(e.target.value)}
+            className="border dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-sm dark:text-white"
+          >
+            <option value="">Todos los roles</option>
+            {['admin', 'ventas', 'inventario', 'cliente'].map(r => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="🔎 Buscar por nombre, email o rol..."
+            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
+          />
+          <button onClick={abrirNuevo}
+            className="bg-[#005a24] text-white px-5 py-2.5 rounded-xl font-bold hover:bg-[#003e19]">
+            + Nuevo usuario
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-red-500 dark:text-red-400 text-sm mb-4">{error}</p>}
 
       {activos.length === 0 && inactivos.length === 0 ? (
         <p className="text-center py-20 text-gray-500 dark:text-gray-400">No hay usuarios registrados</p>
+      ) : visibles.length === 0 ? (
+        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {usuarios.map(u => (
+          {visibles.map(u => (
             <div
               key={u.id}
               className={`bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5 ${u.activo ? 'hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer' : 'opacity-50 cursor-pointer hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow'}`}
@@ -175,7 +207,7 @@ export default function AdminUsuariosPage() {
 
       {creando && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setCreando(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-6 dark:text-white">Nuevo usuario</h2>
             <div className="space-y-4">
               <input type="text" placeholder="Nombre" value={form.nombre}
@@ -192,7 +224,7 @@ export default function AdminUsuariosPage() {
                 {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-6">
               <button onClick={crearUsuario}
                 className="flex-1 bg-[#005a24] text-white py-3 rounded-xl font-bold hover:bg-[#003e19]">
                 Crear usuario
@@ -208,7 +240,7 @@ export default function AdminUsuariosPage() {
 
       {modalUsuario && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setModalUsuario(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${

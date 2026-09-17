@@ -14,17 +14,19 @@ export class DeudasService {
     private deudasRepo: Repository<Deuda>,
   ) {}
 
-  findAll(page = 1, limit = 50) {
+  findAll(page = 1, limit = 50, vendedorId?: number) {
     return this.deudasRepo.find({
-      relations: ['usuario'],
+      where: vendedorId ? { vendedor_id: vendedorId } : {},
+      relations: ['usuario', 'vendedor'],
       order: { fecha_creacion: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
     });
   }
 
-  findAllByDateRange(desde?: Date, hasta?: Date) {
+  findAllByDateRange(desde?: Date, hasta?: Date, vendedorId?: number) {
     const where: any = {};
+    if (vendedorId) where.vendedor_id = vendedorId;
     if (desde || hasta) {
       where.fecha_creacion = {};
       if (desde) where.fecha_creacion['>='] = desde;
@@ -36,14 +38,16 @@ export class DeudasService {
     }
     return this.deudasRepo.find({
       where,
-      relations: ['usuario'],
+      relations: ['usuario', 'vendedor'],
       order: { fecha_creacion: 'DESC' },
     });
   }
 
-  findByUsuario(usuarioId: number) {
+  findByUsuario(usuarioId: number, vendedorId?: number) {
     return this.deudasRepo.find({
-      where: { usuario_id: usuarioId },
+      where: vendedorId
+        ? { usuario_id: usuarioId, vendedor_id: vendedorId }
+        : { usuario_id: usuarioId },
       relations: ['usuario'],
       order: { fecha_creacion: 'DESC' },
     });
@@ -52,15 +56,16 @@ export class DeudasService {
   async findOne(id: number) {
     const deuda = await this.deudasRepo.findOne({
       where: { id },
-      relations: ['usuario'],
+      relations: ['usuario', 'vendedor'],
     });
     if (!deuda) throw new NotFoundException('Deuda no encontrada');
     return deuda;
   }
 
-  async crear(usuarioId: number, monto: number, descripcion?: string) {
+  async crear(usuarioId: number, monto: number, descripcion?: string, vendedorId?: number) {
     const deuda = this.deudasRepo.create({
       usuario_id: usuarioId,
+      vendedor_id: vendedorId,
       monto,
       descripcion: descripcion || '',
       estado: 'pendiente',
@@ -116,8 +121,9 @@ export class DeudasService {
     return { message: 'Deuda eliminada correctamente' };
   }
 
-  async resumen() {
+  async resumen(vendedorId?: number) {
     // Agregado en BD: no depende del límite de paginación de findAll()
+    const filtro = vendedorId ? ` WHERE vendedor_id = ${Number(vendedorId)}` : '';
     const rows: Record<string, unknown>[] = await this.deudasRepo.query(`
       SELECT
         COUNT(*)::int AS total_deudas,
@@ -125,7 +131,7 @@ export class DeudasService {
         COALESCE(SUM(CASE WHEN estado = 'pagado' THEN monto_pagado ELSE 0 END), 0) AS total_pagado,
         COUNT(*) FILTER (WHERE estado != 'pagado')::int AS deudas_pendientes,
         COUNT(*) FILTER (WHERE estado = 'pagado')::int AS deudas_pagadas
-      FROM deudas
+      FROM deudas${filtro}
     `);
     const r = rows[0];
     return {

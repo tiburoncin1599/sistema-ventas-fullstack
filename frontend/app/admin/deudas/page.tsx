@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { api, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 
@@ -13,6 +13,7 @@ interface Deuda {
   fecha_creacion: string;
   fecha_pago: string | null;
   usuario: { nombre: string; email: string; carnet: string };
+  vendedor?: { id: number; nombre: string } | null;
 }
 
 interface Usuario {
@@ -35,7 +36,8 @@ export default function AdminDeudas() {
   } | null>(null);
 
   const [showCrear, setShowCrear] = useState(false);
-  const [formDeuda, setFormDeuda] = useState({ usuarioId: 0, monto: '', descripcion: '' });
+  const [formDeuda, setFormDeuda] = useState({ usuarioId: 0, monto: '', descripcion: '', vendedorId: 0 });
+  const [vendedores, setVendedores] = useState<Usuario[]>([]);
 
   const [showPagar, setShowPagar] = useState<Deuda | null>(null);
   const [montoPago, setMontoPago] = useState('');
@@ -51,7 +53,7 @@ export default function AdminDeudas() {
   const puedeEditar = rolActual === 'admin' || rolActual === 'inventario';
 
   const cargar = async (filtroDesde?: string, filtroHasta?: string) => {
-    const params: any = {};
+    const params: Record<string, string> = {};
     const d = filtroDesde || desde;
     const h = filtroHasta || hasta;
     if (d) params.desde = d;
@@ -66,6 +68,10 @@ export default function AdminDeudas() {
       const u = await api.get('/usuarios');
       setUsuarios(u.data.filter((usr: Usuario) => usr.rol === 'admin' || usr.rol === 'ventas' || usr.rol === 'inventario'));
     } catch {} // solo admin puede listar usuarios
+    try {
+      const v = await api.get('/usuarios/vendedores');
+      setVendedores(v.data || []);
+    } catch {}
   };
 
   useEffect(() => {
@@ -80,9 +86,10 @@ export default function AdminDeudas() {
         usuarioId: formDeuda.usuarioId,
         monto: parseFloat(formDeuda.monto),
         descripcion: formDeuda.descripcion,
+        ...(formDeuda.vendedorId ? { vendedorId: formDeuda.vendedorId } : {}),
       });
       setShowCrear(false);
-      setFormDeuda({ usuarioId: 0, monto: '', descripcion: '' });
+      setFormDeuda({ usuarioId: 0, monto: '', descripcion: '', vendedorId: 0 });
       cargar(desde, hasta);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al crear la deuda';
@@ -139,7 +146,7 @@ export default function AdminDeudas() {
   const saldoPendiente = (d: Deuda) => d.monto - d.monto_pagado;
 
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold dark:text-white">Gestión de Deudas</h1>
@@ -238,11 +245,12 @@ export default function AdminDeudas() {
                     </div>
                   </summary>
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[760px]">
                       <thead>
                         <tr className="border-t dark:border-gray-700">
                           <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">ID</th>
                           <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Descripción</th>
+                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Vendedor</th>
                           <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Monto</th>
                           <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Pagado</th>
                           <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Saldo</th>
@@ -255,6 +263,7 @@ export default function AdminDeudas() {
                           <tr key={d.id} className="border-t dark:border-gray-700 dark:text-white">
                             <td className="px-6 py-4 font-medium text-sm">#{d.id}</td>
                             <td className="px-6 py-4 text-gray-600 dark:text-gray-400 max-w-xs truncate text-sm">{d.descripcion || '\u2014'}</td>
+                            <td className="px-6 py-4 text-sm">{d.vendedor?.nombre || '—'}</td>
                             <td className="px-6 py-4 text-sm">{formatCurrency(d.monto)}</td>
                             <td className="px-6 py-4 text-sm">{formatCurrency(d.monto_pagado)}</td>
                             <td className="px-6 py-4 font-bold text-sm">{formatCurrency(saldoPendiente(d))}</td>
@@ -288,6 +297,7 @@ export default function AdminDeudas() {
                       <tfoot>
                         <tr className="border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                           <td colSpan={2} className="px-6 py-3 font-bold text-sm dark:text-white">Total {nombre}</td>
+                          <td className="px-6 py-3 font-bold text-sm dark:text-white"></td>
                           <td className="px-6 py-3 font-bold text-sm dark:text-white">{formatCurrency(totalDeuda)}</td>
                           <td className="px-6 py-3 font-bold text-sm dark:text-white">{formatCurrency(totalPagado)}</td>
                           <td className="px-6 py-3 font-bold text-sm dark:text-white">{formatCurrency(saldo)}</td>
@@ -306,7 +316,7 @@ export default function AdminDeudas() {
       {/* Modal Crear Deuda */}
       {showCrear && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowCrear(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-6 dark:text-white">Nueva Deuda</h2>
             <div className="space-y-4">
               <div>
@@ -317,6 +327,18 @@ export default function AdminDeudas() {
                   className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
                   <option value={0}>Seleccionar...</option>
                   {usuarios.map(u => (
+                    <option key={u.id} value={u.id}>{u.nombre} ({u.email})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendedor responsable</label>
+                <select
+                  value={formDeuda.vendedorId}
+                  onChange={e => setFormDeuda({ ...formDeuda, vendedorId: +e.target.value })}
+                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
+                  <option value={0}>— Por defecto: quien registra —</option>
+                  {vendedores.map(u => (
                     <option key={u.id} value={u.id}>{u.nombre} ({u.email})</option>
                   ))}
                 </select>
@@ -354,7 +376,7 @@ export default function AdminDeudas() {
       {/* Modal Pagar Deuda */}
       {showPagar && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPagar(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-2 dark:text-white">Registrar Pago</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">Deuda #{showPagar.id} {'—'} {showPagar.usuario?.nombre}</p>
             <div className="space-y-3 mb-6">

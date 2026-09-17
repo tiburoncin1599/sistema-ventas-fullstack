@@ -20,6 +20,33 @@ import { ProveedoresModule } from './proveedores/proveedores.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { POSModule } from './pos/pos.module';
 import { UbicacionesModule } from './ubicaciones/ubicaciones.module';
+import { join } from 'path';
+import * as dotenv from 'dotenv';
+
+dotenv.config({ path: join(__dirname, '..', '.env') });
+
+const rawDatabaseUrl = process.env.DATABASE_URL ?? '';
+const isLocalDatabase = /localhost|127\.0\.0\.1/.test(rawDatabaseUrl);
+
+if (!rawDatabaseUrl) {
+  throw new Error(
+    'DATABASE_URL requerida: define la variable DATABASE_URL en backend/.env o en el entorno antes de iniciar el backend.',
+  );
+}
+
+function sanitizeSslParams(url: string): string {
+  if (!url) return url;
+  const parsed = new URL(url);
+  parsed.searchParams.delete('sslmode');
+  parsed.searchParams.delete('sslrootcert');
+  parsed.searchParams.delete('sslcert');
+  parsed.searchParams.delete('sslkey');
+  return parsed.toString();
+}
+
+const typeOrmUrl = isLocalDatabase
+  ? rawDatabaseUrl
+  : sanitizeSslParams(rawDatabaseUrl);
 
 @Module({
   imports: [
@@ -43,10 +70,8 @@ import { UbicacionesModule } from './ubicaciones/ubicaciones.module';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      url: process.env.DATABASE_URL,
-      ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? '')
-        ? false
-        : { rejectUnauthorized: false },
+      url: typeOrmUrl,
+      ssl: isLocalDatabase ? false : { rejectUnauthorized: true },
       autoLoadEntities: true,
       synchronize: false,
       migrations: [__dirname + '/migrations/*{.ts,.js}'],

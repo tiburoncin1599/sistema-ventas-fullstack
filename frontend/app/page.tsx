@@ -9,6 +9,7 @@ interface Producto {
   nombre: string;
   precio: number;
   imagen_url: string;
+  stock?: number;
 }
 
 function ImagenProducto({ src, alt }: { src: string; alt: string }) {
@@ -74,7 +75,7 @@ export default function Home() {
             <p className="text-base md:text-lg text-white/90 mb-8 max-w-lg font-medium">
               La mejor calidad en lavandinas, desinfectantes, limpia vidrios y más. Precios directos de fábrica.
             </p>
-            <div className="flex gap-3 justify-center md:justify-start">
+            <div className="flex flex-wrap gap-3 justify-center md:justify-start">
               <Link href="/productos"
                 className="bg-[#ffd600] text-[#005a24] px-8 py-3.5 rounded-full font-bold hover:bg-yellow-400 transition-colors shadow-lg">
                 Ver catálogo
@@ -127,6 +128,9 @@ export default function Home() {
                   <div className="p-4">
                     <p className="text-sm text-gray-800 dark:text-gray-200 font-medium line-clamp-2 mb-2">{p.nombre}</p>
                     <p className="text-xl font-bold text-[#005a24] dark:text-green-400">{formatCurrency(p.precio)}</p>
+                    {typeof p.stock === 'number' && p.stock === 0 && (
+                      <span className="inline-block mt-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Agotado</span>
+                    )}
                   </div>
                 </Link>
               ))}

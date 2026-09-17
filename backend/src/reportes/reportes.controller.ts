@@ -11,7 +11,6 @@ import { ReportesService } from './reportes.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import PDFDocument from 'pdfkit';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -172,6 +171,7 @@ export class ReportesController {
         titulo = 'Reporte';
     }
 
+    const PDFDocument = (await import('pdfkit')).default;
     const doc = new PDFDocument({ margin: 30, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${tipo}-${Date.now()}.pdf"`);

@@ -4,10 +4,22 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { In, Repository, DataSource } from 'typeorm';
+import {
+  In,
+  Not,
+  IsNull,
+  Repository,
+  DataSource,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  FindOptionsWhere,
+} from 'typeorm';
 import { Pedido } from './pedido.entity';
 import { DetallePedido } from './detalle-pedido.entity';
 import { Producto } from '../productos/producto.entity';
+import { Usuario } from '../usuarios/usuario.entity';
+import { Deuda } from '../deudas/deuda.entity';
 import { InventarioService } from '../inventario/inventario.service';
 import { InventarioMovimientosService } from '../inventario-movimientos/inventario-movimientos.service';
 
@@ -46,6 +58,58 @@ export class PedidosService {
       skip: (page - 1) * limit,
       take: limit,
     });
+  }
+
+  /**
+   * Listado con filtros combinados: estado, sin vendedor asignado
+   * (sinProcesador) o filtrado por vendedor asignado (procesadorId).
+   */
+  findAllFiltrado(options: {
+    estado?: string;
+    sinProcesador?: boolean;
+    procesadorId?: number;
+    page?: number;
+    limit?: number;
+  }) {
+    const where: FindOptionsWhere<Pedido> = {};
+    if (options.estado) where.estado = options.estado;
+    if (options.sinProcesador) where.procesado_por = IsNull();
+    if (options.procesadorId) where.procesado_por = options.procesadorId;
+    return this.pedidosRepo.find({
+      where,
+      relations: ['usuario', 'procesador'],
+      order: { creado_en: 'DESC' },
+      skip: ((options.page || 1) - 1) * (options.limit || 50),
+      take: options.limit || 50,
+    });
+  }
+
+  /** Pedidos creados por clientes externos que aún no tienen vendedor. */
+  findPendientesAsignacion() {
+    return this.findAllFiltrado({
+      sinProcesador: true,
+      limit: 100,
+    });
+  }
+
+  /** Asigna un pedido sin vendedor a un usuario del personal de ventas. */
+  async asignarVendedor(pedidoId: number, vendedorId: number) {
+    const pedido = await this.findOne(pedidoId);
+    if (pedido.procesado_por != null) {
+      throw new BadRequestException(
+        'Este pedido ya tiene un vendedor asignado',
+      );
+    }
+    const vendedor = await this.pedidosRepo.manager.findOne(Usuario, {
+      where: { id: vendedorId, rol: 'ventas', activo: true },
+    });
+    if (!vendedor) {
+      throw new BadRequestException(
+        'El vendedor seleccionado no existe o no está activo',
+      );
+    }
+    await this.pedidosRepo.update(pedidoId, { procesado_por: vendedorId });
+    return this.findOne(pedidoId);
   }
 
   findAllByDateRange(desde?: Date, hasta?: Date) {
@@ -122,6 +186,7 @@ export class PedidosService {
     items: ItemPedido[],
     notas?: string,
     procesadoPor?: number,
+    tipoPago?: string,
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -165,7 +230,31 @@ export class PedidosService {
         await queryRunner.manager.save(detalle);
       }
 
+      // Crédito: registra el saldo pendiente en el módulo de deudas existente,
+      // dentro de la misma transacción del pedido.
+      if (tipoPago === 'credito') {
+        await queryRunner.manager.save(
+          queryRunner.manager.create(Deuda, {
+            usuario_id: usuarioId,
+            vendedor_id: procesadoPor,
+            monto: total,
+            descripcion: `Venta a crédito · Pedido #${pedidoGuardado.id}${notas ? ` — ${notas}` : ''}`,
+            estado: 'pendiente',
+            monto_pagado: 0,
+          }),
+        );
+      }
+
       await queryRunner.commitTransaction();
+
+      // Contado: la operación queda registrada como pagada según la lógica
+      // actual (estado "entregado").
+      if (tipoPago === 'contado') {
+        await this.actualizarEstado(pedidoGuardado.id, 'confirmado');
+        await this.actualizarEstado(pedidoGuardado.id, 'enviado');
+        await this.actualizarEstado(pedidoGuardado.id, 'entregado');
+      }
+
       return this.findOne(pedidoGuardado.id);
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -192,6 +281,19 @@ export class PedidosService {
     entregado: [],
     cancelado: [],
   };
+
+  /**
+   * Control de edición: un pedido solo se modifica en estado "pendiente".
+   * Confirmado/enviado queda restringido a cambios de estado (quien edite items
+   * alteraría el stock comprometido de una venta ya procesada).
+   */
+  private verificarEditable(pedido: Pedido) {
+    if (pedido.estado !== 'pendiente') {
+      throw new BadRequestException(
+        'Un pedido solo se puede modificar mientras está en estado "pendiente"',
+      );
+    }
+  }
 
   async actualizarEstado(id: number, estado: string) {
     const pedido = await this.findOne(id);
@@ -247,11 +349,7 @@ export class PedidosService {
     await queryRunner.startTransaction();
     try {
       const pedido = await this.findOne(pedidoId);
-      if (pedido.estado === 'cancelado' || pedido.estado === 'entregado') {
-        throw new BadRequestException(
-          'No se puede modificar un pedido cancelado o entregado',
-        );
-      }
+      this.verificarEditable(pedido);
 
       const precios = await this.preciosDesdeBD(queryRunner.manager, items);
 
@@ -293,11 +391,7 @@ export class PedidosService {
     await queryRunner.startTransaction();
     try {
       const pedido = await this.findOne(pedidoId);
-      if (pedido.estado === 'cancelado' || pedido.estado === 'entregado') {
-        throw new BadRequestException(
-          'No se puede modificar un pedido cancelado o entregado',
-        );
-      }
+      this.verificarEditable(pedido);
 
       const detalle = await this.detalleRepo.findOne({
         where: { id: itemId, pedido_id: pedidoId },
@@ -391,11 +485,7 @@ export class PedidosService {
     await queryRunner.startTransaction();
     try {
       const pedido = await this.findOne(pedidoId);
-      if (pedido.estado === 'cancelado' || pedido.estado === 'entregado') {
-        throw new BadRequestException(
-          'No se puede modificar un pedido cancelado o entregado',
-        );
-      }
+      this.verificarEditable(pedido);
 
       const detalle = await this.detalleRepo.findOne({
         where: { id: itemId, pedido_id: pedidoId },
@@ -439,7 +529,7 @@ export class PedidosService {
     }
   }
 
-  async ventasPersonal(desde?: Date, hasta?: Date) {
+  async ventasPersonal(desde?: Date, hasta?: Date, usuarioId?: number) {
     const query = this.pedidosRepo
       .createQueryBuilder('pedido')
       .leftJoinAndSelect('pedido.procesador', 'procesador')
@@ -449,6 +539,10 @@ export class PedidosService {
       .addSelect('SUM(pedido.total)', 'total_vendido')
       .where('pedido.procesado_por IS NOT NULL');
 
+    if (usuarioId) {
+      query.andWhere('pedido.procesado_por = :uid', { uid: usuarioId });
+    }
+
     if (desde) query.andWhere('pedido.creado_en >= :desde', { desde });
     if (hasta) {
       const hastaFin = new Date(hasta);
@@ -456,10 +550,71 @@ export class PedidosService {
       query.andWhere('pedido.creado_en <= :hasta', { hasta: hastaFin });
     }
 
-    return query
+    const filas = await query
       .groupBy('pedido.procesado_por')
       .addGroupBy('procesador.nombre')
       .orderBy('total_vendido', 'DESC')
       .getRawMany();
+
+    // Detalle de pedidos por vendedor (para la vista "Ver pedidos").
+    // Incluye cliente y productos para consolidar la información.
+    const whereDetalle: FindOptionsWhere<Pedido> = {
+      procesado_por: usuarioId ?? Not(IsNull()),
+    };
+    if (desde || hasta) {
+      if (desde && hasta) {
+        const hastaFin = new Date(hasta);
+        hastaFin.setHours(23, 59, 59, 999);
+        whereDetalle.creado_en = Between(desde, hastaFin);
+      } else if (desde) {
+        whereDetalle.creado_en = MoreThanOrEqual(desde);
+      } else {
+        const hastaFin = new Date(hasta!);
+        hastaFin.setHours(23, 59, 59, 999);
+        whereDetalle.creado_en = LessThanOrEqual(hastaFin);
+      }
+    }
+    const pedidosDetalle = await this.pedidosRepo.find({
+      where: whereDetalle,
+      relations: ['usuario'],
+    });
+    const pedidosPorUsuario = new Map<number, unknown[]>();
+
+    if (pedidosDetalle.length > 0) {
+      const ids = pedidosDetalle.map((p) => p.id);
+      const items = await this.detalleRepo.find({
+        where: { pedido_id: In(ids) },
+        relations: ['producto'],
+      });
+      const itemsPorPedido = new Map<number, string[]>();
+      for (const it of items) {
+        const lista = itemsPorPedido.get(it.pedido_id) || [];
+        const nombre = it.producto?.nombre || `Producto #${it.producto_id}`;
+        lista.push(`${nombre} x${it.cantidad}`);
+        itemsPorPedido.set(it.pedido_id, lista);
+      }
+
+      for (const p of pedidosDetalle) {
+        if (p.procesado_por == null) continue;
+        const arr = pedidosPorUsuario.get(p.procesado_por) || [];
+        arr.push({
+          id: p.id,
+          total: Number(p.total),
+          estado: p.estado,
+          fecha: p.creado_en,
+          cliente: p.usuario?.nombre || '',
+          productos: itemsPorPedido.get(p.id) || [],
+        });
+        pedidosPorUsuario.set(p.procesado_por, arr);
+      }
+    }
+
+    return filas.map((f) => ({
+      usuario_id: Number(f.usuario_id),
+      usuario_nombre: f.usuario_nombre as string,
+      total_pedidos: Number(f.total_pedidos),
+      total_vendido: Number(f.total_vendido),
+      pedidos: pedidosPorUsuario.get(Number(f.usuario_id)) || [],
+    }));
   }
 }

@@ -19,8 +19,7 @@ import { PagarDeudaDto } from './dto/pagar-deuda.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { Response } from 'express';
-import PDFDocument from 'pdfkit';
+import { Response, Request } from 'express';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -76,15 +75,24 @@ export class DeudasController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario', 'ventas')
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.deudasService.findAll(Number(page) || 1, Number(limit) || 50);
+  findAll(
+    @Req() req: Request,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const user = req.user as { id: number; rol: string };
+    // Un vendedor solo ve las deudas de sus propias operaciones.
+    const vendedorId = user.rol === 'ventas' ? user.id : undefined;
+    return this.deudasService.findAll(Number(page) || 1, Number(limit) || 50, vendedorId);
   }
 
   @Get('resumen')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario', 'ventas')
-  resumen() {
-    return this.deudasService.resumen();
+  resumen(@Req() req: Request) {
+    const user = req.user as { id: number; rol: string };
+    const vendedorId = user.rol === 'ventas' ? user.id : undefined;
+    return this.deudasService.resumen(vendedorId);
   }
 
   @Get('usuario/:id')
@@ -97,7 +105,9 @@ export class DeudasController {
     if (user.rol === 'cliente' && user.id !== +id) {
       throw new ForbiddenException('No tienes acceso a estas deudas');
     }
-    return this.deudasService.findByUsuario(+id);
+    // Un vendedor solo consulta las deudas que gestiona él mismo.
+    const vendedorId = user.rol === 'ventas' ? user.id : undefined;
+    return this.deudasService.findByUsuario(+id, vendedorId);
   }
 
   @Get(':id')
@@ -111,17 +121,26 @@ export class DeudasController {
     if (user.rol === 'cliente' && deuda.usuario_id !== user.id) {
       throw new ForbiddenException('No tienes acceso a esta deuda');
     }
+    if (user.rol === 'ventas' && deuda.vendedor_id !== user.id) {
+      throw new ForbiddenException('No tienes acceso a esta deuda');
+    }
     return deuda;
   }
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'inventario')
-  crear(@Body() body: CrearDeudaDto) {
+  @Roles('admin', 'inventario', 'ventas')
+  crear(@Body() body: CrearDeudaDto, @Req() req: Request) {
+    const user = req.user as { id: number; rol: string };
+    // El vendedor sólo puede registrar deudas a su nombre; admin/inventario
+    // pueden elegir el personal responsable o quedar asignadas a quien crea.
+    const vendedorId =
+      user.rol === 'ventas' ? user.id : body.vendedorId ?? user.id;
     return this.deudasService.crear(
       body.usuarioId,
       body.monto,
       body.descripcion,
+      vendedorId,
     );
   }
 
@@ -144,8 +163,17 @@ export class DeudasController {
   @Roles('admin', 'inventario', 'ventas')
   @Header('Content-Type', 'application/pdf')
   @Header('Content-Disposition', 'attachment; filename=factura-deuda.pdf')
-  async facturaPDF(@Param('id') id: string, @Res() res: Response) {
+  async facturaPDF(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     const deuda = await this.deudasService.findOne(+id);
+    const user = req.user as { id: number; rol: string };
+    if (user.rol === 'ventas' && deuda.vendedor_id !== user.id) {
+      throw new ForbiddenException('No tienes acceso a esta deuda');
+    }
+    const PDFDocument = (await import('pdfkit')).default;
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.pipe(res);
 

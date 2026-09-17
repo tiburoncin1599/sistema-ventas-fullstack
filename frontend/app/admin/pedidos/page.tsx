@@ -31,10 +31,31 @@ const getColorEstado = (estado: string) => {
   return colores[estado] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
 };
 
+const ESTADOS = ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado'];
+
+const TRANSICIONES: Record<string, string[]> = {
+  pendiente: ['confirmado', 'cancelado'],
+  confirmado: ['enviado', 'cancelado'],
+  enviado: ['entregado', 'cancelado'],
+  entregado: [],
+  cancelado: [],
+};
+
 export default function AdminPedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [pedidoSel, setPedidoSel] = useState<Pedido | null>(null);
   const [qrImg, setQrImg] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+
+  const q = busqueda.trim().toLowerCase();
+  const visibles = pedidos.filter(p =>
+    (!filtroEstado || p.estado === filtroEstado) &&
+    (!q ||
+      String(p.id).includes(q) ||
+      (p.usuario?.nombre || '').toLowerCase().includes(q) ||
+      (p.usuario?.email || '').toLowerCase().includes(q)),
+  );
 
   useEffect(() => {
     api.get('/pedidos').then(res => setPedidos(res.data)).catch(() => {});
@@ -77,21 +98,40 @@ export default function AdminPedidos() {
   };
 
   return (
-    <main className="max-w-6xl mx-auto px-8 py-12">
-      <div className="flex items-center justify-between mb-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <h1 className="text-3xl font-bold dark:text-white">Pedidos</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+            className="border dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-sm dark:text-white"
+          >
+            <option value="">Todos los estados</option>
+            {ESTADOS.map(e => (
+              <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="🔎 Buscar #ID, cliente o email..."
+            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
+          />
           <span className="text-sm text-gray-500 dark:text-gray-400 self-center">
-            {pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}
+            {visibles.length} de {pedidos.length} pedidos
           </span>
         </div>
       </div>
 
       {pedidos.length === 0 ? (
         <p className="text-center py-20 text-gray-500 dark:text-gray-400">No hay pedidos todavía</p>
+      ) : visibles.length === 0 ? (
+        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda o filtro.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {pedidos.map(pedido => (
+          {visibles.map(pedido => (
             <div
               key={pedido.id}
               onClick={() => abrirDetalle(pedido.id)}
@@ -140,7 +180,7 @@ export default function AdminPedidos() {
 
       {pedidoSel && (
         <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setPedidoSel(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-6">
               <h2 className="text-2xl font-bold dark:text-white">Pedido #{pedidoSel.id}</h2>
               <div className="flex gap-2">
@@ -161,11 +201,15 @@ export default function AdminPedidos() {
                 onChange={e => cambiarEstado(pedidoSel.id, e.target.value)}
                 className="border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
               >
-                <option value="pendiente">Pendiente</option>
-                <option value="confirmado">Confirmado</option>
-                <option value="enviado">Enviado</option>
-                <option value="entregado">Entregado</option>
-                <option value="cancelado">Cancelado</option>
+                {ESTADOS.map(e => (
+                  <option
+                    key={e}
+                    value={e}
+                    disabled={e !== pedidoSel.estado && !(TRANSICIONES[pedidoSel.estado] || []).includes(e)}
+                  >
+                    {e.charAt(0).toUpperCase() + e.slice(1)}
+                  </option>
+                ))}
               </select>
               <button
                 onClick={() => generarQR(pedidoSel.id)}
@@ -178,18 +222,18 @@ export default function AdminPedidos() {
             <h3 className="font-bold text-lg mb-3 dark:text-white">Productos</h3>
             <div className="space-y-3 mb-6">
               {pedidoSel.detalles?.map(d => (
-                <div key={d.id} className="flex items-center gap-4 border dark:border-gray-700 rounded-xl p-3">
+                <div key={d.id} className="flex items-start gap-4 border dark:border-gray-700 rounded-xl p-3">
                   <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
                     {d.producto?.imagen_url
                       ? <img src={`${API_URL}${d.producto.imagen_url}`} alt={d.producto.nombre} className="w-full h-full object-contain" />
                       : <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">Sin img</div>
                     }
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium dark:text-white">{d.producto?.nombre}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium dark:text-white break-words">{d.producto?.nombre}</p>
                     <p className="text-gray-500 dark:text-gray-400 text-sm">x{d.cantidad} @ {formatCurrency(d.precio_unitario)}</p>
                   </div>
-                  <p className="font-bold dark:text-white">{formatCurrency(d.cantidad * parseCurrency(d.precio_unitario))}</p>
+                  <p className="font-bold dark:text-white shrink-0">{formatCurrency(d.cantidad * parseCurrency(d.precio_unitario))}</p>
                 </div>
               ))}
             </div>
