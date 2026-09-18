@@ -1,0 +1,30 @@
+# Node
+node_modules/
+
+# Builds
+backend/dist/
+frontend/.next/
+frontend/out/
+build/
+*.tsbuildinfo
+
+# Entorno (nunca subir credenciales reales)
+.env
+.env.local
+.env.test
+.env.production
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Otros
+coverage/
