@@ -1,25 +1,18 @@
 import type { NextConfig } from 'next';
 
-const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-c811d.up.railway.app';
-
-const API_HOST = rawUrl.startsWith('http')
-  ? new URL(rawUrl).hostname
-  : rawUrl;
+// El backend NestJS corre como proceso hermano (puerto interno) iniciado por
+// el launcher raíz. Next enruta las rutas `/api/*`, `/uploads` (a través de
+// `/api/uploads/*`), Swagger (`/api-docs`) hacia ese backend del mismo origen.
+const INTERNAL_API_URL = process.env.INTERNAL_API_URL || 'http://127.0.0.1:3001';
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: API_HOST,
-        pathname: '/uploads/**',
-      },
-      {
-        protocol: 'http',
-        hostname: API_HOST,
-        pathname: '/uploads/**',
-      },
-    ],
+  output: 'standalone',
+  async rewrites() {
+    return [
+      { source: '/api-docs', destination: `${INTERNAL_API_URL}/api` },
+      { source: '/api-docs-json', destination: `${INTERNAL_API_URL}/api-json` },
+      { source: '/api/:path*', destination: `${INTERNAL_API_URL}/:path*` },
+    ];
   },
 };
 

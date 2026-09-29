@@ -1,9 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-c811d.up.railway.app';
 
 interface Producto {
   id: number;

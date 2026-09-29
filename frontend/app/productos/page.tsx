@@ -1,11 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { useCarrito } from '@/store/carrito';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-c811d.up.railway.app';
 
 interface Producto {
   id: number;

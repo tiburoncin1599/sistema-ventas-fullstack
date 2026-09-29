@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
 
 function AuthContent() {
   const router = useRouter();
@@ -108,7 +108,7 @@ function AuthContent() {
           </div>
         </div>
 
-        <a href={`${process.env.NEXT_PUBLIC_API_URL || 'https://web-production-c811d.up.railway.app'}/auth/google`}
+        <a href={`${API_URL}/auth/google`}
           className="w-full flex items-center justify-center gap-3 border border-gray-200 dark:border-gray-600 rounded-xl py-3 font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>

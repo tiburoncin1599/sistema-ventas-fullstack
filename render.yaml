@@ -1,0 +1,46 @@
+# Render Blueprint — sistema de ventas (Next.js + NestJS en un solo servicio)
+#
+# Despliegue: New > Blueprint (render.yaml) y apuntá este repositorio.
+# Opciones dentro de obli.  El plan Free rota el servicio en inactividad.
+#
+# Variables a configurar en el dashboard (o al crear por Blueprint):
+#   DATABASE_URL    (obligatorio, Neon PostgreSQL)
+#   JWT_SECRET      (obligatorio)
+#   FRONTEND_URL    (obligatorio, la URL pública https://...onrender.com)
+#   ADMIN_EMAILS    (opcional)
+#   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_CALLBACK_URL (opcional)
+#   API_URL         (opcional, se deduce de FRONTEND_URL + /api)
+#
+# Rutas públicas resultantes:
+#   /              -> frontend Next.js
+#   /api/*         -> backend NestJS (mismo origen)
+#   /api-docs      -> Swagger UI
+#   /api/health    -> health check
+
+services:
+  - type: web
+    name: sistema-ventas
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: API_URL
+        sync: false

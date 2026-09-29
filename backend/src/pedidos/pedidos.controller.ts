@@ -166,7 +166,8 @@ export class PedidosController {
   async facturaQR(@Param('id') id: string, @Req() req: Request) {
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     const baseUrl =
-      process.env.API_URL || 'https://web-production-c811d.up.railway.app';
+      process.env.API_URL ||
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api`;
     const pdfUrl = `${baseUrl}/pedidos/${id}/factura/pdf`;
     const qr = await QRCode.toDataURL(pdfUrl);
     return { qr, pdf_url: pdfUrl, pedido_id: id };

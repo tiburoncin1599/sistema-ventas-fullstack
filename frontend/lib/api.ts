@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-c811d.up.railway.app';
+// En desarrollo y producción el frontend habla con el backend por el mismo
+// origen: Next enruta `/api/*` hacia el proceso backend (ver next.config.ts).
+// `NEXT_PUBLIC_API_URL` permite apuntar a un origen distinto si hiciera falta.
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/+$/, '');
 
 // Endpoints que NO deben pasar por el interceptor de 401:
 // un login/registro fallido devuelve 401 y ahí no hay sesión que refrescar

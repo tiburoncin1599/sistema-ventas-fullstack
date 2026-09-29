@@ -2,8 +2,7 @@
 import { useCarrito } from '@/store/carrito';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
 import Link from 'next/link';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-c811d.up.railway.app';
+import { API_URL } from '@/lib/api';
 
 export default function CarritoPage() {
   const { items, quitar, cambiarCantidad, total } = useCarrito();

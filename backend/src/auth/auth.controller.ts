@@ -36,7 +36,7 @@ export class AuthController {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL:
         process.env.GOOGLE_CALLBACK_URL ||
-        'https://web-production-c811d.up.railway.app/auth/google/callback',
+        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/auth/google/callback`,
     };
   }
 
