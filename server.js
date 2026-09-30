@@ -83,7 +83,16 @@ function main() {
     fail(`Falta el build del backend (${BACKEND_ENTRY}). Ejecuta 'npm run build' en la raíz.`);
   }
   if (!fs.existsSync(path.join(STANDALONE_DIR, 'server.js'))) {
-    fail(`Falta el build standalone del frontend (${STANDALONE_DIR}). Ejecuta 'npm run build' en la raíz.`);
+    const nextDir = path.join(FRONTEND_DIR, '.next');
+    let detail = '';
+    if (fs.existsSync(nextDir)) {
+      detail = `\n[launcher] Contenido real de ${nextDir}: ${fs.readdirSync(nextDir).join(', ')}`;
+    } else {
+      detail = `\n[launcher] Ni siquiera existe ${nextDir}: el build de Next.js no se ejecuto dentro de 'frontend' (o no genero .next).`;
+    }
+    fail(
+      `Falta el build standalone del frontend (${STANDALONE_DIR}). Ejecuta 'npm run build' en la raiz.${detail}`,
+    );
   }
 
   // El build standalone de Next no copia public/ ni .next/static: se copian aquí.

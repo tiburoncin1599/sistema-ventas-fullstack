@@ -7,6 +7,10 @@ const INTERNAL_API_URL = process.env.INTERNAL_API_URL || 'http://127.0.0.1:3001'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Fija la raíz de traceo en el directorio de la app: impide que Next
+  // detecte la raíz del repo como monorepo (package-lock.json de `npm install`
+  // en la raíz) y anide el standalone en .next/standalone/frontend/.
+  outputFileTracingRoot: __dirname,
   async rewrites() {
     return [
       { source: '/api-docs', destination: `${INTERNAL_API_URL}/api` },

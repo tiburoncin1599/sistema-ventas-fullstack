@@ -5,8 +5,8 @@
   "description": "Despliegue de un solo servicio: frontend Next.js + backend NestJS",
   "scripts": {
     "build": "npm run build:backend && npm run build:frontend",
-    "build:backend": "cd backend && npm install && npm run build",
-    "build:frontend": "cd frontend && npm install && npm run build",
+    "build:backend": "cd backend && npm install --include=dev && npm run build",
+    "build:frontend": "cd frontend && npm install --include=dev && npm run build && node -e \"const fs=require('fs');const path=require('path');const p=path.join(process.cwd(),'.next','standalone','server.js');if(!fs.existsSync(p)){console.error('[build] ERROR: Next.js no genero el standalone en frontend/.next/standalone');const n=path.join(process.cwd(),'.next');if(fs.existsSync(n)){console.error('[build] Contenido de .next: '+fs.readdirSync(n).join(' | '));}process.exit(1)}console.log('[build] Standalone frontend generado correctamente: frontend/.next/standalone')\"",
     "start": "node server.js"
   },
   "engines": {
