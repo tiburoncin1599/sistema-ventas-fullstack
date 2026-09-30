@@ -106,6 +106,7 @@ function main() {
   );
 
   const nodeEnv = process.env.NODE_ENV || 'production';
+  let backendReady = false;
 
   const backend = spawn(process.execPath, ['dist/main.js'], {
     cwd: BACKEND_DIR,
@@ -116,6 +117,20 @@ function main() {
   pipeChild('backend', backend);
   backend.on('exit', (code) => {
     log('backend', `finalizó con código ${code}`);
+    if (!backendReady && !stopping) {
+      console.error(
+        '[launcher] El backend salió antes de quedar listo. Revisá las variables de entorno de Render:',
+      );
+      console.error(
+        '[launcher]   - DATABASE_URL   (obligatoria: tu conexión PostgreSQL de Neon)',
+      );
+      console.error(
+        '[launcher]   - JWT_SECRET     (obligatoria)',
+      );
+      console.error(
+        '[launcher]   - FRONTEND_URL   (obligatoria: la URL pública https://...onrender.com)',
+      );
+    }
     if (!stopping) process.exit(code || 1);
   });
 
@@ -123,6 +138,7 @@ function main() {
   log('launcher', `esperando backend en ${backendHealth}...`);
   waitForHealth(backendHealth, 180000)
     .then(() => {
+      backendReady = true;
       log('launcher', 'backend listo, arrancando Next.js standalone...');
       const web = spawn(process.execPath, ['server.js'], {
         cwd: STANDALONE_DIR,
