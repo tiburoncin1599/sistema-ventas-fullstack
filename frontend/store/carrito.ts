@@ -66,6 +66,6 @@ export const useCarrito = create<CarritoStore>()(
 
       total: () => get().items.reduce((sum, i) => sum + parseCurrency(i.precio) * i.cantidad, 0),
     }),
-    { name: 'carrito-storage' },
+    { name: 'carrito-storage', version: 1 },
   ),
 );
