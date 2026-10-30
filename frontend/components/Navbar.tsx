@@ -85,7 +85,13 @@ export default function Navbar() {
                     <p className="font-medium text-xs truncate max-w-28">{usuario.nombre}</p>
                   </div>
                 </Link>
-                {(usuario.rol === 'admin' || usuario.rol === 'inventario' || usuario.rol === 'ventas') && (
+                {usuario?.rol === 'cliente' && (
+                  <Link href="/carrito" className="hover:text-yellow-300 flex items-center gap-1">
+                    <span className="text-lg">🛒</span>
+                    <span className="text-xs">Carrito ({cantidadItems})</span>
+                  </Link>
+                )}
+                {(usuario?.rol === 'admin' || usuario?.rol === 'inventario' || usuario?.rol === 'ventas') && (
                   <Link href={usuario.rol === 'ventas' ? '/ventas' : '/admin'} className="bg-[#ffd600] text-[#005a24] px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-yellow-400">
                     {usuario.rol === 'admin' ? 'ADMIN' : 'PANEL'}
                   </Link>
@@ -129,13 +135,13 @@ export default function Navbar() {
               <Link href={usuario.rol === 'ventas' ? '/ventas' : '/admin'} className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Panel Admin</Link>
             )}
             <Link href="/cuenta/pedidos" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Mis pedidos</Link>
-            <Link href="/carrito" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Carrito ({cantidadItems})</Link>
+            {usuario?.rol === 'cliente' && (<Link href="/carrito" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Carrito ({cantidadItems})</Link>)}
             <button onClick={cerrarSesionHandler} className="block py-2 text-red-600 dark:text-red-400 font-medium">Cerrar sesión</button>
           </>
         ) : (
           <>
             <Link href="/auth" className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Iniciar sesión</Link>
-            <Link href="/carrito" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Carrito</Link>
+
           </>
         )}
       </div>
