@@ -23,12 +23,18 @@ interface CarritoStore {
   total: () => number;
 }
 
+const CHECK_USER = () => typeof window !== 'undefined' && !!localStorage.getItem('token');
+
 export const useCarrito = create<CarritoStore>()(
   persist(
     (set, get) => ({
       items: [],
 
       agregar: (producto) => {
+        if (!CHECK_USER()) {
+          alert('Debe iniciar sesión para agregar productos al carrito');
+          return;
+        }
         const qty = producto.cantidad || 1;
         const stock = typeof producto.stock === 'number' ? producto.stock : undefined;
         const datos: ProductoCarrito = { id: producto.id, nombre: producto.nombre, precio: parseCurrency(producto.precio), imagen_url: producto.imagen_url, stock };

@@ -36,8 +36,9 @@ export default function Navbar() {
   const { items } = useCarrito();
   const [mounted, setMounted] = useState(false);
   const usuario = useAuth();
+  const usuarioCheck = usuario ? usuario : null;
   const [busqueda, setBusqueda] = useState('');
-  const cantidadItems = mounted ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
+  const cantidadItems = mounted && usuario ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => { setMounted(true); }, []); // eslint-disable-line react-hooks/set-state-in-effect
@@ -110,18 +111,20 @@ export default function Navbar() {
             )}
 
             <Link href="/carrito" className="relative hover:text-yellow-300 flex items-center gap-1">
-              <span className="text-lg">🛒</span>
-              <div className="text-left leading-tight">
-                <p className="text-[10px] text-gray-300">Carrito</p>
-                {cantidadItems > 0 && (
-                  <p className="font-medium text-xs">{cantidadItems} {cantidadItems === 1 ? 'item' : 'items'}</p>
-                )}
-              </div>
-              {cantidadItems > 0 && (
+              {usuario ? (
+                <span className="text-lg">🛒</span>
+                <div className="text-left leading-tight">
+                  <p className="text-[10px] text-gray-300">Carrito</p>
+                  {cantidadItems > 0 && (
+                    <p className="font-medium text-xs">{cantidadItems} {cantidadItems === 1 ? 'item' : 'items'}</p>
+                  )}
+                </div>
+              ) : null}
+              {usuario && cantidadItems > 0 && (
                 <span className="absolute -top-1 -right-1 bg-[#ffd600] text-[#005a24] text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {cantidadItems}
                 </span>
-              )}
+              )}           
             </Link>
           </div>
 
@@ -158,7 +161,6 @@ export default function Navbar() {
           ) : (
             <>
               <Link href="/auth" className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Iniciar sesión</Link>
-              <Link href="/carrito" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Carrito</Link>
             </>
           )}
         </div>
