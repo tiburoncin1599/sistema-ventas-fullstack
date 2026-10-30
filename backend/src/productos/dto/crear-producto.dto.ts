@@ -1,6 +1,11 @@
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, MaxLength, Min } from 'class-validator';
 
 export class CrearProductoDto {
+  @IsOptional()
+  @IsString({ message: 'El código debe ser texto' })
+  @MaxLength(50, { message: 'El código no puede superar los 50 caracteres' })
+  codigo?: string;
+
   @IsString({ message: 'El nombre es obligatorio' })
   nombre!: string;
 

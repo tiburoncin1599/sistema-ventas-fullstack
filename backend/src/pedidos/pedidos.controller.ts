@@ -162,9 +162,27 @@ export class PedidosController {
   }
 
   @Get(':id/factura/qr')
-  @UseGuards(JwtAuthGuard)
-  async facturaQR(@Param('id') id: string, @Req() req: Request) {
-    await this.verificarAcceso(+id, req.user as { id: number; rol: string });
+  async facturaQR(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : '';
+    if (!token) {
+      return res.status(401).json({
+        statusCode: 401,
+        message: 'Token de autenticación requerido',
+      });
+    }
+    let payload: { id: number; rol: string };
+    try {
+      payload = this.jwtService.verify<{ id: number; rol: string }>(token);
+    } catch {
+      return res.status(401).json({
+        statusCode: 401,
+        message: 'Token inválido o expirado',
+      });
+    }
+    await this.verificarAcceso(+id, payload);
     const baseUrl =
       process.env.API_URL ||
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api`;

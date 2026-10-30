@@ -5,6 +5,7 @@ import { formatCurrency, parseCurrency } from '@/lib/utils';
 
 interface Producto {
   id: number;
+  codigo?: string;
   nombre: string;
   descripcion?: string;
   precio: number;
@@ -21,7 +22,7 @@ export default function AdminProductos() {
   const [busqueda, setBusqueda] = useState('');
   const [modalProducto, setModalProducto] = useState<Producto | null>(null);
   const [creando, setCreando] = useState(false);
-  const [form, setForm] = useState({ nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
+  const [form, setForm] = useState({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const cargarDatos = async () => {
@@ -50,7 +51,7 @@ export default function AdminProductos() {
   const abrirNuevo = () => {
     setCreando(true);
     setModalProducto(null);
-    setForm({ nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
+    setForm({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
     limpiarArchivo();
   };
 
@@ -58,6 +59,7 @@ export default function AdminProductos() {
     setCreando(false);
     setModalProducto(p);
     setForm({
+      codigo: p.codigo || '',
       nombre: p.nombre,
       descripcion: p.descripcion || '',
       precio: String(parseCurrency(p.precio)),
@@ -71,6 +73,7 @@ export default function AdminProductos() {
     try {
       const payload = {
         ...form,
+        codigo: form.codigo.trim() || undefined,
         precio: parseCurrency(form.precio),
         precio_costo: form.precio_costo ? parseCurrency(form.precio_costo) : undefined,
         categoria_id: +form.categoria_id || undefined,
@@ -124,6 +127,7 @@ export default function AdminProductos() {
   const visibles = q
     ? productos.filter(p =>
         p.nombre.toLowerCase().includes(q) ||
+        (p.codigo || '').toLowerCase().includes(q) ||
         (p.categoria?.nombre || '').toLowerCase().includes(q),
       )
     : productos;
@@ -140,7 +144,7 @@ export default function AdminProductos() {
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar por nombre o categoría..."
+            placeholder="🔎 Buscar por nombre, código o categoría..."
             className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
           />
           <button onClick={abrirNuevo}
@@ -170,7 +174,10 @@ export default function AdminProductos() {
               </div>
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-bold text-gray-900 dark:text-white truncate flex-1">{p.nombre}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-gray-900 dark:text-white truncate">{p.nombre}</p>
+                    {p.codigo && <p className="text-xs font-mono text-gray-500 dark:text-gray-400">Cód. {p.codigo}</p>}
+                  </div>
                   <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${p.activo ? 'bg-green-500' : 'bg-red-400'}`} />
                 </div>
                 <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">{p.categoria?.nombre}</p>
@@ -197,6 +204,9 @@ export default function AdminProductos() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-2xl font-bold mb-6 dark:text-white">{creando ? 'Nuevo producto' : 'Editar producto'}</h2>
             <div className="space-y-4">
+              <input placeholder="Código (opcional, se usa en el POS)" value={form.codigo}
+                onChange={e => setForm({ ...form, codigo: e.target.value })}
+                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
               <input placeholder="Nombre" value={form.nombre}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
                 className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />

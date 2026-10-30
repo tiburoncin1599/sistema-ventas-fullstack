@@ -23,9 +23,7 @@ export class AuthController {
   private readonly COOKIE_OPTIONS = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    // Frontend (Vercel) y backend (Railway) son sitios distintos: se necesita
-    // SameSite=None para que el navegador envíe la cookie en el refresh cross-site
-    sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
+    sameSite: 'lax' as const,
     path: '/auth',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
   };
@@ -34,9 +32,8 @@ export class AuthController {
     return {
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL:
-        process.env.GOOGLE_CALLBACK_URL ||
-        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/auth/google/callback`,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL ||
+        `${process.env.FRONTEND_URL}/api/auth/google/callback`,
     };
   }
 
@@ -95,11 +92,9 @@ export class AuthController {
 
   @Get('google')
   googleAuth(@Res() res: Response) {
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://sistema-ventas-frontend-tawny.vercel.app';
-    if (!this.googleHabilitado) {
-      return res.redirect(
-        `${FRONTEND_URL}/auth?error=${encodeURIComponent('Google OAuth no configurado. Contactá al administrador.')}`,
-      );
+    const FRONTEND_URL = process.env.FRONTEND_URL;
+    if (!this.googleHabilitado || !FRONTEND_URL) {
+      return res.redirect('/auth?error=Google OAuth no configurado. Contactá al administrador.');
     }
     const { clientId, callbackURL } = this.googleConfig;
     const googleUrl =
@@ -115,12 +110,10 @@ export class AuthController {
 
   @Get('google/callback')
   async googleCallback(@Req() req: Request, @Res() res: Response) {
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://sistema-ventas-frontend-tawny.vercel.app';
+    const FRONTEND_URL = process.env.FRONTEND_URL;
     const code = req.query.code as string;
-    if (!code || !this.googleHabilitado) {
-      return res.redirect(
-        `${FRONTEND_URL}/auth?error=${encodeURIComponent('Google OAuth no configurado. Contactá al administrador.')}`,
-      );
+    if (!code || !this.googleHabilitado || !FRONTEND_URL) {
+      return res.redirect('/auth?error=Google OAuth no configurado. Contactá al administrador.');
     }
     try {
       const { clientId, clientSecret, callbackURL } = this.googleConfig;

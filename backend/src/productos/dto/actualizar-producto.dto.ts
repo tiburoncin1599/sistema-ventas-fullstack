@@ -1,6 +1,11 @@
-import { IsString, IsNumber, IsOptional, Min, IsBoolean } from 'class-validator';
+import { IsString, IsNumber, IsOptional, MaxLength, Min, IsBoolean } from 'class-validator';
 
 export class ActualizarProductoDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  codigo?: string;
+
   @IsOptional()
   @IsString()
   nombre?: string;

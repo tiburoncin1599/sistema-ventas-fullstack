@@ -4,11 +4,14 @@
    Uso:  node scripts/importar-productos.cjs ruta/al/archivo.csv
 
    Formato del CSV (la primera fila son los encabezados):
-     nombre;descripcion;precio;precio_costo;precio_por_docena;tamano;categoria;stock;cantidad_minima
+     codigo;nombre;descripcion;precio;precio_costo;precio_por_docena;tamano;categoria;stock;cantidad_minima
    - Separador: detecta automáticamente ';' o ','
    - Solo 'nombre' y 'precio' son obligatorios
+   - 'codigo' es opcional y debe ser único: es el que permite identificar el
+     producto en el punto de venta
    - 'stock' va en unidades individuales (si vendés por docena de 12, poné docenas*12)
    - Si el producto ya existe (mismo nombre) se actualiza precio/stock en vez de duplicarlo
+   - Si el producto ya existe y ya tenía código, el CSV no lo sobreescribe
 */
 require('dotenv').config({ quiet: true });
 const fs = require('fs');
@@ -65,6 +68,7 @@ async function main() {
     const c = parsearLinea(l, sep);
     return {
       nombre: c[idx('nombre')],
+      codigo: idx('codigo') >= 0 ? c[idx('codigo')] || null : null,
       descripcion: idx('descripcion') >= 0 ? c[idx('descripcion')] : null,
       precio: numero(c[idx('precio')]),
       precio_costo: idx('precio_costo') >= 0 ? numero(c[idx('precio_costo')]) : null,
@@ -123,16 +127,17 @@ async function main() {
         await client.query(
           `UPDATE productos SET precio = $1, precio_costo = $2, precio_por_docena = $3,
              descripcion = COALESCE($4, descripcion), tamano = COALESCE($5, tamano),
-             categoria_id = COALESCE($6, categoria_id)
-           WHERE id = $7`,
-          [f.precio, f.precio_costo, f.precio_por_docena, f.descripcion, f.tamano, categoriaId, productoId],
+             categoria_id = COALESCE($6, categoria_id),
+             codigo = COALESCE(productos.codigo, $7)
+           WHERE id = $8`,
+          [f.precio, f.precio_costo, f.precio_por_docena, f.descripcion, f.tamano, categoriaId, f.codigo, productoId],
         );
         actualizados++;
       } else {
         const ins = await client.query(
-          `INSERT INTO productos (nombre, descripcion, precio, precio_costo, precio_por_docena, tamano, categoria_id, activo)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
-          [f.nombre, f.descripcion, f.precio, f.precio_costo, f.precio_por_docena, f.tamano, categoriaId],
+          `INSERT INTO productos (nombre, codigo, descripcion, precio, precio_costo, precio_por_docena, tamano, categoria_id, activo)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true) RETURNING id`,
+          [f.nombre, f.codigo, f.descripcion, f.precio, f.precio_costo, f.precio_por_docena, f.tamano, categoriaId],
         );
         productoId = ins.rows[0].id;
         creados++;

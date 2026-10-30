@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { Producto } from './producto.entity';
 import { Inventario } from '../inventario/inventario.entity';
 
@@ -57,13 +57,25 @@ export class ProductosService {
     return conStock;
   }
 
-  crear(data: Partial<Producto>) {
+  /** Evita dos productos con el mismo código: el POS busca por código. */
+  private async codigoDisponible(codigo: string, idExcluido?: number) {
+    const repetido = await this.productosRepo.findOne({
+      where: { codigo, ...(idExcluido ? { id: Not(idExcluido) } : {}) },
+    });
+    if (repetido) {
+      throw new ConflictException(`El código ${codigo} ya está asignado a otro producto`);
+    }
+  }
+
+  async crear(data: Partial<Producto>) {
+    if (data.codigo) await this.codigoDisponible(data.codigo);
     const producto = this.productosRepo.create(data);
     return this.productosRepo.save(producto);
   }
 
   async actualizar(id: number, data: Partial<Producto>) {
     await this.findOne(id);
+    if (data.codigo) await this.codigoDisponible(data.codigo, id);
     return this.productosRepo.update(id, data);
   }
 

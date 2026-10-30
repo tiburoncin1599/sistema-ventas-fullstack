@@ -18,6 +18,9 @@ export class Producto {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  @Column({ length: 50, nullable: true, unique: true })
+  codigo?: string;
+
   @Column({ length: 200 })
   nombre!: string;
 
