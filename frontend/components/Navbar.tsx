@@ -37,7 +37,7 @@ export default function Navbar() {
   const [mounted, setMounted] = useState(false);
   const usuario = useAuth();
   const [busqueda, setBusqueda] = useState('');
-  const cantidadItems = mounted && usuario ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
+  const cantidadItems = mounted ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => { setMounted(true); }, []); // eslint-disable-line react-hooks/set-state-in-effect
