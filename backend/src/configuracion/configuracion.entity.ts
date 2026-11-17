@@ -17,16 +17,10 @@ export class Configuracion {
   @Column({ type: 'varchar', length: 20, nullable: true })
   moneda_simbolo!: string | null;
 
-  @Column({
-    type: 'decimal',
-    precision: 5,
-    scale: 2,
-    default: 0,
-    transformer: {
-      to: (value?: number | null) => value ?? 0,
-      from: (value?: string | null) => (value === null || value === undefined ? 0 : Number(value)),
-    },
-  })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: {
+    to: (value?: number | null) => value ?? 0,
+    from: (value?: string | null) => (value === null || value === undefined ? 0 : Number(value)),
+  } })
   impuesto_porcentaje!: number;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
@@ -52,9 +46,6 @@ export class Configuracion {
 
   @Column({ default: true })
   notificaciones_stock!: boolean;
-
-  @Column({ default: 5 })
-  stock_minimo_alerta!: number;
 
   @Column({ default: false })
   modo_oscuro!: boolean;

@@ -63,7 +63,7 @@ export class DashboardService {
         (SELECT COUNT(*)::int FROM productos WHERE activo = true) AS total_productos,
         (SELECT COUNT(*)::int FROM pedidos) AS total_pedidos,
         (SELECT COALESCE(SUM(total), 0) FROM pedidos WHERE estado != 'cancelado') AS ingresos_totales,
-        (SELECT COUNT(*)::int FROM inventario WHERE cantidad <= cantidad_minima) AS productos_stock_bajo,
+        (SELECT COUNT(*)::int FROM inventario WHERE cantidad <= 10) AS productos_stock_bajo,
         (SELECT COALESCE(SUM(monto - monto_pagado), 0) FROM deudas WHERE estado = 'pendiente') AS deudas_pendientes
     `);
     return result[0];
@@ -94,11 +94,11 @@ export class DashboardService {
         p.id AS producto_id,
         p.nombre,
         i.cantidad,
-        i.cantidad_minima,
-        (i.cantidad_minima - i.cantidad) AS faltante
+        10 AS cantidad_minima,
+        (10 - i.cantidad) AS faltante
       FROM inventario i
       JOIN productos p ON p.id = i.producto_id
-      WHERE i.cantidad <= i.cantidad_minima
+      WHERE i.cantidad <= 10
       ORDER BY i.cantidad ASC
       LIMIT 10
     `);

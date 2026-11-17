@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { InventarioMovimiento } from './inventario-movimiento.entity';
 import { InventarioService } from '../inventario/inventario.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class InventarioMovimientosService {
@@ -10,6 +11,7 @@ export class InventarioMovimientosService {
     @InjectRepository(InventarioMovimiento)
     private movimientosRepo: Repository<InventarioMovimiento>,
     private inventarioService: InventarioService,
+    private readonly auditService: AuditService,
   ) {}
 
   async registrar(
@@ -66,6 +68,16 @@ export class InventarioMovimientosService {
     // Incremento atómico: evita que dos entradas concurrentes se pisen
     const cantNueva = await this.inventarioService.incrementar(params.producto_id, params.cantidad);
 
+    await this.auditService.registrar({
+      accion: 'entrada_inventario',
+      entidad: 'inventario',
+      entidad_id: params.producto_id,
+      valor_anterior: { cantidad: cantAnterior },
+      valor_nuevo: { cantidad: cantNueva },
+      usuario_id: params.usuario_id,
+      usuario_rol: 'inventario',
+    });
+
     return this.registrar({
       ...params,
       tipo: 'entrada',
@@ -86,6 +98,16 @@ export class InventarioMovimientosService {
 
     await this.inventarioService.descontar(params.producto_id, params.cantidad);
 
+    await this.auditService.registrar({
+      accion: 'salida_inventario',
+      entidad: 'inventario',
+      entidad_id: params.producto_id,
+      valor_anterior: { cantidad: cantAnterior },
+      valor_nuevo: { cantidad: cantAnterior - params.cantidad },
+      usuario_id: params.usuario_id,
+      usuario_rol: 'inventario',
+    });
+
     return this.registrar({
       ...params,
       tipo: 'salida',
@@ -105,6 +127,16 @@ export class InventarioMovimientosService {
     const cantAnterior = inventario.cantidad;
 
     await this.inventarioService.actualizar(params.producto_id, params.cantidad);
+
+    await this.auditService.registrar({
+      accion: 'ajuste_inventario',
+      entidad: 'inventario',
+      entidad_id: params.producto_id,
+      valor_anterior: { cantidad: cantAnterior },
+      valor_nuevo: { cantidad: params.cantidad },
+      usuario_id: params.usuario_id,
+      usuario_rol: 'inventario',
+    });
 
     return this.registrar({
       ...params,

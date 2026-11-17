@@ -56,11 +56,6 @@ export class ActualizarConfiguracionDto {
   notificaciones_stock?: boolean;
 
   @IsOptional()
-  @IsNumber()
-  @Min(1)
-  stock_minimo_alerta?: number;
-
-  @IsOptional()
   @IsBoolean()
   modo_oscuro?: boolean;
 }

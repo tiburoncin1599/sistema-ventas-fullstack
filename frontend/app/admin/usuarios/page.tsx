@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { Plus, Search, X } from 'lucide-react';
 
 interface Usuario {
   id: number;
@@ -16,12 +17,22 @@ const ROLES_SIN_ADMIN = ['ventas', 'inventario', 'cliente'];
 
 const rolColor = (rol: string) => {
   const colores: Record<string, string> = {
-    admin: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
-    ventas: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-    inventario: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
-    cliente: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+    admin: 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300',
+    ventas: 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300',
+    inventario: 'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200',
+    cliente: 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200',
   };
-  return colores[rol] || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+  return colores[rol] || 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200';
+};
+
+const avatarColor = (rol: string) => {
+  const colores: Record<string, string> = {
+    admin: 'bg-prolimal-coral-500',
+    ventas: 'bg-prolimal-teal-600',
+    inventario: 'bg-prolimal-sand-600',
+    cliente: 'bg-prolimal-ink-500',
+  };
+  return colores[rol] || 'bg-prolimal-ink-500';
 };
 
 export default function AdminUsuariosPage() {
@@ -106,7 +117,13 @@ export default function AdminUsuariosPage() {
     } catch { setError('Error al eliminar usuario'); }
   };
 
-  if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando...</p>;
+  if (cargando) {
+    return (
+      <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+        Cargando usuarios...
+      </div>
+    );
+  }
 
   const activos = usuarios.filter(u => u.activo);
   const inactivos = usuarios.filter(u => !u.activo);
@@ -121,81 +138,97 @@ export default function AdminUsuariosPage() {
   );
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Usuarios</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{activos.length} activos, {inactivos.length} inactivos</p>
+          <p className="prolimal-eyebrow">Equipo</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Usuarios
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            {activos.length} activos · {inactivos.length} inactivos
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <select
             value={filtroRol}
             onChange={(e) => setFiltroRol(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-sm dark:text-white"
+            className="prolimal-input sm:w-40"
           >
             <option value="">Todos los roles</option>
             {['admin', 'ventas', 'inventario', 'cliente'].map(r => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar por nombre, email o rol..."
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
-          />
-          <button onClick={abrirNuevo}
-            className="bg-[#005a24] text-white px-5 py-2.5 rounded-xl font-bold hover:bg-[#003e19]">
-            + Nuevo usuario
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Nombre, email o rol"
+              className="prolimal-search-input"
+            />
+          </div>
+          <button onClick={abrirNuevo} className="prolimal-btn-primary whitespace-nowrap">
+            <Plus className="h-4 w-4" />
+            Nuevo usuario
           </button>
         </div>
-      </div>
+      </section>
 
-      {error && <p className="text-red-500 dark:text-red-400 text-sm mb-4">{error}</p>}
+      {error && (
+        <div className="mb-6 rounded-2xl border border-prolimal-red-300/60 bg-prolimal-red-50 px-5 py-3 text-sm font-semibold text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
+          {error}
+        </div>
+      )}
 
       {activos.length === 0 && inactivos.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">No hay usuarios registrados</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          No hay usuarios registrados
+        </div>
       ) : visibles.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda.</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Sin resultados para tu búsqueda.
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visibles.map(u => (
             <div
               key={u.id}
-              className={`bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5 ${u.activo ? 'hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer' : 'opacity-50 cursor-pointer hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow'}`}
-              onClick={() => u.activo ? abrirEditar(u) : abrirEditar(u)}
+              onClick={() => abrirEditar(u)}
+              className={`cursor-pointer rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-50px_rgba(11,37,32,0.4)] transition-all hover:-translate-y-1 hover:border-prolimal-teal-500/40 hover:shadow-[0_30px_70px_-45px_rgba(11,37,32,0.5)] dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:hover:border-prolimal-teal-500/30 ${u.activo ? '' : 'opacity-60'}`}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shrink-0 ${
-                    u.rol === 'admin' ? 'bg-red-500' :
-                    u.rol === 'ventas' ? 'bg-blue-500' :
-                    u.rol === 'inventario' ? 'bg-green-500' : 'bg-gray-400'
-                  }`}>
+              <div className="mb-4 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold text-white ${avatarColor(u.rol)}`}>
                     {u.nombre.charAt(0).toUpperCase()}
-                  </div>
+                  </span>
                   <div className="min-w-0">
-                    <p className="font-bold text-gray-900 dark:text-white truncate">{u.nombre}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{u.email}</p>
+                    <p className="truncate text-sm font-extrabold text-prolimal-ink-800 dark:text-prolimal-sand-50">{u.nombre}</p>
+                    <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{u.email}</p>
                   </div>
                 </div>
-                {!u.activo && <span className="text-xs text-red-500 dark:text-red-400 font-medium shrink-0">Inactivo</span>}
+                {!u.activo && (
+                  <span className="shrink-0 rounded-full bg-prolimal-red-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300">
+                    Inactivo
+                  </span>
+                )}
               </div>
-              <div className="flex items-center justify-between">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${rolColor(u.rol)}`}>
+              <div className="flex items-center justify-between border-t border-prolimal-ink-900/5 pt-4 dark:border-prolimal-sand-100/10">
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${rolColor(u.rol)}`}>
                   {u.rol}
                 </span>
                 {u.email === ADMIN_EMAIL ? (
-                  <span className="text-xs text-gray-400 dark:text-gray-500 italic">Admin principal</span>
+                  <span className="text-[11px] font-semibold italic text-prolimal-ink-400 dark:text-prolimal-ink-300">Admin principal</span>
                 ) : u.activo ? (
                   <button onClick={e => { e.stopPropagation(); toggleActivo(u); }}
-                    className="text-xs text-red-500 dark:text-red-400 hover:underline">
+                    className="prolimal-btn-ghost-danger px-3 py-2 text-xs">
                     Desactivar
                   </button>
                 ) : (
                   <button onClick={e => { e.stopPropagation(); eliminarUsuario(u.id); }}
-                    className="text-xs text-red-600 dark:text-red-400 hover:underline font-medium">
+                    className="prolimal-btn-ghost-danger px-3 py-2 text-xs">
                     Eliminar
                   </button>
                 )}
@@ -206,32 +239,41 @@ export default function AdminUsuariosPage() {
       )}
 
       {creando && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setCreando(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold mb-6 dark:text-white">Nuevo usuario</h2>
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setCreando(false)}>
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6 flex items-start justify-between gap-3">
+              <div>
+                <p className="prolimal-eyebrow">Nuevo registro</p>
+                <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Nuevo usuario</h2>
+              </div>
+              <button onClick={() => setCreando(false)} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
               <input type="text" placeholder="Nombre" value={form.nombre}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" required />
+                className="prolimal-input" required />
               <input type="email" placeholder="Email" value={form.email}
                 onChange={e => setForm({ ...form, email: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" required />
+                className="prolimal-input" required />
               <input type="password" placeholder="Contraseña" value={form.password}
                 onChange={e => setForm({ ...form, password: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" required />
+                className="prolimal-input" required />
               <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
+                className="prolimal-input">
                 {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-6">
-              <button onClick={crearUsuario}
-                className="flex-1 bg-[#005a24] text-white py-3 rounded-xl font-bold hover:bg-[#003e19]">
-                Crear usuario
-              </button>
-              <button onClick={() => setCreando(false)}
-                className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-bold dark:text-white">
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+              <button onClick={() => setCreando(false)} className="prolimal-btn-secondary sm:w-auto">
                 Cancelar
+              </button>
+              <button onClick={crearUsuario} className="prolimal-btn-primary flex-1">
+                Crear usuario
               </button>
             </div>
           </div>
@@ -239,73 +281,68 @@ export default function AdminUsuariosPage() {
       )}
 
       {modalUsuario && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setModalUsuario(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-6">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
-                  modalUsuario.rol === 'admin' ? 'bg-red-500' :
-                  modalUsuario.rol === 'ventas' ? 'bg-blue-500' :
-                  modalUsuario.rol === 'inventario' ? 'bg-green-500' : 'bg-gray-400'
-                }`}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setModalUsuario(null)}>
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-extrabold text-white ${avatarColor(modalUsuario.rol)}`}>
                   {modalUsuario.nombre.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold dark:text-white">{modalUsuario.nombre}</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{modalUsuario.email}</p>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-extrabold tracking-[-0.02em] text-prolimal-ink-800 dark:text-prolimal-sand-50">{modalUsuario.nombre}</h2>
+                  <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{modalUsuario.email}</p>
                 </div>
               </div>
-              <button onClick={() => setModalUsuario(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-2xl">&times;</button>
+              <button onClick={() => setModalUsuario(null)} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <input type="text" placeholder="Nombre" value={form.nombre}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                className="prolimal-input" />
               <input type="password" placeholder="Nueva contraseña (dejar vacío para no cambiar)" value={form.password}
                 onChange={e => setForm({ ...form, password: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                className="prolimal-input" />
               {modalUsuario.email === ADMIN_EMAIL ? (
                 <input value="admin" disabled
-                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white bg-gray-100 dark:bg-gray-700 cursor-not-allowed" />
+                  className="prolimal-input cursor-not-allowed opacity-70" />
               ) : (
                 <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}
-                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
+                  className="prolimal-input">
                   {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               )}
             </div>
-            <div className="flex flex-col gap-3 mt-6">
-              <div className="flex gap-3">
-                <button onClick={actualizarUsuario}
-                  className="flex-1 bg-[#005a24] text-white py-3 rounded-xl font-bold hover:bg-[#003e19]">
-                  Guardar cambios
-                </button>
-                {modalUsuario.email !== ADMIN_EMAIL && (
-                  <button onClick={() => { toggleActivo(modalUsuario); setModalUsuario(null); }}
-                    className={`flex-1 border py-3 rounded-xl font-bold ${
-                      modalUsuario.activo
-                        ? 'text-red-500 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30'
-                        : 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/30'
-                    }`}>
-                    {modalUsuario.activo ? 'Desactivar' : 'Activar'}
-                  </button>
-                )}
-                <button onClick={() => setModalUsuario(null)}
-                  className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-bold dark:text-white">
+            <div className="mt-6 flex flex-col gap-3">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button onClick={() => setModalUsuario(null)} className="prolimal-btn-secondary sm:w-auto">
                   Cancelar
+                </button>
+                <button onClick={actualizarUsuario} className="prolimal-btn-primary flex-1">
+                  Guardar cambios
                 </button>
               </div>
               {modalUsuario.email !== ADMIN_EMAIL && (
-                <button onClick={() => eliminarUsuario(modalUsuario.id)}
-                  className="w-full border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 py-3 rounded-xl font-bold hover:bg-red-50 dark:hover:bg-red-900/30">
-                  Eliminar usuario
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button onClick={() => { toggleActivo(modalUsuario); setModalUsuario(null); }}
+                    className={`flex-1 ${modalUsuario.activo ? 'prolimal-btn-ghost-danger' : 'prolimal-btn-secondary'}`}>
+                    {modalUsuario.activo ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button onClick={() => eliminarUsuario(modalUsuario.id)}
+                    className="prolimal-btn-ghost-danger flex-1">
+                    Eliminar usuario
+                  </button>
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

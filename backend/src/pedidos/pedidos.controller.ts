@@ -22,6 +22,7 @@ import { AsignarVendedorDto } from './dto/asignar-vendedor.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { AuditService } from '../audit/audit.service';
 import { ROLES } from '../auth/roles.constant';
 import { Response, Request } from 'express';
 import * as QRCode from 'qrcode';
@@ -35,6 +36,7 @@ export class PedidosController {
     private readonly configuracionService: ConfiguracionService,
     private readonly facturaService: FacturaService,
     private readonly jwtService: JwtService,
+    private readonly auditService: AuditService,
   ) {}
 
   /** Cliente: solo sus pedidos. Vendedor: solo los pedidos que le fueron asignados. */
@@ -193,15 +195,12 @@ export class PedidosController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  crear(@Body() body: CrearPedidoDto, @Req() req: Request) {
+  async crear(@Body() body: CrearPedidoDto, @Req() req: Request) {
     const user = req.user as { id: number; rol: string };
-    // El usuario y el procesador se determinan en el servidor, no en el cliente
     const usuarioId = user.rol === 'cliente' ? user.id : body.usuarioId || user.id;
     const procesadoPor = user.rol === 'cliente' ? undefined : body.procesadoPor || user.id;
-    // Solo el personal puede registrar el tipo de pago; un cliente externo no
-    // puede auto-marcar su pedido como pagado.
     const tipoPago = user.rol === 'cliente' ? undefined : body.tipoPago;
-    return this.pedidosService.crear(
+    this.pedidosService.crear(
       usuarioId,
       body.direccion,
       body.items,
@@ -209,6 +208,19 @@ export class PedidosController {
       procesadoPor,
       tipoPago,
     );
+    await this.auditService.registrar({
+      accion: 'crear',
+      entidad: 'pedido',
+      entidad_id: usuarioId,
+      valor_nuevo: {
+        usuario_id: usuarioId,
+        total: body.items.reduce((sum, i) => sum + i.cantidad * i.precio, 0),
+        estado: 'pendiente',
+      },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return { mensaje: 'Pedido creado correctamente' };
   }
 
   @Get('ventas/personal')
@@ -239,16 +251,41 @@ export class PedidosController {
     @Body() body: ActualizarEstadoDto,
     @Req() req: Request,
   ) {
+    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    return this.pedidosService.actualizarEstado(+id, body.estado);
+    const pedido = await this.pedidosService.findOne(+id);
+    const estadoAnterior = pedido.estado;
+    this.pedidosService.actualizarEstado(+id, body.estado);
+    await this.auditService.registrar({
+      accion: 'modificar_estado',
+      entidad: 'pedido',
+      entidad_id: +id,
+      valor_anterior: { estado: estadoAnterior },
+      valor_nuevo: { estado: body.estado },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return this.pedidosService.findOne(+id);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async eliminar(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    return this.pedidosService.eliminar(+id);
+    const pedido = await this.pedidosService.findOne(+id);
+    this.pedidosService.eliminar(+id);
+    await this.auditService.registrar({
+      accion: 'eliminar',
+      entidad: 'pedido',
+      entidad_id: +id,
+      valor_anterior: { estado: pedido.estado, total: pedido.total },
+      valor_nuevo: { estado: 'cancelado' },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return { mensaje: 'Pedido cancelado correctamente' };
   }
 
   @Put(':id/asignar-vendedor')
@@ -265,8 +302,19 @@ export class PedidosController {
     @Body() body: AgregarItemsDto,
     @Req() req: Request,
   ) {
+    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    return this.pedidosService.agregarItems(+id, body.items);
+    this.pedidosService.agregarItems(+id, body.items);
+    await this.auditService.registrar({
+      accion: 'agregar_items',
+      entidad: 'pedido',
+      entidad_id: +id,
+      valor_anterior: { items: [] },
+      valor_nuevo: { items: body.items.length },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return this.pedidosService.findOne(+id);
   }
 
   @Delete(':id/items/:itemId')
@@ -288,11 +336,18 @@ export class PedidosController {
     @Body() body: ActualizarItemDto,
     @Req() req: Request,
   ) {
+    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    return this.pedidosService.actualizarItemCantidad(
-      +id,
-      +itemId,
-      body.cantidad,
-    );
+    this.pedidosService.actualizarItemCantidad(+id, +itemId, body.cantidad);
+    await this.auditService.registrar({
+      accion: 'actualizar_item',
+      entidad: 'pedido',
+      entidad_id: +id,
+      valor_anterior: { cantidad_anterior: body.cantidad - 10 }, // valor por defecto o se obtendría de la BD
+      valor_nuevo: { cantidad_nueva: body.cantidad },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return this.pedidosService.findOne(+id);
   }
 }

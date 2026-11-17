@@ -1,113 +1,233 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  BarChart3,
+  Boxes,
+  ClipboardList,
+  Package,
+  UserCog,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 
-function getUsuarioFromStorage(): { nombre: string; rol: string } | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const u = localStorage.getItem('usuario');
-    return u ? JSON.parse(u) : null;
-  } catch { return null; }
+interface UsuarioAdmin {
+  nombre: string;
+  rol: string;
 }
 
-const seccionesAdmin = [
-  { href: '/admin/productos', titulo: 'Productos', desc: 'Crear, editar y desactivar productos del catálogo', roles: ['admin', 'inventario'] },
-  { href: '/admin/inventario', titulo: 'Inventario', desc: 'Controlar stock y cantidades mínimas', roles: ['admin', 'inventario'] },
-  { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Administrar pedidos de clientes', roles: ['admin', 'inventario'] },
-  { href: '/ventas', titulo: 'Mi Portal de Ventas', desc: 'Registrar clientes con GPS y gestionar tus pedidos', roles: ['ventas'] },
-  { href: '/admin/ventas', titulo: 'Ventas', desc: 'Historial de ventas del personal', roles: ['admin', 'inventario', 'ventas'] },
-  { href: '/admin/personal', titulo: 'Rendimiento del Personal', desc: 'Gráficas semanales y mensuales de ventas por vendedor', roles: ['admin'] },
-  { href: '/admin/reportes', titulo: 'Reportes', desc: 'Ventas, ganancias, inventario y clientes destacados con exportación', roles: ['admin'] },
-  { href: '/admin/deudas', titulo: 'Deudas', desc: 'Deudas del personal y generación de facturas', roles: ['admin', 'inventario', 'ventas'] },
-  { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestionar empleados y asignar roles (ventas, inventario)', roles: ['admin'] },
-  { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registrar y administrar clientes', roles: ['admin'] },
+interface SeccionAdmin {
+  href: string;
+  titulo: string;
+  desc: string;
+  roles: string[];
+  Icono: LucideIcon;
+}
+
+function parseUsuario(raw: string | null): UsuarioAdmin | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as UsuarioAdmin;
+  } catch {
+    return null;
+  }
+}
+
+function suscribirUsuario(onChange: () => void) {
+  window.addEventListener('auth-change', onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener('auth-change', onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+function obtenerUsuarioRaw() {
+  return localStorage.getItem('usuario');
+}
+
+function obtenerUsuarioServidor() {
+  return null;
+}
+
+const seccionesAdmin: SeccionAdmin[] = [
+  { href: '/admin/productos', titulo: 'Productos', desc: 'Crear, editar y desactivar productos del catálogo', roles: ['admin', 'inventario'], Icono: Package },
+  { href: '/admin/inventario', titulo: 'Inventario', desc: 'Controlar stock y cantidades mínimas', roles: ['admin', 'inventario'], Icono: Boxes },
+  { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Administrar pedidos de clientes', roles: ['admin', 'inventario'], Icono: ClipboardList },
+  { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registrar y administrar clientes', roles: ['admin'], Icono: Users },
+  { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestionar empleados y asignar roles', roles: ['admin'], Icono: UserCog },
+  { href: '/admin/deudas', titulo: 'Deudas', desc: 'Deudas del personal y generación de facturas', roles: ['admin', 'inventario', 'ventas'], Icono: Wallet },
+  { href: '/admin/reportes', titulo: 'Reportes', desc: 'Ventas, ganancias e inventario con exportación', roles: ['admin'], Icono: BarChart3 },
+  { href: '/admin/personal', titulo: 'Rendimiento', desc: 'Gráficas semanales y mensuales de ventas por vendedor', roles: ['admin'], Icono: BarChart3 },
 ];
 
 export default function AdminDashboard() {
+  const usuarioRaw = useSyncExternalStore(
+    suscribirUsuario,
+    obtenerUsuarioRaw,
+    obtenerUsuarioServidor,
+  );
+  const usuario = parseUsuario(usuarioRaw);
+  const rol = usuario?.rol;
+  const esAdmin = rol === 'admin';
   const [stats, setStats] = useState({
     productos: 0,
     pedidos: 0,
     alertas: 0,
     usuarios: 0,
   });
-  const [cargando, setCargando] = useState(true);
   const [errorConexion, setErrorConexion] = useState(false);
-  const [usuario, setUsuario] = useState<{ nombre: string; rol: string } | null>(null);
-  const esAdmin = usuario?.rol === 'admin';
 
   useEffect(() => {
-    const u = getUsuarioFromStorage();
-    setUsuario(u); // eslint-disable-line react-hooks/set-state-in-effect
-    const peticiones: Promise<any>[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
-      api.get('/productos'),
-      api.get('/pedidos'),
+    if (!rol) return;
+
+    let activo = true;
+    const peticiones = [
+      api.get<unknown[]>('/productos'),
+      api.get<unknown[]>('/pedidos'),
     ];
-    if (u?.rol === 'admin' || u?.rol === 'inventario') {
-      peticiones.push(api.get('/inventario/alertas'));
+    if (rol === 'admin' || rol === 'inventario') {
+      peticiones.push(api.get<unknown[]>('/inventario/alertas'));
     }
-    if (u?.rol === 'admin') {
-      peticiones.push(api.get('/usuarios'));
+    if (rol === 'admin') {
+      peticiones.push(api.get<unknown[]>('/usuarios'));
     }
-    Promise.all(peticiones).then(([productos, pedidos, alertas, usuarios]) => {
-      setStats({
-        productos: productos.data.length,
-        pedidos: pedidos.data.length,
-        alertas: alertas ? alertas.data.length : 0,
-        usuarios: usuarios ? usuarios.data.length : 0,
+
+    Promise.all(peticiones)
+      .then(([productos, pedidos, alertas, usuarios]) => {
+        if (!activo) return;
+        setStats({
+          productos: productos.data.length,
+          pedidos: pedidos.data.length,
+          alertas: alertas ? alertas.data.length : 0,
+          usuarios: usuarios ? usuarios.data.length : 0,
+        });
+        setErrorConexion(false);
+      })
+      .catch(() => {
+        if (activo) setErrorConexion(true);
       });
-    }).catch(() => setErrorConexion(true)).finally(() => setCargando(false));
-  }, []);
 
-  const secciones = seccionesAdmin.filter(s => usuario && s.roles.includes(usuario.rol));
+    return () => {
+      activo = false;
+    };
+  }, [rol]);
 
-  if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando panel...</p>;
+  const tarjetas = [
+    { label: 'Productos activos', value: stats.productos, Icono: Package, tono: 'teal' },
+    { label: 'Pedidos totales', value: stats.pedidos, Icono: ClipboardList, tono: 'sand' },
+    { label: 'Alertas de stock', value: stats.alertas, Icono: AlertTriangle, tono: 'coral' },
+    ...(esAdmin ? [{ label: 'Usuarios registrados', value: stats.usuarios, Icono: Users, tono: 'ink' }] : []),
+  ];
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <h1 className="text-3xl font-bold mb-8 dark:text-white">Panel de Administración</h1>
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="prolimal-eyebrow">Resumen operativo</p>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            Todo lo que necesitás para gestionar productos, pedidos y personas desde un solo lugar.
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-ink-900/10 bg-card px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-500 dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:text-prolimal-ink-200">
+          <span className="h-1.5 w-1.5 rounded-full bg-prolimal-teal-500" />
+          {usuario?.rol || 'Sin rol'}
+        </span>
+      </section>
 
       {errorConexion && (
-        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-2xl p-4 mb-8 text-sm text-red-700 dark:text-red-300">
-          <strong>No se pudo conectar con el servidor.</strong> Verificá que el backend esté corriendo
-          (en su terminal debe decir <em>&quot;Nest application successfully started&quot;</em>) y refrescá esta página.
+        <div className="mb-8 rounded-[2rem] border border-prolimal-red-300/60 bg-prolimal-red-50 p-5 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-prolimal-red-600 dark:text-prolimal-red-300" />
+            <div>
+              <p className="font-extrabold text-prolimal-red-800 dark:text-prolimal-red-100">
+                No se pudo conectar con el servidor
+              </p>
+              <p className="mt-1 text-sm font-medium text-prolimal-red-700/80 dark:text-prolimal-red-200/80">
+                Verificá que el backend esté corriendo y refrescá esta página.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className={`grid grid-cols-1 ${esAdmin ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-6 mb-12`}>
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
-          <p className="text-blue-600 dark:text-blue-400 font-medium mb-1">Productos activos</p>
-          <p className="text-4xl font-bold text-blue-700 dark:text-blue-300">{stats.productos}</p>
-        </div>
-        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-2xl p-6">
-          <p className="text-green-600 dark:text-green-400 font-medium mb-1">Pedidos totales</p>
-          <p className="text-4xl font-bold text-green-700 dark:text-green-300">{stats.pedidos}</p>
-        </div>
-        <div className={`rounded-2xl p-6 border ${stats.alertas > 0 ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
-          <p className={`font-medium mb-1 ${stats.alertas > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>
-            Alertas de stock
-          </p>
-          <p className={`text-4xl font-bold ${stats.alertas > 0 ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'}`}>
-            {stats.alertas}
-          </p>
-        </div>
-        {esAdmin && (
-          <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-2xl p-6">
-            <p className="text-purple-600 dark:text-purple-400 font-medium mb-1">Usuarios registrados</p>
-            <p className="text-4xl font-bold text-purple-700 dark:text-purple-300">{stats.usuarios}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {secciones.map(s => (
-          <Link key={s.href} href={s.href}
-            className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6 hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow">
-            <h2 className="text-xl font-bold mb-2 dark:text-white">{s.titulo}</h2>
-            <p className="text-gray-500 dark:text-gray-400">{s.desc}</p>
-          </Link>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {tarjetas.map(({ label, value, Icono, tono }, index) => (
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: index * 0.05 }}
+            className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+          >
+            <span
+              className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+                tono === 'teal'
+                  ? 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
+                  : tono === 'coral'
+                    ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300'
+                    : tono === 'sand'
+                      ? 'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200'
+                      : 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200'
+              }`}
+            >
+              <Icono className="h-5 w-5" />
+            </span>
+            <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+              {label}
+            </p>
+            <p className="mt-1 text-4xl font-extrabold tracking-[-0.05em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+              {value}
+            </p>
+          </motion.div>
         ))}
       </div>
-    </main>
+
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <p className="prolimal-eyebrow">Accesos rápidos</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            ¿Qué querés gestionar?
+          </h2>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {seccionesAdmin
+          .filter((seccion) => usuario && seccion.roles.includes(usuario.rol))
+          .map(({ href, titulo, desc, Icono }, index) => (
+            <motion.div
+              key={href}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.04 }}
+            >
+              <Link
+                href={href}
+                className="group flex h-full flex-col rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-50px_rgba(11,37,32,0.4)] transition-all duration-300 hover:-translate-y-1 hover:border-prolimal-teal-500/40 hover:shadow-[0_30px_70px_-45px_rgba(11,37,32,0.5)] dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:hover:border-prolimal-teal-500/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-prolimal-sand-100 text-prolimal-ink-600 transition-colors group-hover:bg-prolimal-teal-100 group-hover:text-prolimal-teal-700 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:group-hover:bg-prolimal-teal-900/30 dark:group-hover:text-prolimal-teal-300">
+                    <Icono className="h-4 w-4" />
+                  </span>
+                  <ArrowUpRight className="h-4 w-4 text-prolimal-ink-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-prolimal-teal-600 dark:text-prolimal-ink-500 dark:group-hover:text-prolimal-teal-300" />
+                </div>
+                <h3 className="mt-5 text-base font-extrabold tracking-[-0.02em] text-prolimal-ink-800 transition-colors group-hover:text-prolimal-teal-700 dark:text-prolimal-sand-50 dark:group-hover:text-prolimal-teal-300">
+                  {titulo}
+                </h3>
+                <p className="mt-1 text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+                  {desc}
+                </p>
+              </Link>
+            </motion.div>
+          ))}
+      </div>
+    </div>
   );
 }

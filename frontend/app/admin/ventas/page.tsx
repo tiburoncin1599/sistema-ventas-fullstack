@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import GraficoBarras from '@/components/charts/GraficoBarras';
+import { ClipboardList, TrendingUp, Users } from 'lucide-react';
 
 interface VentaPersonal {
   usuario_id: number;
@@ -71,71 +72,94 @@ export default function AdminVentas() {
     setSel(null);
   };
 
-  if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando...</p>;
+  if (cargando) {
+    return (
+      <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+        Cargando ventas...
+      </div>
+    );
+  }
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <h1 className="text-3xl font-bold mb-2 dark:text-white">Historial de Ventas</h1>
-      <p className="text-gray-500 dark:text-gray-400 mb-6">Ventas registradas por cada miembro del personal</p>
+    <div className="pb-10">
+      <section className="mb-8">
+        <p className="prolimal-eyebrow">Comercial</p>
+        <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+          Historial de ventas
+        </h2>
+        <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+          Ventas registradas por cada miembro del personal.
+        </p>
+      </section>
 
-      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border dark:border-gray-700">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Vendedor</label>
-          <select value={filtroVendedor} onChange={e => cambiarVendedor(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 dark:bg-gray-700 dark:text-white text-sm">
-            <option value="">Todos</option>
-            {ventas.map(v => (
-              <option key={v.usuario_id} value={v.usuario_id}>{v.usuario_nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Desde</label>
-          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 dark:bg-gray-700 dark:text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Hasta</label>
-          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 dark:bg-gray-700 dark:text-white text-sm" />
-        </div>
-        <button onClick={cargar}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 text-sm mt-4">
-          Filtrar
-        </button>
-        {(desde || hasta) && (
-          <button onClick={() => { setDesde(''); setHasta(''); }}
-            className="text-gray-500 dark:text-gray-400 hover:underline text-sm mt-4">
-            Limpiar filtro
+      <div className="mb-8 rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[10rem] flex-1">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Vendedor</label>
+            <select value={filtroVendedor} onChange={e => cambiarVendedor(e.target.value)}
+              className="prolimal-input">
+              <option value="">Todos</option>
+              {ventas.map(v => (
+                <option key={v.usuario_id} value={v.usuario_id}>{v.usuario_nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Desde</label>
+            <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+              className="prolimal-input" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Hasta</label>
+            <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+              className="prolimal-input" />
+          </div>
+          <button onClick={cargar} className="prolimal-btn-primary">
+            Filtrar
           </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
-          <p className="text-blue-600 dark:text-blue-400 font-medium mb-1">Personal activo</p>
-          <p className="text-4xl font-bold text-blue-700 dark:text-blue-300">{visibles.length}</p>
-        </div>
-        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-2xl p-6">
-          <p className="text-green-600 dark:text-green-400 font-medium mb-1">Total vendido</p>
-          <p className="text-4xl font-bold text-green-700 dark:text-green-300">{formatCurrency(totalGeneral)}</p>
-        </div>
-        <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-2xl p-6">
-          <p className="text-purple-600 dark:text-purple-400 font-medium mb-1">Total pedidos</p>
-          <p className="text-4xl font-bold text-purple-700 dark:text-purple-300">{visibles.reduce((s, v) => s + v.total_pedidos, 0)}</p>
+          {(desde || hasta) && (
+            <button onClick={() => { setDesde(''); setHasta(''); }}
+              className="prolimal-btn-ghost px-3 py-2 text-sm">
+              Limpiar filtro
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="border dark:border-gray-700 rounded-2xl p-6 mb-8 bg-white dark:bg-gray-800">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-xl font-bold dark:text-white">Gráficas de ingresos</h2>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300">
+            <Users className="h-4 w-4" />
+          </span>
+          <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Personal activo</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{visibles.length}</p>
+        </div>
+        <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200">
+            <TrendingUp className="h-4 w-4" />
+          </span>
+          <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Total vendido</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(totalGeneral)}</p>
+        </div>
+        <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300">
+            <ClipboardList className="h-4 w-4" />
+          </span>
+          <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Total pedidos</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{visibles.reduce((s, v) => s + v.total_pedidos, 0)}</p>
+        </div>
+      </div>
+
+      <div className="mb-8 rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Gráficas de ingresos</h2>
           <div className="flex gap-2">
             {([['vendedor', 'Por vendedor'], ['dia', 'Por día']] as const).map(([val, label]) => (
               <button key={val} onClick={() => setVistaGraf(val)}
-                className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+                className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${
                   vistaGraf === val
-                    ? 'bg-[#005a24] text-white'
-                    : 'bg-white dark:bg-gray-800 border dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                    ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                    : 'border border-prolimal-ink-900/10 bg-white text-prolimal-ink-600 hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700'
                 }`}>
                 {label}
               </button>
@@ -143,70 +167,73 @@ export default function AdminVentas() {
           </div>
         </div>
         {serieGraf.length === 0 ? (
-          <p className="text-center py-12 text-gray-400">Sin datos de ventas en el período</p>
+          <p className="py-12 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin datos de ventas en el período</p>
         ) : (
-          <div className="text-gray-900 dark:text-gray-100">
+          <div className="text-prolimal-ink-900 dark:text-prolimal-sand-50">
             <GraficoBarras datos={serieGraf} />
           </div>
         )}
       </div>
 
-      <div className="border dark:border-gray-700 rounded-2xl overflow-x-auto">
-        <table className="w-full min-w-[640px]">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>
-              <th className="text-left px-6 py-4 font-semibold dark:text-white">Personal</th>
-              <th className="text-left px-6 py-4 font-semibold dark:text-white">Pedidos</th>
-              <th className="text-left px-6 py-4 font-semibold dark:text-white">Total vendido</th>
-              <th className="text-left px-6 py-4 font-semibold dark:text-white">Promedio</th>
-              <th className="text-left px-6 py-4 font-semibold dark:text-white">Detalle</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ventas.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-gray-500 dark:text-gray-400">Sin datos de ventas</td>
+      <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+        <div className="border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+          <h2 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Detalle por vendedor</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
+                {['Personal', 'Pedidos', 'Total vendido', 'Promedio', 'Detalle'].map((h) => (
+                  <th key={h} className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{h}</th>
+                ))}
               </tr>
-            ) : visibles.map(v => (
-              <tr key={v.usuario_id} className="border-t dark:border-gray-700 dark:text-white">
-                <td className="px-6 py-4 font-medium">{v.usuario_nombre}</td>
-                <td className="px-6 py-4">{v.total_pedidos}</td>
-                <td className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400">{formatCurrency(v.total_vendido)}</td>
-                <td className="px-6 py-4">{formatCurrency(v.total_pedidos > 0 ? v.total_vendido / v.total_pedidos : 0)}</td>
-                <td className="px-6 py-4">
-                  <button onClick={() => setSel(sel?.usuario_id === v.usuario_id ? null : v)} className="text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium">
-                    {sel?.usuario_id === v.usuario_id ? 'Ocultar' : 'Ver pedidos'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {ventas.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin datos de ventas</td>
+                </tr>
+              ) : visibles.map(v => (
+                <tr key={v.usuario_id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
+                  <td className="px-6 py-4 text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{v.usuario_nombre}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-600 dark:text-prolimal-sand-100">{v.total_pedidos}</td>
+                  <td className="px-6 py-4 text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(v.total_vendido)}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-600 dark:text-prolimal-sand-100">{formatCurrency(v.total_pedidos > 0 ? v.total_vendido / v.total_pedidos : 0)}</td>
+                  <td className="px-6 py-4">
+                    <button onClick={() => setSel(sel?.usuario_id === v.usuario_id ? null : v)} className="text-xs font-bold text-prolimal-teal-700 underline-offset-4 hover:underline dark:text-prolimal-teal-300">
+                      {sel?.usuario_id === v.usuario_id ? 'Ocultar' : 'Ver pedidos'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {sel && (
-        <div className="mt-6 border dark:border-gray-700 rounded-2xl p-6 dark:bg-gray-800">
-          <h2 className="text-xl font-bold mb-4 dark:text-white">Pedidos de {sel.usuario_nombre}</h2>
-          <div className="space-y-3">
+        <div className="mt-6 rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+          <h2 className="mb-4 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Pedidos de {sel.usuario_nombre}</h2>
+          <div className="space-y-1">
             {sel.pedidos.map(p => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b dark:border-gray-700 pb-3">
+              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-prolimal-ink-900/5 py-3 last:border-0 dark:border-prolimal-sand-100/10">
                 <div>
-                  <p className="font-medium dark:text-white">Pedido #{p.id}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(p.fecha).toLocaleDateString()}</p>
+                  <p className="text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">Pedido #{p.id}</p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{new Date(p.fecha).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    p.estado === 'entregado' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
-                    p.estado === 'cancelado' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' :
-                    'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                    p.estado === 'entregado' ? 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300' :
+                    p.estado === 'cancelado' ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300' :
+                    'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200'
                   }`}>{p.estado}</span>
-                  <p className="font-bold dark:text-white">{formatCurrency(p.total)}</p>
+                  <p className="text-sm font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(p.total)}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import GraficoBarras from '@/components/charts/GraficoBarras';
 import { aFechaISO, rangoSemana, rangoMes, listaDias } from '@/components/charts/chart-utils';
+import { ArrowLeft, ClipboardList, Sparkles, Wallet } from 'lucide-react';
 
 interface DiaVenta {
   fecha: string;
@@ -75,27 +76,54 @@ export default function MiRendimientoPage() {
     return { totalVendido, totalPedidos, mejorDia };
   }, [serieGrafica]);
 
+  const stats = [
+    {
+      label: 'Total vendido',
+      value: formatCurrency(resumen.totalVendido),
+      hint: usuarioNombre || 'Tu actividad',
+      Icono: Wallet,
+    },
+    {
+      label: 'Pedidos',
+      value: resumen.totalPedidos,
+      hint: periodo === 'semana' ? 'esta semana' : 'este mes',
+      Icono: ClipboardList,
+    },
+    {
+      label: 'Mejor día',
+      value: formatCurrency(resumen.mejorDia?.valor || 0),
+      hint: resumen.mejorDia?.fecha || '—',
+      Icono: Sparkles,
+    },
+  ];
+
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
       <div className="mb-8">
-        <Link href="/ventas" className="text-sm text-green-700 dark:text-green-400 hover:underline">
-          ← Portal de ventas
+        <Link
+          href="/ventas"
+          className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-teal-700 transition-colors hover:text-prolimal-ink-900 dark:text-prolimal-teal-300 dark:hover:text-prolimal-sand-50"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Portal de ventas
         </Link>
-        <h1 className="text-2xl font-bold mt-1">Mi Rendimiento</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Tus ventas — gráficas semanal y mensual
+        <h1 className="prolimal-display mt-3 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+          Mi Rendimiento
+        </h1>
+        <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+          Tus ventas, con lectura semanal y mensual.
         </p>
       </div>
 
-      <div className="flex gap-2 mb-6">
+      <div className="mb-6 inline-flex flex-wrap gap-1 rounded-full border border-prolimal-ink-900/10 bg-card p-1 dark:border-prolimal-sand-100/10 dark:bg-card-dark">
         {([['semana', 'Esta semana'], ['mes', 'Este mes']] as const).map(([p, etiqueta]) => (
           <button
             key={p}
             onClick={() => setPeriodo(p)}
-            className={`px-5 py-2 rounded-xl font-medium transition-colors ${
+            className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${
               periodo === p
-                ? 'bg-[#005a24] text-white'
-                : 'bg-white dark:bg-gray-800 border dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                ? 'bg-prolimal-ink-900 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                : 'text-prolimal-ink-500 hover:bg-prolimal-sand-100 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800'
             }`}
           >
             {etiqueta}
@@ -103,40 +131,38 @@ export default function MiRendimientoPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Total vendido</p>
-          <p className="text-2xl font-bold mt-1">{formatCurrency(resumen.totalVendido)}</p>
-          <p className="text-xs text-gray-400 mt-1">{usuarioNombre}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Pedidos</p>
-          <p className="text-2xl font-bold mt-1">{resumen.totalPedidos}</p>
-          <p className="text-xs text-gray-400 mt-1">
-            {periodo === 'semana' ? 'esta semana' : 'este mes'}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Mejor día</p>
-          <p className="text-2xl font-bold mt-1">{formatCurrency(resumen.mejorDia?.valor || 0)}</p>
-          <p className="text-xs text-gray-400 mt-1">{resumen.mejorDia?.fecha || '—'}</p>
-        </div>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {stats.map(({ label, value, hint, Icono }) => (
+          <div
+            key={label}
+            className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
+              <Icono className="h-4 w-4 text-prolimal-teal-700 dark:text-prolimal-teal-300" />
+            </div>
+            <p className="mt-2 text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
+            <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{hint}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-        <h2 className="font-bold mb-4">
-          Ventas por día ·{' '}
-          <span className="text-gray-500 dark:text-gray-400 font-normal">
-            {aFechaISO(desde)} al {aFechaISO(hasta)}
-          </span>
+      <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8">
+        <h2 className="prolimal-display text-xl tracking-[-0.03em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+          Ventas por día
         </h2>
-        {cargando ? (
-          <p className="text-center py-16 text-gray-400">Cargando…</p>
-        ) : (
-          <div className="text-gray-900 dark:text-gray-100">
-            <GraficoBarras datos={serieGrafica} />
-          </div>
-        )}
+        <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          {aFechaISO(desde)} al {aFechaISO(hasta)}
+        </p>
+        <div className="mt-6">
+          {cargando ? (
+            <p className="py-16 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Cargando…</p>
+          ) : (
+            <div className="text-prolimal-ink-900 dark:text-prolimal-sand-50">
+              <GraficoBarras datos={serieGrafica} />
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

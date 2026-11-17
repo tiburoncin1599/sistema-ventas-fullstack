@@ -1,4 +1,4 @@
-FROM node:18-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -7,20 +7,24 @@ RUN npm ci
 
 COPY . .
 RUN npm run build
-RUN mkdir -p /app/uploads
+RUN mkdir -p /app/uploads/productos
 
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache tzdata wget
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nestjs
 
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/uploads ./uploads
-COPY --from=build /app/assets ./assets
+COPY --from=build --chown=nestjs:nodejs /app/dist ./dist
+COPY --from=build --chown=nestjs:nodejs /app/uploads ./uploads
+COPY --from=build --chown=nestjs:nodejs /app/assets ./assets
+
+USER nestjs
 
 EXPOSE 3001
 

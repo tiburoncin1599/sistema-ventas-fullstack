@@ -22,7 +22,7 @@ export class Inventario {
   @Column({ default: 0 })
   cantidad!: number;
 
-  @Column({ default: 5 })
+  @Column({ default: 10 })
   cantidad_minima!: number;
 
   @Column({ nullable: true })

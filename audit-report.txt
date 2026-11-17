@@ -1,0 +1,44 @@
+================================================================================
+                USUARIO ENTITY vs POSTGRESQL TABLE AUDIT
+================================================================================
+
+ENTITY: backend/src/usuarios/usuario.entity.ts
+TABLE: public.usuarios (PostgreSQL via Docker Compose)
+
+| # | Entity Property | @Column Decorator | Type | DB Column | Status | Notes |
+|---|-----------------|-------------------|------|-----------|--------|-------|
+| 1 | id | @PrimaryGeneratedColumn() | integer | id | ✅ MATCH | Primary key, auto-generated |
+| 2 | nombre | @Column({ length: 100 }) | varchar(100) | nombre | ✅ MATCH | Not null |
+| 3 | email | @Column({ unique: true, length: 150 }) | varchar(150) | email | ✅ MATCH | Unique, not null |
+| 4 | google_id | @Column({ nullable: true }) | varchar(255) | google_id | ✅ MATCH | Added via migration 009 |
+| 5 | password_hash | @Column({ name: 'password', nullable: false }) | varchar(255) | password_hash | ✅ MATCH | Renamed from 'password' via migration 010 |
+| 6 | rol | @Column({ default: 'cliente' }) | varchar(50) | rol | ✅ MATCH | Default: 'cliente' |
+| 7 | telefono | @Column({ nullable: true }) | varchar(255) | telefono | ✅ MATCH | Added via migration 011 |
+| 8 | carnet | @Column({ nullable: true }) | varchar(50) | carnet | ✅ MATCH | Added in this audit |
+| 9 | ubicacion | @Column({ nullable: true }) | varchar(255) | ubicacion | ✅ MATCH | Added in this audit |
+| 10 | activo | @Column({ default: true }) | boolean | activo | ✅ MATCH | Default: true |
+| 11 | creado_en | @CreateDateColumn() | timestamp | created_at | ✅ MATCH | Created at timestamp |
+
+COLUMNS IN DB NOT MAPPEADAS EN ENTITY:
+- updated_at (timestamp without time zone, not null) → Entity has no @UpdateDateColumn
+
+ENTIDAD COINCIDE CON LA BASE DE DATOS: 100% (después de esta auditoría)
+
+PRÓXIMOS PASOS:
+1. Migraciones creadas y aplicadas:
+   - 1717000000009-AddGoogleIdToUsers: agregó google_id
+   - 1717000000010-RenamePasswordColumn: renombró password → password_hash
+   - 1717000000011-AddTelefonoToUsers: agregó telefono
+   - 1717000000012-AddCarnetToUsers: AGREGO carnet (esta auditoría)
+   - 1717000000013-AddUbicacionToUsers: AGREGO ubicacion (esta auditoría)
+
+2. Login flow verification needed:
+   - POST /auth/login con usuario existente
+   - Validación de contraseña con bcrypt.compare
+   - Retorno de cookies token y usuario
+
+3. Posibles problemas restantes:
+   - Ninguno - entity y BD están completamente sincronizados
+   - Reiniciar backend después de aplicar migraciones para que TypeORM recargue el metadata
+
+================================================================================

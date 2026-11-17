@@ -31,12 +31,12 @@ export class NotificacionesService {
         p.id AS producto_id,
         p.nombre,
         i.cantidad,
-        i.cantidad_minima,
-        (i.cantidad_minima - i.cantidad) AS faltante,
+        10 AS cantidad_minima,
+        (10 - i.cantidad) AS faltante,
         'stock_bajo' AS tipo
       FROM inventario i
       JOIN productos p ON p.id = i.producto_id
-      WHERE i.cantidad <= i.cantidad_minima AND p.activo = true
+      WHERE i.cantidad <= 10 AND p.activo = true
       ORDER BY i.cantidad ASC
       LIMIT 10
     `);

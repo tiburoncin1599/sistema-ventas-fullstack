@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -61,7 +62,7 @@ export default function MapaCliente({ gps, onChange }: Props) {
       return;
     }
     const icono = L.divIcon({
-      html: '<div style="width:26px;height:26px;border-radius:50%;background:#005a24;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
+      html: '<div style="width:26px;height:26px;border-radius:50%;background:#1A3C6E;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);"></div>',
       className: '',
       iconSize: [26, 26],
       iconAnchor: [13, 13],
@@ -212,21 +213,21 @@ export default function MapaCliente({ gps, onChange }: Props) {
   }, [gps]);
 
   return (
-    <div className="border dark:border-gray-600 rounded-xl p-4">
-      <p className="text-sm font-medium mb-3 dark:text-white">Ubicación del cliente *</p>
+    <div className="border dark:border-prolimal-border/50 rounded-xl p-4">
+      <p className="text-sm font-medium mb-3 dark:text-prolimal-light">Ubicación del cliente *</p>
 
       <input
         type="text"
         placeholder="🔎 Buscar lugar o dirección en el mapa..."
         value={busquedaMapa}
         onChange={e => setGpsInput(e.target.value)}
-        className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 text-sm bg-white dark:bg-gray-700 dark:text-white mb-2"
+        className="w-full border dark:border-prolimal-border/50 rounded-xl px-4 py-3 text-sm bg-white dark:bg-prolimal-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-primary/50"
       />
       {buscandoMapa && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Buscando...</p>
+        <p className="text-xs text-prolimal-muted/80 mb-1">Buscando...</p>
       )}
       {resultadosMapa.length > 0 && (
-        <ul className="border dark:border-gray-600 rounded-xl mb-2 max-h-36 overflow-y-auto divide-y dark:divide-gray-700 text-sm">
+        <ul className="border dark:border-prolimal-border/50 rounded-xl mb-2 max-h-36 overflow-y-auto divide-y dark:divide-prolimal-border/50 text-sm">
           {resultadosMapa.map((r, i) => (
             <li key={i}>
               <button
@@ -236,7 +237,7 @@ export default function MapaCliente({ gps, onChange }: Props) {
                   setBusquedaMapa(r.nombre);
                   setResultadosMapa([]);
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-green-50 dark:hover:bg-green-900/30 dark:text-white truncate"
+                className="w-full text-left px-3 py-2 hover:bg-prolimal-primary/10 dark:hover:bg-prolimal-primary/20 text-prolimal-light truncate"
               >
                 📍 {r.nombre}
               </button>
@@ -247,14 +248,14 @@ export default function MapaCliente({ gps, onChange }: Props) {
 
       <div
         ref={contenedorRef}
-        className="h-64 w-full rounded-xl z-0 border dark:border-gray-600 mb-3"
+        className="h-64 w-full rounded-xl z-0 border dark:border-prolimal-border/50 mb-3"
       />
 
       <div className="flex gap-2">
         <button
           type="button"
           onClick={obtenerGps}
-          className="flex-1 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700"
+          className="flex-1 bg-prolimal-primary text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-prolimal-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-primary/50"
         >
           📡 Usar mi ubicación actual
         </button>
@@ -262,7 +263,7 @@ export default function MapaCliente({ gps, onChange }: Props) {
           <button
             type="button"
             onClick={limpiar}
-            className="border dark:border-gray-600 px-4 py-2.5 rounded-xl text-sm text-gray-600 dark:text-gray-300"
+            className="border dark:border-prolimal-border/50 px-4 py-2.5 rounded-xl text-sm text-prolimal-muted/70 dark:text-prolimal-light"
           >
             Limpiar
           </button>
@@ -270,21 +271,21 @@ export default function MapaCliente({ gps, onChange }: Props) {
       </div>
 
       {estadoGps === 'obteniendo' && (
-        <p className="text-sm text-yellow-600 dark:text-yellow-400 animate-pulse mt-2">
+        <p className="text-sm text-prolimal-primary/80 dark:text-prolimal-primary/90 animate-pulse mt-2">
           🛰️ Obteniendo tu ubicación GPS...
         </p>
       )}
-      {estadoGps === 'error' && <p className="text-red-500 text-xs mt-2">{errorGps}</p>}
+      {estadoGps === 'error' && <p className="text-prolimal-red-600 text-xs mt-2">{errorGps}</p>}
       {gps && (
         <div className="mt-2 text-sm space-y-1">
-          <p className="text-green-600 dark:text-green-400 font-medium">✅ Ubicación seleccionada</p>
-          <p className="text-gray-600 dark:text-gray-300 font-mono text-xs">
+          <p className="text-prolimal-green-600 dark:text-prolimal-green-400 font-medium">✅ Ubicación seleccionada</p>
+          <p className="text-prolimal-muted/60 dark:text-prolimal-muted/40 font-mono text-xs">
             lat: {gps.latitud.toFixed(6)} · lng: {gps.longitud.toFixed(6)}
           </p>
           {gps.precision != null && (
-            <p className="text-gray-400 text-xs">Precisión: ±{Math.round(gps.precision)} m</p>
+            <p className="text-prolimal-muted/50 text-xs">Precisión: ±{Math.round(gps.precision)} m</p>
           )}
-          <p className="text-xs text-gray-400 dark:text-gray-500">
+          <p className="text-prolimal-muted/40 dark:text-prolimal-muted/50">
             Buscá un lugar, hacé clic en el mapa o arrastrá el pin para ajustar el punto exacto.
           </p>
         </div>

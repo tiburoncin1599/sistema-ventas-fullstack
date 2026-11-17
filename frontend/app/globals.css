@@ -1,20 +1,314 @@
 @import "tailwindcss";
 @variant dark (&:is(.dark *));
 
+@theme {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-dark: #0D2723;
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-prolimal-primary: var(--prolimal-primary);
+  --color-prolimal-primary-dark: var(--prolimal-primary-dark);
+  --color-prolimal-primary-500: #18A88F;
+  --color-prolimal-accent: var(--prolimal-accent);
+  --color-prolimal-sidebar: #0B2520;
+  --color-prolimal-card: var(--card);
+  --color-prolimal-card-dark: #0D2723;
+  --color-prolimal-border: var(--border);
+  --color-prolimal-muted: var(--muted);
+  --color-prolimal-light: #F7F3E8;
+  --color-prolimal-white: #FFFDF8;
+  --color-prolimal-black: #071C19;
+
+  --color-prolimal-blue-50: #EDFBF7;
+  --color-prolimal-blue-100: #D5F5EC;
+  --color-prolimal-blue-200: #A9EADB;
+  --color-prolimal-blue-300: #74D9C5;
+  --color-prolimal-blue-400: #3EC5AC;
+  --color-prolimal-blue-500: #18A88F;
+  --color-prolimal-blue-600: #0E8A77;
+  --color-prolimal-blue-700: #0B6D60;
+  --color-prolimal-blue-800: #0B574D;
+  --color-prolimal-blue-900: #0A473F;
+
+  --color-prolimal-teal-50: #EDFBF7;
+  --color-prolimal-teal-100: #D5F5EC;
+  --color-prolimal-teal-200: #A9EADB;
+  --color-prolimal-teal-300: #74D9C5;
+  --color-prolimal-teal-400: #3EC5AC;
+  --color-prolimal-teal-500: #18A88F;
+  --color-prolimal-teal-600: #0E8A77;
+  --color-prolimal-teal-700: #0B6D60;
+  --color-prolimal-teal-800: #0B574D;
+  --color-prolimal-teal-900: #0A473F;
+
+  --color-prolimal-coral-50: #FFF2EF;
+  --color-prolimal-coral-100: #FFE2DD;
+  --color-prolimal-coral-200: #FFC9C2;
+  --color-prolimal-coral-300: #FFAFA5;
+  --color-prolimal-coral-400: #FA9185;
+  --color-prolimal-coral-500: #F1786A;
+  --color-prolimal-coral-600: #DD5F51;
+  --color-prolimal-coral-700: #B94A3F;
+  --color-prolimal-coral-800: #983D35;
+  --color-prolimal-coral-900: #7F352E;
+
+  --color-prolimal-ink-50: #F1F5F2;
+  --color-prolimal-ink-100: #DDE7E2;
+  --color-prolimal-ink-200: #BFCFC8;
+  --color-prolimal-ink-300: #97AEA5;
+  --color-prolimal-ink-400: #6C8B80;
+  --color-prolimal-ink-500: #4D6D62;
+  --color-prolimal-ink-600: #3A574E;
+  --color-prolimal-ink-700: #2C463F;
+  --color-prolimal-ink-800: #1D372F;
+  --color-prolimal-ink-900: #0B2520;
+
+  --color-prolimal-sand-50: #FCFAF4;
+  --color-prolimal-sand-100: #F7F3E8;
+  --color-prolimal-sand-200: #EFE7D4;
+  --color-prolimal-sand-300: #E3D6B8;
+  --color-prolimal-sand-400: #D4C096;
+  --color-prolimal-sand-500: #C3A874;
+  --color-prolimal-sand-600: #A98B5C;
+  --color-prolimal-sand-700: #8A704B;
+  --color-prolimal-sand-800: #6F5B40;
+  --color-prolimal-sand-900: #594A36;
+
+  --color-prolimal-dark-50: #F7F8F7;
+  --color-prolimal-dark-100: #EDF1EE;
+  --color-prolimal-dark-200: #D9E2DC;
+  --color-prolimal-dark-300: #B8C8BF;
+  --color-prolimal-dark-400: #91A69C;
+  --color-prolimal-dark-500: #6C8278;
+  --color-prolimal-dark-600: #52685F;
+  --color-prolimal-dark-700: #3D5149;
+  --color-prolimal-dark-800: #263D35;
+  --color-prolimal-dark-900: #122A24;
+
+  --color-prolimal-gray-50: #F9FAF9;
+  --color-prolimal-gray-100: #F3F5F4;
+  --color-prolimal-gray-200: #E7EBE9;
+  --color-prolimal-gray-300: #D4DBD7;
+  --color-prolimal-gray-400: #A7B3AD;
+  --color-prolimal-gray-500: #7C8B84;
+  --color-prolimal-gray-600: #5F6E67;
+  --color-prolimal-gray-700: #48564F;
+  --color-prolimal-gray-800: #323E39;
+  --color-prolimal-gray-900: #1B2521;
+
+  --color-prolimal-green-50: #EFFAF3;
+  --color-prolimal-green-100: #DDF3E5;
+  --color-prolimal-green-200: #BDE7CB;
+  --color-prolimal-green-300: #91D6AA;
+  --color-prolimal-green-400: #5DBC81;
+  --color-prolimal-green-500: #36A063;
+  --color-prolimal-green-600: #26814F;
+  --color-prolimal-green-700: #206641;
+  --color-prolimal-green-800: #1C5236;
+  --color-prolimal-green-900: #17442E;
+
+  --color-prolimal-red-50: #FFF2F1;
+  --color-prolimal-red-100: #FFE2DF;
+  --color-prolimal-red-200: #FFC9C4;
+  --color-prolimal-red-300: #FFA49B;
+  --color-prolimal-red-400: #FA7F73;
+  --color-prolimal-red-500: #EE5D50;
+  --color-prolimal-red-600: #DB4033;
+  --color-prolimal-red-700: #B83127;
+  --color-prolimal-red-800: #982B23;
+  --color-prolimal-red-900: #7E2922;
+
+  --color-prolimal-orange-50: #FFF7ED;
+  --color-prolimal-orange-100: #FFEDD5;
+  --color-prolimal-orange-200: #FED7AA;
+  --color-prolimal-orange-300: #FDBA74;
+  --color-prolimal-orange-400: #FB923C;
+  --color-prolimal-orange-500: #F97316;
+  --color-prolimal-orange-600: #EA580C;
+  --color-prolimal-orange-700: #C2410C;
+  --color-prolimal-orange-800: #9A3412;
+  --color-prolimal-orange-900: #7C2D12;
+
+  --color-prolimal-purple-50: #FAF5FF;
+  --color-prolimal-purple-100: #F3E8FF;
+  --color-prolimal-purple-200: #E9D5FF;
+  --color-prolimal-purple-300: #D8B4FE;
+  --color-prolimal-purple-400: #C084FC;
+  --color-prolimal-purple-500: #A855F7;
+  --color-prolimal-purple-600: #9333EA;
+  --color-prolimal-purple-700: #7E22CE;
+  --color-prolimal-purple-800: #6B21A8;
+  --color-prolimal-purple-900: #581C87;
+
+  --color-prolimal-yellow-50: #FEFCE8;
+  --color-prolimal-yellow-100: #FEF9C3;
+  --color-prolimal-yellow-200: #FEF08A;
+  --color-prolimal-yellow-300: #FDE047;
+  --color-prolimal-yellow-400: #FACC15;
+  --color-prolimal-yellow-500: #EAB308;
+  --color-prolimal-yellow-600: #CA8A04;
+  --color-prolimal-yellow-700: #A16207;
+  --color-prolimal-yellow-800: #854D0E;
+  --color-prolimal-yellow-900: #713F12;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --background: #F7F5EF;
+  --foreground: #122925;
+  --card: #FFFDF8;
+  --card-foreground: #122925;
+  --muted: #667A73;
+  --muted-foreground: #8A9A94;
+  --prolimal-primary: #0E8A77;
+  --prolimal-primary-dark: #0A6558;
+  --prolimal-accent: #E98376;
+  --border: #DCE3DA;
 }
 
 .dark {
-  --background: #0f172a;
-  --foreground: #f1f5f9;
+  color-scheme: dark;
+  --background: #071C19;
+  --foreground: #F2F5F0;
+  --card: #0D2723;
+  --card-foreground: #F2F5F0;
+  --muted: #9AB0A9;
+  --muted-foreground: #C3D1CC;
+  --prolimal-primary: #3CC5AD;
+  --prolimal-primary-dark: #6DDBC8;
+  --prolimal-accent: #FFA398;
+  --border: #24413B;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
+::selection {
+  background: #A9EADB;
+  color: #0A473F;
+}
 
+@keyframes prolimal-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -18px, 0) scale(1.04); }
+}
+
+@keyframes prolimal-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .prolimal-display {
+    font-family: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+    font-variation-settings: 'SOFT' 40, 'WONK' 1;
+  }
+
+  .prolimal-page {
+    background:
+      radial-gradient(1100px 620px at 4% -8%, rgba(24, 168, 143, 0.14), transparent 62%),
+      radial-gradient(900px 500px at 100% 4%, rgba(233, 131, 118, 0.12), transparent 58%),
+      var(--background);
+  }
+
+  .dark .prolimal-page {
+    background:
+      radial-gradient(1100px 620px at 4% -8%, rgba(60, 197, 173, 0.12), transparent 62%),
+      radial-gradient(900px 500px at 100% 4%, rgba(255, 163, 152, 0.08), transparent 58%),
+      var(--background);
+  }
+
+  .prolimal-float {
+    animation: prolimal-drift 9s ease-in-out infinite;
+  }
+
+  .prolimal-marquee {
+    animation: prolimal-marquee 28s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .prolimal-float,
+  .prolimal-marquee {
+    animation: none;
+  }
+}
+
+@layer components {
+  .prolimal-eyebrow {
+    @apply inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-prolimal-teal-700 dark:text-prolimal-teal-300;
+  }
+
+  .prolimal-title {
+    @apply font-semibold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50;
+  }
+
+  .prolimal-heading {
+    @apply text-xl font-semibold tracking-[-0.03em] text-prolimal-ink-800 dark:text-prolimal-sand-50;
+  }
+
+  .prolimal-surface {
+    @apply rounded-[2rem] border border-border bg-card shadow-[0_22px_60px_-42px_rgba(11,37,32,0.45)] dark:border-prolimal-ink-700 dark:bg-card-dark;
+  }
+
+  .prolimal-nav-link {
+    @apply inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[13px] font-semibold tracking-wide text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-teal-900/25 dark:hover:text-prolimal-teal-200;
+  }
+
+  .prolimal-icon-btn {
+    @apply relative inline-flex h-10 w-10 items-center justify-center rounded-full text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800 dark:hover:text-prolimal-teal-200 dark:focus-visible:ring-offset-prolimal-ink-900;
+  }
+
+  .prolimal-input {
+    @apply w-full rounded-2xl border border-prolimal-border bg-white px-4 py-3 text-sm text-prolimal-ink-900 placeholder:text-prolimal-ink-400 transition-colors focus:border-prolimal-teal-500 focus:outline-none focus:ring-4 focus:ring-prolimal-teal-500/15 dark:border-prolimal-ink-600 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-50 dark:placeholder:text-prolimal-ink-400 dark:focus:ring-prolimal-teal-400/15;
+  }
+
+  .prolimal-search-input {
+    @apply w-full rounded-full border border-prolimal-border bg-white py-2.5 pl-10 pr-4 text-sm text-prolimal-ink-900 placeholder:text-prolimal-ink-400 transition-colors focus:border-prolimal-teal-500 focus:outline-none focus:ring-4 focus:ring-prolimal-teal-500/15 dark:border-prolimal-ink-600 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-50 dark:placeholder:text-prolimal-ink-400 dark:focus:ring-prolimal-teal-400/15;
+  }
+
+  .prolimal-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-prolimal-teal-700 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_30px_-16px_rgba(14,138,119,0.75)] transition-all hover:-translate-y-0.5 hover:bg-prolimal-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300 dark:focus-visible:ring-offset-prolimal-ink-900;
+  }
+
+  .prolimal-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-prolimal-ink-900/15 bg-white/75 px-5 py-3 text-sm font-bold text-prolimal-ink-800 backdrop-blur transition-all hover:-translate-y-0.5 hover:border-prolimal-ink-900/30 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 dark:border-prolimal-sand-100/15 dark:bg-prolimal-ink-800/70 dark:text-prolimal-sand-50 dark:hover:border-prolimal-sand-100/30 dark:hover:bg-prolimal-ink-700 dark:focus-visible:ring-offset-prolimal-ink-900;
+  }
+
+  .prolimal-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-prolimal-red-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-prolimal-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 dark:bg-prolimal-red-500 dark:hover:bg-prolimal-red-400 dark:focus-visible:ring-offset-prolimal-ink-900;
+  }
+
+  .prolimal-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800 dark:hover:text-prolimal-sand-50;
+  }
+
+  .prolimal-btn-ghost-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-prolimal-red-600 transition-colors hover:bg-prolimal-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-red-400 dark:text-prolimal-red-400 dark:hover:bg-prolimal-red-900/30;
+  }
+}

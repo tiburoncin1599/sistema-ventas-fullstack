@@ -5,6 +5,7 @@ import { api, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import GraficoBarras from '@/components/charts/GraficoBarras';
 import { aFechaISO, rangoMes } from '@/components/charts/chart-utils';
+import { Search } from 'lucide-react';
 
 interface DiaVenta {
   fecha: string;
@@ -75,8 +76,8 @@ function descargar(url: string, nombre: string, setCargando: (b: boolean) => voi
     .finally(() => setCargando(false));
 }
 
-const th = 'text-left px-4 py-2 font-semibold text-xs dark:text-white';
-const td = 'px-4 py-3 text-sm';
+const th = 'px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300';
+const td = 'px-4 py-4 text-sm text-prolimal-ink-600 dark:text-prolimal-sand-100';
 
 export default function AdminReportes() {
   const hoy = useMemo(() => new Date(), []);
@@ -195,71 +196,71 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
   };
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <Link href="/admin" className="text-sm text-green-700 dark:text-green-400 hover:underline">
-            ← Panel admin
-          </Link>
-          <h1 className="text-3xl font-bold mt-1 dark:text-white">Reportes</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Ventas, ganancias, inventario y clientes
-          </p>
-        </div>
-      </div>
+    <div className="pb-10">
+      <section className="mb-8">
+        <Link href="/admin" className="text-xs font-bold uppercase tracking-[0.14em] text-prolimal-teal-700 hover:underline dark:text-prolimal-teal-300">
+          ← Panel admin
+        </Link>
+        <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+          Reportes
+        </h2>
+        <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+          Ventas, ganancias, inventario y clientes con exportación.
+        </p>
+      </section>
 
-      <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5 mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            Desde
+      <div className="mb-6 rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block">
+            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Desde</span>
             <input
               type="date"
               value={desde}
               onChange={(e) => setDesde(e.target.value)}
-              className="border dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-sm"
+              className="prolimal-input"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            Hasta
+          <label className="block">
+            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Hasta</span>
             <input
               type="date"
               value={hasta}
               onChange={(e) => setHasta(e.target.value)}
-              className="border dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-sm"
+              className="prolimal-input"
             />
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {Object.entries(presets).map(([etiqueta, [desdeD, hastaD]]) => (
               <button
                 key={etiqueta}
                 onClick={() => aplicarPreset(desdeD, hastaD)}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2.5 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
               >
                 {etiqueta}
               </button>
             ))}
             <button
               onClick={() => { setDesde(''); setHasta(''); }}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              className="prolimal-btn-ghost px-4 py-2.5 text-xs"
             >
               Todo
             </button>
           </div>
           {!desde && !hasta && (
-            <span className="text-xs text-gray-400">Sin filtro de fechas (todo el historial)</span>
+            <span className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin filtro de fechas (todo el historial)</span>
           )}
         </div>
       </div>
 
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="mb-6 flex flex-wrap gap-2">
         {SECCIONES.map((s) => (
           <button
             key={s.id}
             onClick={() => setSeccion(s.id)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+            className={`rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
               seccion === s.id
-                ? 'bg-[#005a24] text-white'
-                : 'bg-white dark:bg-gray-800 border dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                : 'border border-prolimal-ink-900/10 bg-white text-prolimal-ink-600 hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700'
             }`}
           >
             {s.etiqueta}
@@ -268,76 +269,81 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
       </div>
 
       {(seccion === 'producto' || seccion === 'categoria' || seccion === 'inventario' || seccion === 'clientes') && (
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar..."
-          className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm mb-6 w-full max-w-sm"
-        />
+        <div className="relative mb-6 w-full max-w-sm">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar..."
+            className="prolimal-search-input"
+          />
+        </div>
       )}
 
       {cargando ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando reportes...</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Cargando reportes...
+        </div>
       ) : (
         <div>
           {seccion === 'ventas' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Total vendido</p>
-                  <p className="text-2xl font-bold mt-1 dark:text-white">{formatCurrency(totalesVentas.vendido)}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Pedidos</p>
-                  <p className="text-2xl font-bold mt-1 dark:text-white">{totalesVentas.pedidos}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Cancelados</p>
-                  <p className="text-2xl font-bold mt-1 dark:text-white">{totalesVentas.cancelados}</p>
-                </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {[
+                  { label: 'Total vendido', value: formatCurrency(totalesVentas.vendido) },
+                  { label: 'Pedidos', value: totalesVentas.pedidos },
+                  { label: 'Cancelados', value: totalesVentas.cancelados },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
+                    <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
+                  </div>
+                ))}
               </div>
 
-              <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                  <h2 className="font-bold dark:text-white">
+              <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
                     Ventas por día ·{' '}
-                    <span className="text-gray-500 dark:text-gray-400 font-normal">
+                    <span className="font-semibold normal-case tracking-normal text-prolimal-ink-400 dark:text-prolimal-ink-300">
                       {desde || 'inicio'} al {hasta || 'hoy'}
                     </span>
-                  </h2>
+                  </h3>
                   <div className="flex gap-2">
                     <button
                       onClick={() => exportar('ventas-por-fecha', 'ventas-por-fecha')}
                       disabled={descargando}
-                      className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                      className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                     >
                       CSV
                     </button>
                     <button
                       onClick={() => exportar('ventas-por-fecha', 'ventas-por-fecha', true)}
                       disabled={descargando}
-                      className="px-4 py-2 rounded-xl text-sm font-medium bg-[#005a24] text-white hover:bg-[#00401a] transition-colors disabled:opacity-50"
+                      className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300"
                     >
                       PDF
                     </button>
                   </div>
                 </div>
                 {serieVentas.length > 0 ? (
-                  <div className="text-gray-900 dark:text-gray-100">
+                  <div className="text-prolimal-ink-900 dark:text-prolimal-sand-50">
                     <GraficoBarras datos={serieVentas} />
                   </div>
                 ) : (
-                  <p className="text-center py-10 text-gray-400">Sin ventas en el período.</p>
+                  <p className="py-10 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin ventas en el período.</p>
                 )}
               </div>
 
-              <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-                <h2 className="font-bold mb-3 dark:text-white">Detalle por día</h2>
+              <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+                <div className="border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+                  <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Detalle por día</h3>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[640px]">
                     <thead>
-                      <tr className="border-t dark:border-gray-700">
+                      <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                         <th className={th}>Fecha</th>
                         <th className={th}>Pedidos</th>
                         <th className={th}>Cancelados</th>
@@ -346,11 +352,11 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
                     </thead>
                     <tbody>
                       {ventasFecha.map((d) => (
-                        <tr key={String(d.fecha)} className="border-t dark:border-gray-700 dark:text-white">
+                        <tr key={String(d.fecha)} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
                           <td className={td}>{new Date(String(d.fecha).slice(0, 10)).toLocaleDateString()}</td>
                           <td className={td}>{d.total_pedidos}</td>
                           <td className={td}>{d.cancelados}</td>
-                          <td className={`${td} font-bold text-blue-600 dark:text-blue-400`}>{formatCurrency(Number(d.total_vendido))}</td>
+                          <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(d.total_vendido))}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -362,49 +368,47 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
 
           {seccion === 'ganancias' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Ingresos</p>
-                  <p className="text-2xl font-bold mt-1 dark:text-white">{formatCurrency(Number(ganancias?.ingresos || 0))}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Costo</p>
-                  <p className="text-2xl font-bold mt-1 dark:text-white">{formatCurrency(Number(ganancias?.costo || 0))}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Ganancia</p>
-                  <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">{formatCurrency(Number(ganancias?.ganancia || 0))}</p>
-                </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {[
+                  { label: 'Ingresos', value: formatCurrency(Number(ganancias?.ingresos || 0)), tono: 'text-prolimal-ink-900 dark:text-prolimal-sand-50' },
+                  { label: 'Costo', value: formatCurrency(Number(ganancias?.costo || 0)), tono: 'text-prolimal-ink-900 dark:text-prolimal-sand-50' },
+                  { label: 'Ganancia', value: formatCurrency(Number(ganancias?.ganancia || 0)), tono: 'text-prolimal-teal-700 dark:text-prolimal-teal-300' },
+                ].map(({ label, value, tono }) => (
+                  <div key={label} className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
+                    <p className={`mt-1 text-2xl font-extrabold tracking-[-0.04em] ${tono}`}>{value}</p>
+                  </div>
+                ))}
               </div>
 
-              <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                  <h2 className="font-bold dark:text-white">
+              <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
                     Resumen de ganancias ·{' '}
-                    <span className="text-gray-500 dark:text-gray-400 font-normal">
+                    <span className="font-semibold normal-case tracking-normal text-prolimal-ink-400 dark:text-prolimal-ink-300">
                       {desde || 'inicio'} al {hasta || 'hoy'}
                     </span>
-                  </h2>
+                  </h3>
                   <button
                     onClick={() => exportar('ganancias', 'ganancias', true)}
                     disabled={descargando}
-                    className="px-4 py-2 rounded-xl text-sm font-medium bg-[#005a24] text-white hover:bg-[#00401a] transition-colors disabled:opacity-50"
+                    className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300"
                   >
                     PDF
                   </button>
                 </div>
                 {!ganancias || (Number(ganancias.ingresos) === 0 && Number(ganancias.ganancia) === 0) ? (
-                  <p className="text-center py-10 text-gray-400">Sin ventas en el período.</p>
+                  <p className="py-10 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin ventas en el período.</p>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     {[
                       ['Ingresos', Number(ganancias.ingresos)],
                       ['Costo', Number(ganancias.costo)],
                       ['Ganancia', Number(ganancias.ganancia)],
                     ].map(([label, valor]) => (
-                      <div key={label as string} className="border dark:border-gray-700 rounded-xl p-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{label as string}</p>
-                        <p className="text-xl font-bold mt-1 dark:text-white">{formatCurrency(valor as number)}</p>
+                      <div key={label as string} className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label as string}</p>
+                        <p className="mt-1 text-xl font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(valor as number)}</p>
                       </div>
                     ))}
                   </div>
@@ -414,13 +418,13 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
           )}
 
           {seccion === 'producto' && (
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <h2 className="font-bold dark:text-white">Ventas por producto</h2>
+            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Ventas por producto</h3>
                 <button
                   onClick={() => exportar('ventas-por-producto', 'ventas-por-producto')}
                   disabled={descargando}
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                  className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                 >
                   CSV
                 </button>
@@ -428,7 +432,7 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px]">
                   <thead>
-                    <tr className="border-t dark:border-gray-700">
+                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                       <th className={th}>Producto</th>
                       <th className={th}>Categoría</th>
                       <th className={th}>Precio</th>
@@ -438,12 +442,12 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
                   </thead>
                   <tbody>
                     {filtrados.productos.map((p) => (
-                      <tr key={p.id} className="border-t dark:border-gray-700 dark:text-white">
-                        <td className={`${td} font-medium`}>{p.nombre}</td>
+                      <tr key={p.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
+                        <td className={`${td} font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50`}>{p.nombre}</td>
                         <td className={td}>{p.categoria || '—'}</td>
                         <td className={td}>{formatCurrency(Number(p.precio))}</td>
                         <td className={td}>{p.unidades_vendidas}</td>
-                        <td className={`${td} font-bold text-blue-600 dark:text-blue-400`}>{formatCurrency(Number(p.total_ingresos))}</td>
+                        <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(p.total_ingresos))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -453,13 +457,13 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
           )}
 
           {seccion === 'categoria' && (
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <h2 className="font-bold dark:text-white">Ventas por categoría</h2>
+            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Ventas por categoría</h3>
                 <button
                   onClick={() => exportar('ventas-por-categoria', 'ventas-por-categoria')}
                   disabled={descargando}
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                  className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                 >
                   CSV
                 </button>
@@ -467,7 +471,7 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px]">
                   <thead>
-                    <tr className="border-t dark:border-gray-700">
+                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                       <th className={th}>Categoría</th>
                       <th className={th}>Unidades</th>
                       <th className={th}>Ingresos</th>
@@ -475,10 +479,10 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
                   </thead>
                   <tbody>
                     {filtrados.categorias.map((c) => (
-                      <tr key={c.id} className="border-t dark:border-gray-700 dark:text-white">
-                        <td className={`${td} font-medium`}>{c.nombre}</td>
+                      <tr key={c.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
+                        <td className={`${td} font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50`}>{c.nombre}</td>
                         <td className={td}>{c.unidades_vendidas}</td>
-                        <td className={`${td} font-bold text-blue-600 dark:text-blue-400`}>{formatCurrency(Number(c.total_ingresos))}</td>
+                        <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(c.total_ingresos))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -488,21 +492,21 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
           )}
 
           {seccion === 'inventario' && (
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <h2 className="font-bold dark:text-white">Inventario actual</h2>
+            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Inventario actual</h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => exportar('inventario', 'inventario')}
                     disabled={descargando}
-                    className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                    className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                   >
                     CSV
                   </button>
                   <button
                     onClick={() => exportar('inventario', 'inventario', true)}
                     disabled={descargando}
-                    className="px-4 py-2 rounded-xl text-sm font-medium bg-[#005a24] text-white hover:bg-[#00401a] transition-colors disabled:opacity-50"
+                    className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300"
                   >
                     PDF
                   </button>
@@ -511,7 +515,7 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px]">
                   <thead>
-                    <tr className="border-t dark:border-gray-700">
+                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                       <th className={th}>Producto</th>
                       <th className={th}>Categoría</th>
                       <th className={th}>Stock</th>
@@ -522,21 +526,21 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
                   </thead>
                   <tbody>
                     {filtrados.inventario.map((i) => (
-                      <tr key={i.id} className="border-t dark:border-gray-700 dark:text-white">
-                        <td className={`${td} font-medium`}>{i.nombre}</td>
+                      <tr key={i.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
+                        <td className={`${td} font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50`}>{i.nombre}</td>
                         <td className={td}>{i.categoria || '—'}</td>
                         <td className={td}>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-[0.05em] ${
                             i.cantidad <= i.cantidad_minima
-                              ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
-                              : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+                              ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300'
+                              : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
                           }`}>
                             {i.cantidad}
                           </span>
                         </td>
                         <td className={td}>{i.cantidad_minima}</td>
                         <td className={td}>{formatCurrency(Number(i.precio_costo || 0))}</td>
-                        <td className={td}>{formatCurrency(Number(i.precio))}</td>
+                        <td className={`${td} font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50`}>{formatCurrency(Number(i.precio))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -546,13 +550,13 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
           )}
 
           {seccion === 'clientes' && (
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <h2 className="font-bold dark:text-white">Clientes frecuentes</h2>
+            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Clientes frecuentes</h3>
                 <button
                   onClick={() => exportar('clientes', 'clientes')}
                   disabled={descargando}
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                  className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                 >
                   CSV
                 </button>
@@ -560,7 +564,7 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px]">
                   <thead>
-                    <tr className="border-t dark:border-gray-700">
+                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                       <th className={th}>Cliente</th>
                       <th className={th}>Compras</th>
                       <th className={th}>Total gastado</th>
@@ -569,13 +573,13 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
                   </thead>
                   <tbody>
                     {filtrados.clientes.map((c) => (
-                      <tr key={c.id} className="border-t dark:border-gray-700 dark:text-white">
+                      <tr key={c.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
                         <td className={td}>
-                          <p className="font-medium">{c.nombre}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{c.email}</p>
+                          <p className="font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{c.nombre}</p>
+                          <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{c.email}</p>
                         </td>
                         <td className={td}>{c.total_compras}</td>
-                        <td className={`${td} font-bold text-blue-600 dark:text-blue-400`}>{formatCurrency(Number(c.total_gastado))}</td>
+                        <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(c.total_gastado))}</td>
                         <td className={td}>
                           {c.ultima_compra ? new Date(c.ultima_compra).toLocaleDateString() : '—'}
                         </td>
@@ -588,6 +592,6 @@ setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
           )}
         </div>
       )}
-    </main>
+    </div>
   );
 }

@@ -1,30 +1,43 @@
-'use client';
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCarrito } from '@/store/carrito';
-import { cerrarSesion } from '@/lib/api';
-import DarkModeToggle from './DarkModeToggle';
+﻿'use client';
 
-function getUsuarioFromStorage(): { nombre: string; rol: string } | null {
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { LogOut, Menu, Search, ShoppingCart, User, X } from 'lucide-react';
+import { cerrarSesion } from '@/lib/api';
+import { useCarrito } from '@/store/carrito';
+import DarkModeToggle from './DarkModeToggle';
+import CarritoDrawer from './CarritoDrawer';
+import MenuMovil from './MenuMovil';
+
+interface Usuario {
+  nombre: string;
+  rol: string;
+}
+
+const WHATSAPP_NUMERO = process.env.NEXT_PUBLIC_WHATSAPP || '59170000000';
+
+function getUsuarioFromStorage(): Usuario | null {
   if (typeof window === 'undefined') return null;
   try {
     const u = localStorage.getItem('usuario');
     return u ? JSON.parse(u) : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function useAuth() {
-  const [usuario, setUsuario] = useState<{ nombre: string; rol: string } | null>(null);
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
 
   useEffect(() => {
-setUsuario(getUsuarioFromStorage()); // eslint-disable-line react-hooks/set-state-in-effect
-    const onAuth = () => setUsuario(getUsuarioFromStorage());
-    window.addEventListener('auth-change', onAuth);
-    window.addEventListener('storage', onAuth);
+    const actualizar = () => setUsuario(getUsuarioFromStorage());
+    actualizar();
+    window.addEventListener('auth-change', actualizar);
+    window.addEventListener('storage', actualizar);
     return () => {
-      window.removeEventListener('auth-change', onAuth);
-      window.removeEventListener('storage', onAuth);
+      window.removeEventListener('auth-change', actualizar);
+      window.removeEventListener('storage', actualizar);
     };
   }, []);
 
@@ -33,118 +46,213 @@ setUsuario(getUsuarioFromStorage()); // eslint-disable-line react-hooks/set-stat
 
 export default function Navbar() {
   const router = useRouter();
-  const { items } = useCarrito();
-  const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
   const usuario = useAuth();
+  const { items } = useCarrito();
   const [busqueda, setBusqueda] = useState('');
-  const cantidadItems = mounted ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []); // eslint-disable-line react-hooks/set-state-in-effect
+  const cantidadItems = usuario ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
+  const puedeComprar = Boolean(usuario);
+  const inicialUsuario = usuario?.nombre?.charAt(0).toUpperCase() || '?';
 
-  const cerrarSesionHandler = async () => {
+  const cerrarMenu = useCallback(() => setMenuOpen(false), []);
+  const cerrarCarrito = useCallback(() => setCarritoAbierto(false), []);
+
+  useEffect(() => {
+    const cerrarDrawers = () => {
+      setMenuOpen(false);
+      setCarritoAbierto(false);
+    };
+    window.addEventListener('popstate', cerrarDrawers);
+    return () => window.removeEventListener('popstate', cerrarDrawers);
+  }, []);
+
+  const buscar = (event: React.FormEvent) => {
+    event.preventDefault();
+    const q = busqueda.trim();
+    router.push(q ? `/productos?q=${encodeURIComponent(q)}` : '/productos');
+  };
+
+  const salir = async () => {
+    cerrarMenu();
+    cerrarCarrito();
     await cerrarSesion();
     router.push('/');
   };
 
-  const buscar = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (busqueda.trim()) router.push(`/productos?q=${encodeURIComponent(busqueda.trim())}`);
+  const abrirCarrito = () => {
+    cerrarMenu();
+    setCarritoAbierto(true);
   };
 
+  const enlaces: { href: string; label: string }[] = [
+    { href: '/', label: 'Inicio' },
+    { href: '/productos', label: 'Productos' },
+  ];
+
+  if (usuario?.rol === 'admin') {
+    enlaces.push({ href: '/admin', label: 'Panel' });
+    enlaces.push({ href: '/ventas', label: 'Ventas' });
+  } else if (usuario?.rol === 'inventario') {
+    enlaces.push({ href: '/admin', label: 'Panel' });
+  } else if (usuario?.rol === 'ventas') {
+    enlaces.push({ href: '/ventas', label: 'Ventas' });
+  }
+
+  const esRutaActiva = (href: string) =>
+    href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+
+  const claseEnlace = (href: string) =>
+    `inline-flex items-center rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-colors ${
+      esRutaActiva(href)
+        ? 'bg-prolimal-ink-900 text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+        : 'text-prolimal-ink-600 hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-teal-900/25 dark:hover:text-prolimal-teal-200'
+    }`;
+
   return (
-    <header className="sticky top-0 z-50">
-      <div className="bg-[#005a24] px-4 py-2">
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
-          <Link href="/" className="shrink-0">
-            <img src="/logo.png" alt="Logo" className="w-11 h-11 rounded-lg object-contain bg-white p-1" />
-          </Link>
-
-          <form onSubmit={buscar} className="flex-1 hidden sm:flex">
-            <input
-              type="text"
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              placeholder="Buscar productos de limpieza..."
-              className="w-full px-4 py-2.5 rounded-l-lg text-sm outline-none bg-white text-gray-900 placeholder-gray-500"
-            />
-            <button type="submit" className="bg-[#ffd600] text-[#005a24] px-5 py-2.5 rounded-r-lg font-bold text-sm hover:bg-yellow-400">
-              Buscar
-            </button>
-          </form>
-
-          <DarkModeToggle />
-
-          <div className="hidden md:flex items-center gap-4 text-white text-sm">
-            {usuario ? (
-              <>
-                <Link href="/cuenta/pedidos" className="hover:text-yellow-300 flex items-center gap-1">
-                  <span className="text-lg">👤</span>
-                  <div className="text-left leading-tight">
-                    <p className="text-[10px] text-gray-300">Hola,</p>
-                    <p className="font-medium text-xs truncate max-w-28">{usuario.nombre}</p>
-                  </div>
-                </Link>
-                {usuario?.rol === 'cliente' && (
-                  <Link href="/carrito" className="hover:text-yellow-300 flex items-center gap-1">
-                    <span className="text-lg">🛒</span>
-                    <span className="text-xs">Carrito ({cantidadItems})</span>
-                  </Link>
-                )}
-                {(usuario?.rol === 'admin' || usuario?.rol === 'inventario' || usuario?.rol === 'ventas') && (
-                  <Link href={usuario.rol === 'ventas' ? '/ventas' : '/admin'} className="bg-[#ffd600] text-[#005a24] px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-yellow-400">
-                    {usuario.rol === 'admin' ? 'ADMIN' : 'PANEL'}
-                  </Link>
-                )}
-                <button onClick={cerrarSesionHandler} className="text-red-200 hover:text-red-100 text-xs font-semibold bg-red-800/30 px-2.5 py-1 rounded-lg">
-                  Cerrar sesión
-                </button>
-              </>
-            ) : (
-              <Link href="/auth" className="hover:text-yellow-300 flex items-center gap-1">
-                <span className="text-lg">👤</span>
-                <div className="text-left leading-tight">
-                  <p className="text-[10px] text-gray-300">Hola,</p>
-                  <p className="font-medium text-xs">Ingresá</p>
-                </div>
-              </Link>
-            )}
-          </div>
-
-          <button className="md:hidden text-white text-2xl" onClick={() => setMenuOpen(!menuOpen)}>
-            ☰
-          </button>
+    <>
+      <div className="bg-prolimal-ink-900 text-prolimal-sand-100">
+        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between gap-4 px-4 text-[9px] font-bold uppercase tracking-[0.22em] sm:px-6 lg:px-8">
+          <span className="hidden sm:inline">Cochabamba · Bolivia</span>
+          <a
+            href={`https://wa.me/${WHATSAPP_NUMERO}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 transition-colors hover:text-prolimal-teal-300"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-prolimal-teal-400" aria-hidden="true" />
+            Pedidos por WhatsApp
+          </a>
+          <span className="hidden md:inline">Limpieza para hogar, oficina y empresa</span>
         </div>
       </div>
 
-      <div className="md:hidden bg-white dark:bg-gray-800 border-b dark:border-gray-700 shadow-lg px-4 py-3 space-y-2 text-sm">
-        <form onSubmit={buscar} className="flex sm:hidden mb-2">
-          <input
-            type="text"
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-            placeholder="Buscar..."
-            className="flex-1 border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
-          />
-        </form>
-        <Link href="/productos" className="block py-2 text-gray-600 dark:text-gray-300 font-medium" onClick={() => setMenuOpen(false)}>Productos</Link>
-        {usuario ? (
-          <>
-            <p className="font-bold text-gray-800 dark:text-gray-100">Hola, {usuario.nombre}</p>
-            {(usuario.rol === 'admin' || usuario.rol === 'inventario' || usuario.rol === 'ventas') && (
-              <Link href={usuario.rol === 'ventas' ? '/ventas' : '/admin'} className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Panel Admin</Link>
-            )}
-            <Link href="/cuenta/pedidos" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Mis pedidos</Link>
-            {usuario?.rol === 'cliente' && (<Link href="/carrito" className="block py-2 text-gray-600 dark:text-gray-300" onClick={() => setMenuOpen(false)}>Carrito ({cantidadItems})</Link>)}
-            <button onClick={cerrarSesionHandler} className="block py-2 text-red-600 dark:text-red-400 font-medium">Cerrar sesión</button>
-          </>
-        ) : (
-          <>
-            <Link href="/auth" className="block py-2 text-[#005a24] dark:text-green-400 font-medium" onClick={() => setMenuOpen(false)}>Iniciar sesión</Link>
+      <header className="sticky top-0 z-50 border-b border-prolimal-ink-900/10 bg-[#F7F5EF]/85 backdrop-blur-xl supports-[backdrop-filter]:bg-[#F7F5EF]/72 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-900/88 dark:supports-[backdrop-filter]:bg-prolimal-ink-900/78">
+        <div className="mx-auto flex h-[5.5rem] max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex min-w-0 shrink-0 items-center gap-3" onClick={cerrarMenu}>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-prolimal-sand-50 p-1.5 dark:bg-prolimal-ink-900/30 shadow-[0_10px_30px_-20px_rgba(11,37,32,0.8)] ring-1 ring-prolimal-ink-900/10 dark:bg-prolimal-sand-50 dark:ring-prolimal-sand-100/15">
+              <img src="/logo.png" alt="Logo PROLIMAC" className="h-full w-full object-contain" />
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-lg font-extrabold tracking-[-0.045em] text-prolimal-ink-900 transition-colors hover:text-prolimal-teal-700 dark:text-prolimal-sand-50 dark:hover:text-prolimal-teal-300">
+                PROLIMAC
+              </span>
+              <span className="prolimal-display hidden truncate text-[13px] italic leading-none text-prolimal-ink-500 dark:text-prolimal-ink-300 sm:block">
+                limpieza que respira
+              </span>
+            </span>
+          </Link>
 
-          </>
-        )}
-      </div>
-    </header>
+          <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label="Navegación principal">
+            {enlaces.map((enlace) => (
+              <Link
+                key={enlace.href}
+                href={enlace.href}
+                aria-current={esRutaActiva(enlace.href) ? 'page' : undefined}
+                className={claseEnlace(enlace.href)}
+              >
+                {enlace.label}
+              </Link>
+            ))}
+          </nav>
+
+          <form onSubmit={buscar} className="ml-auto hidden min-w-0 md:block" role="search">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(event) => setBusqueda(event.target.value)}
+                placeholder="Buscar en el catálogo"
+                aria-label="Buscar productos"
+                className="prolimal-search-input md:w-48 xl:w-64"
+              />
+            </div>
+          </form>
+
+          <div className="ml-auto flex items-center gap-1 md:ml-2">
+            <DarkModeToggle />
+
+            {puedeComprar && (
+              <button
+                type="button"
+                onClick={abrirCarrito}
+                aria-label={`Abrir carrito${cantidadItems > 0 ? `, ${cantidadItems} artículos` : ''}`}
+                className="prolimal-icon-btn"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {cantidadItems > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-prolimal-teal-700 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#F7F5EF] dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:ring-prolimal-ink-900">
+                    {cantidadItems > 99 ? '99+' : cantidadItems}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <div className="hidden items-center gap-1 lg:flex">
+              {usuario ? (
+                <>
+                  <Link
+                    href="/cuenta"
+                    className="flex items-center gap-2 rounded-full px-2 py-1.5 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 dark:hover:bg-prolimal-ink-800"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-prolimal-ink-900 text-sm font-bold text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900">
+                      {inicialUsuario}
+                    </span>
+                    <span className="hidden max-w-32 flex-col text-left xl:flex">
+                      <span className="truncate text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
+                        {usuario.nombre}
+                      </span>
+                      <span className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        {usuario.rol}
+                      </span>
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={salir}
+                    aria-label="Cerrar sesión"
+                    title="Cerrar sesión"
+                    className="rounded-full p-2.5 text-prolimal-ink-500 transition-colors hover:bg-prolimal-red-50 hover:text-prolimal-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-red-400 dark:text-prolimal-ink-300 dark:hover:bg-prolimal-red-900/30 dark:hover:text-prolimal-red-400"
+                  >
+                    <LogOut className="h-5 w-5" />
+                  </button>
+                </>
+              ) : (
+                <Link href="/auth" className="prolimal-btn-primary whitespace-nowrap px-5 py-2.5">
+                  <User className="h-4 w-4" />
+                  Ingresar
+                </Link>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMenuOpen((abierto) => !abierto)}
+              aria-expanded={menuOpen}
+              aria-controls="menu-movil"
+              aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              className="prolimal-icon-btn lg:hidden"
+            >
+              {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <MenuMovil
+        abierto={menuOpen}
+        onCerrar={cerrarMenu}
+        usuario={usuario}
+        enlaces={enlaces}
+        cantidadItems={cantidadItems}
+        onAbrirCarrito={abrirCarrito}
+        onSalir={salir}
+      />
+
+      <CarritoDrawer abierto={carritoAbierto} onCerrar={cerrarCarrito} />
+    </>
   );
 }

@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
+import { MapPin, Phone, Plus, Search, X } from 'lucide-react';
 
 const MapaCliente = dynamic(() => import('@/components/MapaCliente'), {
   ssr: false,
   loading: () => (
-    <p className="text-sm text-gray-400 dark:text-gray-500">Cargando mapa...</p>
+    <p className="text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Cargando mapa...</p>
   ),
 });
 
@@ -154,123 +155,144 @@ export default function VentasClientesPage() {
 
   if (cargando) {
     return (
-      <p className="text-center py-20 text-gray-500 dark:text-gray-400">
-        Cargando clientes...
-      </p>
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Cargando clientes...
+        </div>
+      </main>
     );
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-10">
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Mis clientes</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {filtrados.length} cliente{filtrados.length !== 1 ? 's' : ''} · registrá
-            nuevos con ubicación GPS y días de visita
+          <p className="prolimal-eyebrow">Cartera</p>
+          <h1 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Mis clientes
+          </h1>
+          <p className="mt-2 text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+            {filtrados.length} cliente{filtrados.length !== 1 ? 's' : ''} · ubicación GPS y días de visita
           </p>
         </div>
-        <button
-          onClick={abrirNuevo}
-          className="bg-[#005a24] text-white px-5 py-2.5 rounded-xl font-medium hover:bg-[#003e19]"
-        >
-          + Nuevo cliente con GPS
+        <button onClick={abrirNuevo} className="prolimal-btn-primary">
+          <Plus className="h-4 w-4" />
+          Nuevo cliente con GPS
         </button>
       </div>
 
-      <input
-        type="text"
-        placeholder="Buscar por nombre o teléfono..."
-        value={busqueda}
-        onChange={e => setBusqueda(e.target.value)}
-        className="w-full max-w-md mb-6 border dark:border-gray-600 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-gray-800 dark:text-white"
-      />
+      <div className="relative mb-6 max-w-md">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+        <input
+          type="text"
+          placeholder="Buscar por nombre o teléfono..."
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          className="prolimal-search-input"
+        />
+      </div>
 
       {filtrados.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
           No hay clientes para mostrar.
-        </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtrados.map(c => (
-            <div
+            <article
               key={c.id}
-              className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5"
+              className="flex flex-col rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shrink-0">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-prolimal-teal-100 text-sm font-extrabold text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300">
                   {c.nombre.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white truncate">
-                    {c.nombre}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                    {c.email}
-                  </p>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-prolimal-ink-900 dark:text-prolimal-sand-50">{c.nombre}</p>
+                  <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{c.email}</p>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
-                {c.telefono && <span>📞 {c.telefono}</span>}
-                {c.ubicacion && <span className="truncate">📍 {c.ubicacion}</span>}
+              <div className="mt-4 flex flex-1 flex-col gap-1.5 text-xs font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">
+                {c.telefono && (
+                  <span className="flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+                    {c.telefono}
+                  </span>
+                )}
+                {c.ubicacion && (
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+                    <span className="truncate">{c.ubicacion}</span>
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => abrirAsignarGps(c)}
-                className="mt-4 w-full border border-[#005a24]/30 dark:border-green-800 text-[#005a24] dark:text-green-400 rounded-xl py-2 text-sm font-medium hover:bg-green-50 dark:hover:bg-green-900/30"
+                className="prolimal-btn-secondary mt-5 w-full px-4 py-2.5 text-xs"
               >
-                📍 Registrar punto GPS de visita
+                <MapPin className="h-3.5 w-3.5" />
+                Registrar punto GPS de visita
               </button>
-            </div>
+            </article>
           ))}
         </div>
       )}
 
       {modalAbierto && (
         <div
-          className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
           onClick={() => setModalAbierto(false)}
         >
           <div
-            className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
             onClick={e => e.stopPropagation()}
           >
-            <h2 className="text-2xl font-bold mb-1 dark:text-white">
-              {clienteExistente ? 'Registrar punto de visita' : 'Nuevo cliente'}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              {clienteExistente
-                ? `Asignale una ubicación GPS y días de visita a ${clienteExistente.nombre}.`
-                : 'Completá los datos y ubicá al cliente en el mapa.'}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="prolimal-display text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                  {clienteExistente ? 'Registrar punto de visita' : 'Nuevo cliente'}
+                </h2>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  {clienteExistente
+                    ? `Asignale una ubicación GPS y días de visita a ${clienteExistente.nombre}.`
+                    : 'Completá los datos y ubicá al cliente en el mapa.'}
+                </p>
+              </div>
+              <button
+                onClick={() => setModalAbierto(false)}
+                className="prolimal-icon-btn shrink-0"
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-            <div className="space-y-4">
+            <div className="mt-6 space-y-4">
               {!clienteExistente && (
                 <>
                   <input
                     placeholder="Nombre del cliente *"
                     value={form.nombre}
                     onChange={e => setForm({ ...form, nombre: e.target.value })}
-                    className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white"
+                    className="prolimal-input"
                   />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      placeholder="Teléfono"
-                      value={form.telefono}
-                      onChange={e => setForm({ ...form, telefono: e.target.value })}
-                      className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
+                  <input
+                    placeholder="Teléfono"
+                    value={form.telefono}
+                    onChange={e => setForm({ ...form, telefono: e.target.value })}
+                    className="prolimal-input"
+                  />
                   <input
                     placeholder="Dirección de referencia"
                     value={form.ubicacion}
                     onChange={e => setForm({ ...form, ubicacion: e.target.value })}
-                    className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white"
+                    className="prolimal-input"
                   />
                 </>
               )}
 
               <div>
-                <p className="text-sm font-medium mb-2 dark:text-white">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                   Días de visita *
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -281,10 +303,10 @@ export default function VentasClientesPage() {
                         key={d.valor}
                         type="button"
                         onClick={() => toggleDia(d.valor)}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                        className={`rounded-full border px-4 py-2 text-xs font-bold transition-colors ${
                           activo
-                            ? 'bg-[#005a24] text-white border-[#005a24]'
-                            : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
+                            ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-white dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                            : 'border-prolimal-ink-900/15 bg-transparent text-prolimal-ink-500 hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800'
                         }`}
                       >
                         {d.etiqueta}
@@ -298,13 +320,13 @@ export default function VentasClientesPage() {
 
               {pedidos.length > 0 && (
                 <div>
-                  <label className="text-sm font-medium block mb-2 dark:text-white">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                     Pedido asociado (opcional)
                   </label>
                   <select
                     value={pedidoId}
                     onChange={e => setPedidoId(e.target.value)}
-                    className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 text-sm bg-white dark:bg-gray-700 dark:text-white"
+                    className="prolimal-input"
                   >
                     <option value="">— Sin pedido asociado —</option>
                     {pedidos.map(p => (
@@ -318,17 +340,17 @@ export default function VentasClientesPage() {
               )}
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <button
                 onClick={guardar}
                 disabled={guardando}
-                className="flex-1 bg-[#005a24] text-white py-3 rounded-xl font-medium hover:bg-[#003e19] disabled:opacity-50"
+                className="prolimal-btn-primary flex-1"
               >
                 {guardando ? 'Guardando...' : 'Guardar'}
               </button>
               <button
                 onClick={() => setModalAbierto(false)}
-                className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-medium dark:text-white"
+                className="prolimal-btn-secondary flex-1"
               >
                 Cancelar
               </button>

@@ -1,4 +1,4 @@
-import { IsNumber, Min } from 'class-validator';
+import { IsNumber, Min, IsOptional } from 'class-validator';
 
 export class ActualizarInventarioDto {
   @IsNumber({}, { message: 'La cantidad debe ser un número' })

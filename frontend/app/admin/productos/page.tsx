@@ -1,7 +1,10 @@
 'use client';
+
 import { useEffect, useState, useRef } from 'react';
 import { api, API_URL } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Package, Plus, Search } from 'lucide-react';
 
 interface Producto {
   id: number;
@@ -35,7 +38,20 @@ export default function AdminProductos() {
   };
 
   useEffect(() => {
-    cargarDatos().catch(() => {}); // eslint-disable-line react-hooks/set-state-in-effect
+    let activo = true;
+    Promise.all([
+      api.get('/productos/admin'),
+      api.get('/categorias'),
+    ])
+      .then(([prods, cats]) => {
+        if (!activo) return;
+        setProductos(prods.data);
+        setCategorias(cats.data);
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
   }, []);
 
   const limpiarArchivo = () => {
@@ -120,9 +136,6 @@ export default function AdminProductos() {
     } catch { alert('Error al activar el producto'); }
   };
 
-  const abiertos = productos.filter(p => p.activo);
-  const inactivos = productos.filter(p => !p.activo);
-
   const q = busqueda.trim().toLowerCase();
   const visibles = q
     ? productos.filter(p =>
@@ -133,120 +146,160 @@ export default function AdminProductos() {
     : productos;
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Productos</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{abiertos.length} activos, {inactivos.length} inactivos</p>
+          <p className="prolimal-eyebrow">Catálogo</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Productos
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            {visibles.length} de {productos.length} productos visibles en el catálogo.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar por nombre, código o categoría..."
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
-          />
-          <button onClick={abrirNuevo}
-            className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700">
-            + Nuevo
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre, código o categoría"
+              className="prolimal-search-input"
+            />
+          </div>
+          <button onClick={abrirNuevo} className="prolimal-btn-primary whitespace-nowrap">
+            <Plus className="h-4 w-4" />
+            Nuevo producto
           </button>
         </div>
-      </div>
+      </section>
 
       {productos.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando productos...</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Cargando productos...
+        </div>
       ) : visibles.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda.</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Sin resultados para tu búsqueda.
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {visibles.map(p => (
-              <div
-                key={p.id}
-                onClick={() => abrirEditar(p)}
-                className={`bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl overflow-hidden hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer ${!p.activo ? 'opacity-40' : ''}`}
-              >
-              <div className="h-36 bg-gray-50 dark:bg-gray-700 flex items-center justify-center p-4">
+            <motion.div
+              key={p.id}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => abrirEditar(p)}
+              className="group cursor-pointer overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-50px_rgba(11,37,32,0.4)] transition-all hover:border-prolimal-teal-500/40 hover:shadow-[0_30px_70px_-45px_rgba(11,37,32,0.5)] dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:hover:border-prolimal-teal-500/30"
+            >
+              <div className="flex h-40 items-center justify-center bg-prolimal-sand-100 p-4 dark:bg-prolimal-ink-800">
                 {p.imagen_url
-                  ? <img src={`${API_URL}${p.imagen_url}`} alt={p.nombre} className="w-full h-full object-contain" />
-                  : <div className="text-gray-300 dark:text-gray-600 text-4xl">{'\uD83D\uDCE6'}</div>
+                  ? <img src={`${API_URL}${p.imagen_url}`} alt={p.nombre} className="h-full w-full object-contain" />
+                  : <Package className="h-10 w-10 text-prolimal-ink-300 dark:text-prolimal-ink-500" />
                 }
               </div>
-              <div className="p-4">
+              <div className="p-5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-gray-900 dark:text-white truncate">{p.nombre}</p>
-                    {p.codigo && <p className="text-xs font-mono text-gray-500 dark:text-gray-400">Cód. {p.codigo}</p>}
+                    <p className="truncate text-base font-extrabold tracking-[-0.02em] text-prolimal-ink-800 dark:text-prolimal-sand-50">{p.nombre}</p>
+                    {p.codigo && <p className="mt-0.5 font-mono text-[11px] font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Cód. {p.codigo}</p>}
                   </div>
-                  <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${p.activo ? 'bg-green-500' : 'bg-red-400'}`} />
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${p.activo ? 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300' : 'bg-prolimal-red-100 text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300'}`}>
+                    {p.activo ? 'Activo' : 'Inactivo'}
+                  </span>
                 </div>
-                <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">{p.categoria?.nombre}</p>
-                <div className="flex items-center justify-between mt-3">
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{formatCurrency(p.precio)}</p>
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  {p.categoria?.nombre || 'Sin categoría'}
+                </p>
+                <div className="mt-4 flex items-center justify-between border-t border-prolimal-ink-900/5 pt-4 dark:border-prolimal-sand-100/10">
+                  <p className="text-lg font-extrabold tracking-[-0.03em] text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(p.precio)}</p>
                   <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                     {p.activo ? (
                       <button onClick={() => desactivar(p.id)}
-                        className="text-xs text-red-500 dark:text-red-400 hover:underline px-1">Desactivar</button>
+                        className="prolimal-btn-ghost-danger px-3 py-2 text-xs">Desactivar</button>
                     ) : (
                       <button onClick={() => activar(p.id)}
-                        className="text-xs text-green-500 dark:text-green-400 hover:underline px-1">Activar</button>
+                        className="rounded-full px-3 py-2 text-xs font-bold text-prolimal-teal-700 transition-colors hover:bg-prolimal-teal-50 dark:text-prolimal-teal-300 dark:hover:bg-prolimal-teal-900/30">Activar</button>
                     )}
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
 
-      {(modalProducto || creando) && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={cerrarModal}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold mb-6 dark:text-white">{creando ? 'Nuevo producto' : 'Editar producto'}</h2>
-            <div className="space-y-4">
-              <input placeholder="Código (opcional, se usa en el POS)" value={form.codigo}
-                onChange={e => setForm({ ...form, codigo: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-              <input placeholder="Nombre" value={form.nombre}
-                onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-              <div className="grid grid-cols-2 gap-3">
-                <input placeholder="Precio venta" type="number" step="0.01" value={form.precio}
-                  onChange={e => setForm({ ...form, precio: e.target.value })}
-                  className="border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-                <input placeholder="Precio costo" type="number" step="0.01" value={form.precio_costo}
-                  onChange={e => setForm({ ...form, precio_costo: e.target.value })}
-                  className="border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+      <AnimatePresence>
+        {(modalProducto || creando) && (
+          <motion.div
+            key="modal-producto"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
+            onClick={cerrarModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              transition={{ duration: 0.22 }}
+              className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="mb-6">
+                <p className="prolimal-eyebrow">{creando ? 'Nuevo registro' : 'Editar registro'}</p>
+                <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                  {creando ? 'Nuevo producto' : 'Editar producto'}
+                </h2>
               </div>
-              <select value={form.categoria_id}
-                onChange={e => setForm({ ...form, categoria_id: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
-                <option value="">Sin categoría</option>
-                {categorias.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                ))}
-              </select>
-              <textarea placeholder="Descripción" value={form.descripcion}
-                onChange={e => setForm({ ...form, descripcion: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" rows={3} />
-              <div>
-                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Imagen</label>
-                <input ref={fileRef} type="file" accept="image/*" className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+              <div className="space-y-3">
+                <input placeholder="Código (opcional, se usa en el POS)" value={form.codigo}
+                  onChange={e => setForm({ ...form, codigo: e.target.value })}
+                  className="prolimal-input" />
+                <input placeholder="Nombre" value={form.nombre}
+                  onChange={e => setForm({ ...form, nombre: e.target.value })}
+                  className="prolimal-input" />
+                <div className="grid grid-cols-2 gap-3">
+                  <input placeholder="Precio venta" type="number" step="0.01" value={form.precio}
+                    onChange={e => setForm({ ...form, precio: e.target.value })}
+                    className="prolimal-input" />
+                  <input placeholder="Precio costo" type="number" step="0.01" value={form.precio_costo}
+                    onChange={e => setForm({ ...form, precio_costo: e.target.value })}
+                    className="prolimal-input" />
+                </div>
+                <select value={form.categoria_id}
+                  onChange={e => setForm({ ...form, categoria_id: e.target.value })}
+                  className="prolimal-input">
+                  <option value="">Sin categoría</option>
+                  {categorias.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                  ))}
+                </select>
+                <textarea placeholder="Descripción" value={form.descripcion}
+                  onChange={e => setForm({ ...form, descripcion: e.target.value })}
+                  className="prolimal-input" rows={3} />
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Imagen</label>
+                  <input ref={fileRef} type="file" accept="image/*" className="prolimal-input file:mr-3 file:rounded-full file:border-0 file:bg-prolimal-teal-100 file:px-4 file:py-1.5 file:text-xs file:font-bold file:text-prolimal-teal-800 dark:file:bg-prolimal-teal-900/30 dark:file:text-prolimal-teal-200" />
+                </div>
               </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={guardar}
-                className="flex-1 bg-green-600 text-white py-3 rounded-xl font-medium hover:bg-green-700">
-                {creando ? 'Crear producto' : 'Guardar cambios'}
-              </button>
-              <button onClick={cerrarModal}
-                className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-medium dark:text-white">
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+                <button onClick={cerrarModal}
+                  className="prolimal-btn-secondary sm:w-auto">
+                  Cancelar
+                </button>
+                <button onClick={guardar}
+                  className="prolimal-btn-primary flex-1">
+                  {creando ? 'Crear producto' : 'Guardar cambios'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import { DetallePedido } from './detalle-pedido.entity';
 import { InventarioModule } from '../inventario/inventario.module';
 import { InventarioMovimientosModule } from '../inventario-movimientos/inventario-movimientos.module';
 import { ConfiguracionModule } from '../configuracion/configuracion.module';
+import { AuditModule } from '../audit/audit.module';
 import { FacturaService } from './factura.service';
 
 @Module({
@@ -15,6 +16,7 @@ import { FacturaService } from './factura.service';
     InventarioModule,
     InventarioMovimientosModule,
     ConfiguracionModule,
+    AuditModule,
   ],
   controllers: [PedidosController],
   providers: [PedidosService, FacturaService],

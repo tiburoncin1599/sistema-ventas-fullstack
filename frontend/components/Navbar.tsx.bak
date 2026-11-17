@@ -1,0 +1,182 @@
+﻿'use client';
+
+import { useState, useEffect } from 'react';
+import { formatCurrency, parseCurrency } from '@/lib/utils';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCarrito } from '@/store/carrito';
+import { cerrarSesion } from '@/lib/api';
+import DarkModeToggle from './DarkModeToggle';
+import { ShoppingCart, User, Menu, X, Search } from 'lucide-react';
+
+function getUsuarioFromStorage(): { nombre: string; rol: string } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const u = localStorage.getItem('usuario');
+    return u ? JSON.parse(u) : null;
+  } catch { return null; }
+}
+
+function useAuth() {
+  const [usuario, setUsuario] = useState<{ nombre: string; rol: string } | null>(null);
+
+  useEffect(() => {
+    const u = getUsuarioFromStorage();
+    setUsuario(u);
+    const onAuth = () => setUsuario(getUsuarioFromStorage());
+    window.addEventListener('auth-change', onAuth);
+    window.addEventListener('storage', onAuth);
+    return () => {
+      window.removeEventListener('auth-change', onAuth);
+      window.removeEventListener('storage', onAuth);
+    };
+  }, []);
+
+  return usuario;
+}
+
+export default function Navbar() {
+  const router = useRouter();
+  const { items, total, quitar, cambiarCantidad } = useCarrito();
+  const usuario = useAuth();
+  const [busqueda, setBusqueda] = useState('');
+  const cantidadItems = usuario ? items.reduce((sum, i) => sum + i.cantidad, 0) : 0;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
+
+  useEffect(() => {}, []);
+
+  const cerrarSesionHandler = async () => {
+    await cerrarSesion();
+    router.push('/');
+  };
+
+  const buscar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busqueda.trim()) router.push(`/productos?q=${encodeURIComponent(busqueda.trim())}`);
+  };
+
+  return (
+    <>
+      <header className="sticky top-0 z-50 shadow-sm">
+        <div className="bg-white/80 backdrop-blur-sm border-b border-border-prolimal-border/50 dark:bg-gray-900/80">
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Link href="/" className="shrink-0 flex items-center gap-2">
+                <img src="/logo.png" alt="Logo" className="w-11 h-11 rounded-lg object-contain bg-white p-1" />
+                <span className="hidden sm:block text-white font-bold text-lg">PROLIMAC SRL</span>
+              </Link>
+            </div>
+            <form onSubmit={buscar} className="flex-1 md:hidden">
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  placeholder="Buscar..."
+                  className="w-full pl-4 pr-12 py-2.5 rounded-lg text-sm outline-none bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-500 focus:ring-2 focus:ring-[#16A36A] transition-all"
+                />
+                <button type="submit" className="absolute right-1 top-1/2 -translate-y-1/2 bg-[#16A36A] text-white px-4 py-1.5 rounded-md font-bold text-sm hover:bg-[#075E3B] transition-colors">
+                  <Search className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
+            <div className="flex items-center gap-2 lg:hidden">
+              <DarkModeToggle />
+              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Menú" onClick={() => setMenuOpen(!menuOpen)}>
+                {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
+            <div className="hidden lg:flex items-center gap-8">
+              <Link href="/productos" className="text-prolimal-dark-600 font-medium hover:text-prolimal-blue-500 transition-colors">Productos</Link>
+              <Link href="/ventas" className="text-prolimal-dark-600 font-medium hover:text-prolimal-blue-500 transition-colors">Ventas</Link>
+              <div>
+                {usuario ? (
+                  <div className="flex items-center gap-3 py-2 border-b dark:border-gray-700">
+                    <div className="w-10 h-10 bg-[#DCFCE7] dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-[#16A36A] dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-800 dark:text-gray-100">{usuario.nombre}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{usuario.rol}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Link href="/auth" className="hover:text-prolimal-blue-500 flex items-center gap-2 transition-colors">
+                    <User className="w-5 h-5" />
+                    <div className="text-left leading-tight">
+                      <p className="text-[10px] text-gray-200">Hola,</p>
+                      <p className="font-medium text-xs">Ingresá</p>
+                    </div>
+                  </Link>
+                )}
+              </div>
+              <div className="flex items-center gap-2 lg:hidden">
+                <DarkModeToggle />
+                <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Menú" onClick={() => setMenuOpen(!menuOpen)}>
+                  {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center gap-6">
+            <div className="relative group cursor-pointer" onClick={() => setCarritoAbierto(!carritoAbierto)}>
+              <ShoppingCart className="w-5.5 h-5.5 text-prolimal-blue-500 transition-transform hover:scale-125 duration-200 group-hover:scale-110">
+                <span className="absolute -top-0.5 -right-0.5 bg-prolimal-blue-500 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {cantidadItems > 99 ? '99+' : cantidadItems}
+                </span>
+              </ShoppingCart>
+            </div>
+            {carritoAbierto && (
+              <div className="fixed right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 max-w-full shadow-2xl border-l border-border-prolimal-border/50 transform translateX-[100%] sm:translateX[0] transition-transform duration-500 ease-out z-50" aria-modal="true" aria-label="Carrito">
+                <div className="px-6 py-4 border-b border-border-prolimal-border/50 dark:border-border-prolimal-border/50 flex items-center justify-between">
+                  <h2 className="text-xl font-medium text-prolimal-dark-800">Carrito</h2>
+                  <button onClick={() => setCarritoAbierto(false)} className="text-prolimal-gray-400 hover:text-prolimal-gray-600"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="p-4 max-h-[70vh] overflow-y-auto">
+                  {items.length === 0 ? (
+                    <div className="p-8 text-center">Carrito vacío</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {items.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between px-2 pb-3">
+                          <div className="flex items-center gap-4">
+                            <img src="https://via.placeholder.com/100" alt={item.nombre} className="w-14 h-18 object-cover rounded-lg" />
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-prolimal-dark-600 truncate">{item.nombre}</h3>
+                              <p className="text-sm text-prolimal-gray-400">${item.precio}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 3))} className="w-8 h-8 rounded-lg border border-gray-300 text-sm font-bold hover:bg-prolimal-blue-50 transition-colors">-3</button>
+                            <span className="min-w-12 text-center font-bold text-prolimal-dark-500">{item.cantidad}</span>
+                            <button onClick={() => cambiarCantidad(item.id, item.cantidad + 3)} className="w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-prolimal-blue-50 transition-colors text-sm font-bold">+3</button>
+                          </div>
+                          <p className="text-right text-sm text-prolimal-gray-400">{total()} USD</p>
+                          <button onClick={() => quitar(item.id)} className="text-prolimal-red-400 text-xs font-medium">Quitar</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="p-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex justify-between text-sm text-gray-400 mb-2">Artículos <span>{items.length}</span></div>
+                    <div className="flex justify-between text-lg font-bold text-prolimal-dark-700">Total <span>{formatCurrency(total())}</span></div>
+                    <button className="w-full bg-prolimal-blue-50 text-prolimal-blue-600 py-3 rounded-lg font-medium text-sm hover:bg-prolimal-blue-100 transition-colors mt-4">Continuar</button>
+                    <button className="w-full bg-prolimal-red-50 text-prolimal-red-600 py-3 rounded-lg font-medium text-sm hover:bg-prolimal-red-100 transition-colors mt-2">Vaciar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            <span className="absolute -top-0.5 -right-0.5 bg-prolimal-blue-500 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              {cantidadItems > 99 ? '99+' : cantidadItems}
+            </span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

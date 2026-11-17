@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { ChevronDown, MapPin } from 'lucide-react';
 
 interface Pedido {
   id: number;
@@ -13,11 +14,11 @@ interface Pedido {
 }
 
 const COLORES_ESTADO: Record<string, string> = {
-  pendiente: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300',
-  confirmado: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-  enviado: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300',
-  entregado: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
-  cancelado: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
+  pendiente: 'bg-prolimal-orange-100 text-prolimal-orange-700 dark:bg-prolimal-orange-900/25 dark:text-prolimal-orange-300',
+  confirmado: 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300',
+  enviado: 'bg-prolimal-purple-100 text-prolimal-purple-700 dark:bg-prolimal-purple-900/25 dark:text-prolimal-purple-300',
+  entregado: 'bg-prolimal-green-100 text-prolimal-green-700 dark:bg-prolimal-green-900/25 dark:text-prolimal-green-300',
+  cancelado: 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300',
 };
 
 const ESTADOS = ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado'];
@@ -64,78 +65,93 @@ cargar(); // eslint-disable-line react-hooks/set-state-in-effect
 
   if (cargando) {
     return (
-      <p className="text-center py-20 text-gray-500 dark:text-gray-400">
-        Cargando pedidos...
-      </p>
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Cargando pedidos...
+        </div>
+      </main>
     );
   }
 
   const visibles = filtro ? pedidos.filter(p => p.estado === filtro) : pedidos;
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-10">
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Pedidos</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {visibles.length} pedido{visibles.length !== 1 ? 's' : ''}
+          <p className="prolimal-eyebrow">Seguimiento</p>
+          <h1 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Pedidos
+          </h1>
+          <p className="mt-2 text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+            {visibles.length} pedido{visibles.length !== 1 ? 's' : ''} en esta vista
           </p>
         </div>
-        <select
-          value={filtro}
-          onChange={e => setFiltro(e.target.value)}
-          className="border dark:border-gray-600 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-gray-800 dark:text-white"
-        >
-          <option value="">Todos los estados</option>
-          {ESTADOS.map(e => (
-            <option key={e} value={e}>
-              {e.charAt(0).toUpperCase() + e.slice(1)}
-            </option>
-          ))}
-        </select>
+        <div className="relative w-full sm:w-56">
+          <select
+            value={filtro}
+            onChange={e => setFiltro(e.target.value)}
+            className="prolimal-input appearance-none pr-10"
+            aria-label="Filtrar por estado"
+          >
+            <option value="">Todos los estados</option>
+            {ESTADOS.map(e => (
+              <option key={e} value={e}>
+                {e.charAt(0).toUpperCase() + e.slice(1)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+        </div>
       </div>
 
       {visibles.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">
-          No hay pedidos en esta vista.
-        </p>
+        <div className="prolimal-surface px-6 py-20 text-center">
+          <p className="text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+            No hay pedidos en esta vista.
+          </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visibles.map(p => (
-            <div
+            <article
               key={p.id}
-              className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5"
+              className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-bold text-lg dark:text-white">#{p.id}</p>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mt-0.5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="prolimal-display text-xl tracking-[-0.03em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                    #{p.id}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
                     {p.usuario?.nombre}
                   </p>
                 </div>
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold ${COLORES_ESTADO[p.estado] || ''}`}
+                  className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${COLORES_ESTADO[p.estado] || ''}`}
                 >
                   {p.estado}
                 </span>
               </div>
               {p.direccion_entrega && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 truncate mb-2">
-                  📍 {p.direccion_entrega}
+                <p className="mb-3 flex items-center gap-1.5 truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{p.direccion_entrega}</span>
                 </p>
               )}
-              <div className="flex items-end justify-between mb-3">
-                <span className="text-xs text-gray-400 dark:text-gray-500">
+              <div className="mb-4 flex items-end justify-between gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                   {new Date(p.creado_en).toLocaleDateString()}
                 </span>
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                <p className="text-lg font-extrabold tracking-[-0.03em] text-prolimal-teal-700 dark:text-prolimal-teal-300">
                   {formatCurrency(p.total)}
                 </p>
               </div>
               <select
                 value={p.estado}
                 onChange={e => cambiarEstado(p.id, e.target.value)}
-                className="w-full border dark:border-gray-600 rounded-lg px-3 py-2 text-xs bg-white dark:bg-gray-700 dark:text-white"
+                className="prolimal-input py-2.5 text-xs font-semibold"
+                aria-label={`Estado del pedido ${p.id}`}
               >
                 {ESTADOS.map(e => (
                   <option
@@ -147,7 +163,7 @@ cargar(); // eslint-disable-line react-hooks/set-state-in-effect
                   </option>
                 ))}
               </select>
-            </div>
+            </article>
           ))}
         </div>
       )}

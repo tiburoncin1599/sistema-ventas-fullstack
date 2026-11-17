@@ -12,6 +12,7 @@ import {
   UploadedFile,
   BadRequestException,
   NotFoundException,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -22,8 +23,12 @@ import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { AuditService } from '../audit/audit.service';
 
-// Extensión derivada del mimetype validado: evita subir .html/.svg disfrazados
+interface AuthRequest extends Request {
+  user?: { id: number; rol: string };
+}
+
 const EXTENSIONES: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -33,7 +38,10 @@ const EXTENSIONES: Record<string, string> = {
 
 @Controller('productos')
 export class ProductosController {
-  constructor(private readonly productosService: ProductosService) {}
+  constructor(
+    private readonly productosService: ProductosService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get()
   findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
@@ -63,22 +71,75 @@ export class ProductosController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario')
-  crear(@Body() body: CrearProductoDto) {
-    return this.productosService.crear(body);
+  async crear(@Body() body: CrearProductoDto, @Req() req: AuthRequest) {
+    const user = req.user as { id: number; rol: string };
+    this.productosService.crear(body);
+    await this.auditService.registrar({
+      accion: 'crear',
+      entidad: 'producto',
+      entidad_id: body.codigo ? Number(body.codigo) : 1, // Usar codigo o ID por defecto
+      valor_nuevo: {
+        nombre: body.nombre,
+        codigo: body.codigo,
+        precio: body.precio,
+        activo: true, // Por defecto al crear
+      },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return { mensaje: 'Producto creado correctamente' };
   }
 
-  @Put(':id')
+@Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario')
-  actualizar(@Param('id') id: string, @Body() body: ActualizarProductoDto) {
-    return this.productosService.actualizar(+id, body);
+  async actualizar(@Param('id') id: string, @Body() body: ActualizarProductoDto, @Req() req: AuthRequest) {
+    const user = req.user as { id: number; rol: string };
+    this.productosService.actualizar(+id, body);
+    // Obtener el producto anterior para el registro de auditoría
+    const productoAnterior = await this.productosService.findOne(+id);
+    await this.auditService.registrar({
+      accion: 'modificar',
+      entidad: 'producto',
+      entidad_id: +id,
+      valor_anterior: {
+        nombre: productoAnterior?.nombre,
+        precio: productoAnterior?.precio,
+        activo: productoAnterior?.activo,
+      },
+      valor_nuevo: {
+        nombre: body.nombre ?? productoAnterior?.nombre,
+        precio: body.precio ?? productoAnterior?.precio,
+        activo: body.activo ?? productoAnterior?.activo,
+      },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return { mensaje: 'Producto actualizado correctamente' };
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario')
-  desactivar(@Param('id') id: string) {
-    return this.productosService.desactivar(+id);
+  async desactivar(@Param('id') id: string, @Req() req: AuthRequest, @Body() body: any) {
+    const user = req.user as { id: number; rol: string };
+    this.productosService.desactivar(+id);
+    await this.auditService.registrar({
+      accion: 'desactivar',
+      entidad: 'producto',
+      entidad_id: +id,
+      valor_anterior: {
+        nombre: body?.nombre,
+        activo: true,
+      },
+      valor_nuevo: {
+        nombre: body?.nombre,
+        activo: false,
+      },
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+    });
+    return { mensaje: 'Producto desactivado correctamente' };
   }
 
   @Post('upload/:id')

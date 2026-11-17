@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
   // detecte la raíz del repo como monorepo (package-lock.json de `npm install`
   // en la raíz) y anide el standalone en .next/standalone/frontend/.
   outputFileTracingRoot: __dirname,
+  images: {
+    unoptimized: true,
+  },
   async rewrites() {
     return [
       { source: '/api-docs', destination: `${INTERNAL_API_URL}/api` },

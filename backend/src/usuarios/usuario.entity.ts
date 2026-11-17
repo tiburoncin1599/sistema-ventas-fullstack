@@ -20,7 +20,7 @@ export class Usuario {
   @Column({ nullable: true })
   google_id?: string;
 
-  @Column()
+  @Column({ name: 'password_hash', nullable: false })
   @Exclude()
   password_hash!: string;
 
@@ -39,6 +39,6 @@ export class Usuario {
   @Column({ default: true })
   activo!: boolean;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'creado_en' })
   creado_en!: Date;
 }

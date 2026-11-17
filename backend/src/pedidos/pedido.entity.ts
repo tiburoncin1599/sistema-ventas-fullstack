@@ -38,6 +38,23 @@ export class Pedido {
   estado!: string;
 
   @Column({ nullable: true })
+  tipo_identificador!: string;  // 'publico' | 'privado'
+
+  @Column({ nullable: true })
+  identificador_publico!: string;
+
+  @Column({ type: 'simple-array', default: [] })
+  historial_estados!: {
+    estado: string;
+    fecha: Date;
+    usuario?: number;
+    observacion?: string;
+  }[];
+
+  @Column({ type: 'timestamp', onUpdate: 'CURRENT_TIMESTAMP' })
+  actualizado_en!: Date;
+
+  @Column({ nullable: true })
   direccion_entrega?: string;
 
   @Column({ nullable: true })

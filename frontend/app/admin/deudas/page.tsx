@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { AlertTriangle, CheckCircle2, Plus, Wallet } from 'lucide-react';
 
 interface Deuda {
   id: number;
@@ -134,77 +135,103 @@ export default function AdminDeudas() {
 
   const getColorEstado = (estado: string) => {
     const colores: Record<string, string> = {
-      pendiente: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
-      parcial: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
-      pagado: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
+      pendiente: 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300',
+      parcial: 'bg-prolimal-orange-100 text-prolimal-orange-700 dark:bg-prolimal-orange-900/30 dark:text-prolimal-orange-300',
+      pagado: 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300',
     };
-    return colores[estado] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+    return colores[estado] || 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200';
   };
 
-  if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando...</p>;
+  if (cargando) {
+    return (
+      <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+        Cargando deudas...
+      </div>
+    );
+  }
 
   const saldoPendiente = (d: Deuda) => d.monto - d.monto_pagado;
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex justify-between items-center mb-8">
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Gestión de Deudas</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Registro de deudas del personal con la empresa</p>
+          <p className="prolimal-eyebrow">Finanzas</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Gestión de deudas
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            Registro de deudas del personal con la empresa.
+          </p>
         </div>
         {puedeEditar && (
-          <button onClick={() => setShowCrear(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700">
-            + Nueva deuda
+          <button onClick={() => setShowCrear(true)} className="prolimal-btn-primary w-fit whitespace-nowrap">
+            <Plus className="h-4 w-4" />
+            Nueva deuda
           </button>
         )}
-      </div>
+      </section>
 
-      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border dark:border-gray-700">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Desde</label>
-          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 dark:bg-gray-700 dark:text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Hasta</label>
-          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 dark:bg-gray-700 dark:text-white text-sm" />
-        </div>
-        <button onClick={() => cargar(desde, hasta)}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 text-sm mt-4">
-          Filtrar
-        </button>
-        {(desde || hasta) && (
-          <button onClick={() => { setDesde(''); setHasta(''); cargar('', ''); }}
-            className="text-gray-500 dark:text-gray-400 hover:underline text-sm mt-4">
-            Limpiar filtro
+      <div className="mb-8 rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Desde</label>
+            <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+              className="prolimal-input" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Hasta</label>
+            <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+              className="prolimal-input" />
+          </div>
+          <button onClick={() => cargar(desde, hasta)} className="prolimal-btn-primary">
+            Filtrar
           </button>
-        )}
+          {(desde || hasta) && (
+            <button onClick={() => { setDesde(''); setHasta(''); cargar('', ''); }}
+              className="prolimal-btn-ghost px-3 py-2 text-sm">
+              Limpiar filtro
+            </button>
+          )}
+        </div>
       </div>
 
       {resumen && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-5">
-            <p className="text-blue-600 dark:text-blue-400 text-sm font-medium">Total deudas</p>
-            <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{resumen.total_deudas}</p>
-          </div>
-          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-2xl p-5">
-            <p className="text-red-600 dark:text-red-400 text-sm font-medium">Pendientes</p>
-            <p className="text-3xl font-bold text-red-700 dark:text-red-300">{resumen.deudas_pendientes}</p>
-          </div>
-          <div className="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-2xl p-5">
-            <p className="text-orange-600 dark:text-orange-400 text-sm font-medium">Saldo pendiente</p>
-            <p className="text-3xl font-bold text-orange-700 dark:text-orange-300">{formatCurrency(resumen.total_pendiente)}</p>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-2xl p-5">
-            <p className="text-green-600 dark:text-green-400 text-sm font-medium">Pagado</p>
-            <p className="text-3xl font-bold text-green-700 dark:text-green-300">{formatCurrency(resumen.total_pagado)}</p>
-          </div>
+        <div className="mb-8 grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {[
+            { label: 'Total deudas', value: resumen.total_deudas, Icono: Wallet, tono: 'ink' },
+            { label: 'Pendientes', value: resumen.deudas_pendientes, Icono: AlertTriangle, tono: 'coral' },
+            { label: 'Saldo pendiente', value: formatCurrency(resumen.total_pendiente), Icono: Wallet, tono: 'sand' },
+            { label: 'Pagado', value: formatCurrency(resumen.total_pagado), Icono: CheckCircle2, tono: 'teal' },
+          ].map(({ label, value, Icono, tono }) => (
+            <div
+              key={label}
+              className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+            >
+              <span
+                className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                  tono === 'teal'
+                    ? 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
+                    : tono === 'coral'
+                      ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300'
+                      : tono === 'sand'
+                        ? 'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200'
+                        : 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200'
+                }`}
+              >
+                <Icono className="h-4 w-4" />
+              </span>
+              <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
+              <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
+            </div>
+          ))}
         </div>
       )}
 
       {deudas.length === 0 ? (
-        <div className="text-center py-20 text-gray-500 dark:text-gray-400">No hay deudas registradas</div>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          No hay deudas registradas
+        </div>
       ) : (
         <div className="space-y-6">
           {(() => {
@@ -221,24 +248,24 @@ export default function AdminDeudas() {
               const saldo = totalDeuda - totalPagado;
               const pendientes = grupo.deudas.filter(d => d.estado !== 'pagado').length;
               return (
-                <details key={nombre} className="border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-                  <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750">
-                    <div className="flex items-center justify-between">
+                <details key={nombre} className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark" open>
+                  <summary className="cursor-pointer bg-prolimal-sand-100/60 px-6 py-4 transition-colors hover:bg-prolimal-sand-100 dark:bg-prolimal-ink-800/60 dark:hover:bg-prolimal-ink-700">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-prolimal-teal-100 font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
                           {nombre.charAt(0).toUpperCase()}
-                        </div>
+                        </span>
                         <div>
-                          <span className="font-bold text-lg dark:text-white">{nombre}</span>
-                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-3">{grupo.deudas.length} deuda{grupo.deudas.length !== 1 ? 's' : ''}</span>
+                          <span className="text-lg font-extrabold tracking-[-0.02em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{nombre}</span>
+                          <span className="ml-3 text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{grupo.deudas.length} deuda{grupo.deudas.length !== 1 ? 's' : ''}</span>
                           {pendientes > 0 && (
-                            <span className="text-xs text-red-500 dark:text-red-400 ml-2 font-medium">{pendientes} pendiente{pendientes !== 1 ? 's' : ''}</span>
+                            <span className="ml-2 text-xs font-bold text-prolimal-coral-600 dark:text-prolimal-coral-300">{pendientes} pendiente{pendientes !== 1 ? 's' : ''}</span>
                           )}
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Saldo pendiente</p>
-                        <p className={`text-xl font-bold ${saldo > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Saldo pendiente</p>
+                        <p className={`text-xl font-extrabold tracking-[-0.03em] ${saldo > 0 ? 'text-prolimal-coral-600 dark:text-prolimal-coral-300' : 'text-prolimal-teal-700 dark:text-prolimal-teal-300'}`}>
                           {formatCurrency(saldo)}
                         </p>
                       </div>
@@ -247,45 +274,40 @@ export default function AdminDeudas() {
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[760px]">
                       <thead>
-                        <tr className="border-t dark:border-gray-700">
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">ID</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Descripción</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Vendedor</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Monto</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Pagado</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Saldo</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Estado</th>
-                          <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Acciones</th>
+                        <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
+                          {['ID', 'Descripción', 'Vendedor', 'Monto', 'Pagado', 'Saldo', 'Estado', 'Acciones'].map((h) => (
+                            <th key={h} className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{h}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
                         {grupo.deudas.map(d => (
-                          <tr key={d.id} className="border-t dark:border-gray-700 dark:text-white">
-                            <td className="px-6 py-4 font-medium text-sm">#{d.id}</td>
-                            <td className="px-6 py-4 text-gray-600 dark:text-gray-400 max-w-xs truncate text-sm">{d.descripcion || '\u2014'}</td>
-                            <td className="px-6 py-4 text-sm">{d.vendedor?.nombre || '—'}</td>
-                            <td className="px-6 py-4 text-sm">{formatCurrency(d.monto)}</td>
-                            <td className="px-6 py-4 text-sm">{formatCurrency(d.monto_pagado)}</td>
-                            <td className="px-6 py-4 font-bold text-sm">{formatCurrency(saldoPendiente(d))}</td>
+                          <tr key={d.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
+                            <td className="px-6 py-4 text-sm font-bold text-prolimal-ink-700 dark:text-prolimal-sand-100">#{d.id}</td>
+                            <td className="max-w-xs truncate px-6 py-4 text-sm font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">{d.descripcion || '\u2014'}</td>
+                            <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">{d.vendedor?.nombre || '—'}</td>
+                            <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">{formatCurrency(d.monto)}</td>
+                            <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">{formatCurrency(d.monto_pagado)}</td>
+                            <td className="px-6 py-4 text-sm font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(saldoPendiente(d))}</td>
                             <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getColorEstado(d.estado)}`}>
+                              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${getColorEstado(d.estado)}`}>
                                 {d.estado}
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2">
                                 {puedeEditar && d.estado !== 'pagado' && (
-                                  <button onClick={() => { setShowPagar(d); setMontoPago(String(saldoPendiente(d))); }} className="text-green-600 dark:text-green-400 hover:underline text-xs font-medium">
+                                  <button onClick={() => { setShowPagar(d); setMontoPago(String(saldoPendiente(d))); }} className="text-xs font-bold text-prolimal-teal-700 underline-offset-4 hover:underline dark:text-prolimal-teal-300">
                                     Pagar
                                   </button>
                                 )}
                                 {d.estado === 'pagado' && (
-                                  <button onClick={() => descargarFactura(d.id)} className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium">
+                                  <button onClick={() => descargarFactura(d.id)} className="text-xs font-bold text-prolimal-ink-600 underline-offset-4 hover:underline dark:text-prolimal-sand-100">
                                     Factura
                                   </button>
                                 )}
                                 {puedeEditar && (
-                                  <button onClick={() => eliminarDeuda(d.id)} className="text-red-600 dark:text-red-400 hover:underline text-xs font-medium">
+                                  <button onClick={() => eliminarDeuda(d.id)} className="text-xs font-bold text-prolimal-red-600 underline-offset-4 hover:underline dark:text-prolimal-red-400">
                                     Eliminar
                                   </button>
                                 )}
@@ -295,12 +317,12 @@ export default function AdminDeudas() {
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                          <td colSpan={2} className="px-6 py-3 font-bold text-sm dark:text-white">Total {nombre}</td>
-                          <td className="px-6 py-3 font-bold text-sm dark:text-white"></td>
-                          <td className="px-6 py-3 font-bold text-sm dark:text-white">{formatCurrency(totalDeuda)}</td>
-                          <td className="px-6 py-3 font-bold text-sm dark:text-white">{formatCurrency(totalPagado)}</td>
-                          <td className="px-6 py-3 font-bold text-sm dark:text-white">{formatCurrency(saldo)}</td>
+                        <tr className="border-t border-prolimal-ink-900/10 bg-prolimal-sand-100/40 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/40">
+                          <td colSpan={2} className="px-6 py-3 text-sm font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">Total {nombre}</td>
+                          <td className="px-6 py-3 text-sm font-bold text-prolimal-ink-700 dark:text-prolimal-sand-100"></td>
+                          <td className="px-6 py-3 text-sm font-bold text-prolimal-ink-700 dark:text-prolimal-sand-100">{formatCurrency(totalDeuda)}</td>
+                          <td className="px-6 py-3 text-sm font-bold text-prolimal-ink-700 dark:text-prolimal-sand-100">{formatCurrency(totalPagado)}</td>
+                          <td className="px-6 py-3 text-sm font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(saldo)}</td>
                           <td colSpan={2} />
                         </tr>
                       </tfoot>
@@ -315,16 +337,22 @@ export default function AdminDeudas() {
 
       {/* Modal Crear Deuda */}
       {showCrear && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowCrear(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold mb-6 dark:text-white">Nueva Deuda</h2>
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 dark:bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setShowCrear(false)}>
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6">
+              <p className="prolimal-eyebrow">Nuevo registro</p>
+              <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Nueva deuda</h2>
+            </div>
+            <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Personal *</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Personal *</label>
                 <select
                   value={formDeuda.usuarioId}
                   onChange={e => setFormDeuda({ ...formDeuda, usuarioId: +e.target.value })}
-                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
+                  className="prolimal-input">
                   <option value={0}>Seleccionar...</option>
                   {usuarios.map(u => (
                     <option key={u.id} value={u.id}>{u.nombre} ({u.email})</option>
@@ -332,11 +360,11 @@ export default function AdminDeudas() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendedor responsable</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Vendedor responsable</label>
                 <select
                   value={formDeuda.vendedorId}
                   onChange={e => setFormDeuda({ ...formDeuda, vendedorId: +e.target.value })}
-                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white">
+                  className="prolimal-input">
                   <option value={0}>— Por defecto: quien registra —</option>
                   {vendedores.map(u => (
                     <option key={u.id} value={u.id}>{u.nombre} ({u.email})</option>
@@ -344,30 +372,30 @@ export default function AdminDeudas() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monto *</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Monto *</label>
                 <input
                   type="number"
                   step="0.01"
                   value={formDeuda.monto}
                   onChange={e => setFormDeuda({ ...formDeuda, monto: e.target.value })}
-                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white"
+                  className="prolimal-input"
                   placeholder="0.00"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Descripción</label>
                 <textarea
                   value={formDeuda.descripcion}
                   onChange={e => setFormDeuda({ ...formDeuda, descripcion: e.target.value })}
-                  className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white"
+                  className="prolimal-input"
                   placeholder="Motivo de la deuda..."
                   rows={3}
                 />
               </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowCrear(false)} className="flex-1 border dark:border-gray-600 rounded-xl py-3 font-medium dark:text-white">Cancelar</button>
-                <button onClick={crearDeuda} className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-medium hover:bg-blue-700">Guardar</button>
-              </div>
+            </div>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+              <button onClick={() => setShowCrear(false)} className="prolimal-btn-secondary sm:w-auto">Cancelar</button>
+              <button onClick={crearDeuda} className="prolimal-btn-primary flex-1">Guardar</button>
             </div>
           </div>
         </div>
@@ -375,50 +403,56 @@ export default function AdminDeudas() {
 
       {/* Modal Pagar Deuda */}
       {showPagar && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPagar(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold mb-2 dark:text-white">Registrar Pago</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">Deuda #{showPagar.id} {'—'} {showPagar.usuario?.nombre}</p>
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-400">Monto total:</span>
-                <span className="font-bold">{formatCurrency(showPagar.monto)}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 dark:bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setShowPagar(null)}>
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6">
+              <p className="prolimal-eyebrow">Movimiento</p>
+              <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Registrar pago</h2>
+              <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Deuda #{showPagar.id} · {showPagar.usuario?.nombre}</p>
+            </div>
+            <div className="mb-6 space-y-2 rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
+              <div className="flex justify-between text-sm">
+                <span className="font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">Monto total</span>
+                <span className="font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{formatCurrency(showPagar.monto)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-400">Ya pagado:</span>
-                <span className="font-medium dark:text-white">{formatCurrency(showPagar.monto_pagado)}</span>
+              <div className="flex justify-between text-sm">
+                <span className="font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">Ya pagado</span>
+                <span className="font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{formatCurrency(showPagar.monto_pagado)}</span>
               </div>
-              <div className="flex justify-between text-lg border-t dark:border-gray-700 pt-3">
-                <span className="font-bold dark:text-white">Saldo pendiente:</span>
-                <span className="font-bold text-orange-600 dark:text-orange-400">{formatCurrency(saldoPendiente(showPagar))}</span>
+              <div className="flex justify-between border-t border-prolimal-ink-900/5 pt-2 dark:border-prolimal-sand-100/10">
+                <span className="text-sm font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">Saldo pendiente</span>
+                <span className="text-lg font-extrabold text-prolimal-coral-600 dark:text-prolimal-coral-300">{formatCurrency(saldoPendiente(showPagar))}</span>
               </div>
             </div>
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monto a pagar</label>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Monto a pagar</label>
               <input
                 type="number"
                 step="0.01"
                 value={montoPago}
                 onChange={e => setMontoPago(e.target.value)}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 text-lg font-bold dark:bg-gray-700 dark:text-white"
+                className="prolimal-input text-lg font-bold"
                 placeholder="0.00"
               />
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowPagar(null)} className="flex-1 border dark:border-gray-600 rounded-xl py-3 font-medium dark:text-white">Cancelar</button>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row">
+              <button onClick={() => setShowPagar(null)} className="prolimal-btn-secondary sm:w-auto">Cancelar</button>
               <button
                 onClick={pagarDeuda}
                 disabled={!montoPago || parseFloat(montoPago) <= 0}
-                className="flex-1 bg-green-600 text-white rounded-xl py-3 font-medium hover:bg-green-700 disabled:opacity-50">
+                className="prolimal-btn-primary flex-1">
                 Registrar pago
               </button>
             </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-4 text-center">
+            <p className="mt-4 text-center text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
               Al pagar se generará un comprobante descargable en PDF
             </p>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

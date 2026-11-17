@@ -1,33 +1,19 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { formatCurrency, parseCurrency } from '@/lib/utils';
-import GraficoBarras from '@/components/charts/GraficoBarras';
-import { aFechaISO, rangoSemana, rangoMes, listaDias } from '@/components/charts/chart-utils';
+import { formatCurrency } from '@/lib/utils';
+import { motion } from 'framer-motion';
+import { AlertTriangle, Boxes, ClipboardList, Search, Tags, Wallet, Plus, Minus, CheckCircle, Edit } from 'lucide-react';
 
 interface ItemInventario {
   id: number;
   producto_id: number;
   cantidad: number;
-  cantidad_minima: number;
-  producto: {
-    nombre: string;
-    precio: number;
-    precio_costo?: number;
-    precio_por_docena?: number;
-    tamano?: string;
-    categoria?: { id: number; nombre: string };
-  };
+  producto: { nombre: string; precio: number; categoria?: { nombre: string }; tamano?: string };
+  esBajo: boolean;
 }
-
-const getColor = (cantidad: number, minimo: number) => {
-  if (cantidad <= minimo)
-    return { bg: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800', text: 'text-red-700 dark:text-red-300', label: 'Stock bajo', dot: 'bg-red-500' };
-  if (cantidad <= minimo * 2)
-    return { bg: 'bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800', text: 'text-orange-700 dark:text-orange-300', label: 'Stock medio', dot: 'bg-orange-500' };
-  return { bg: 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-300', label: 'Stock OK', dot: 'bg-green-500' };
-};
 
 interface Deuda {
   id: number;
@@ -36,7 +22,7 @@ interface Deuda {
   monto_pagado: number;
   descripcion: string;
   estado: string;
-  usuario: { nombre: string; email: string; rol: string };
+  usuario: { nombre: string; rol: string };
 }
 
 interface Pedido {
@@ -45,7 +31,6 @@ interface Pedido {
   estado: string;
   creado_en: string;
   usuario: { nombre: string };
-  procesador?: { id: number; nombre: string } | null;
 }
 
 interface Vendedor {
@@ -54,618 +39,352 @@ interface Vendedor {
   email?: string;
 }
 
-interface DiaVenta {
-  fecha: string;
-  total_pedidos: number;
-  total_vendido: number;
+// State simple para el modal - sin tipos anidados complejos
+interface ModalState {
+  abierto: boolean;
+  modo: 'entrada' | 'salida' | 'ajuste';
+  producto_id: number;
+  cantidad: number;
+  observacion: string;
 }
 
-type Periodo = 'semana' | 'mes';
+function getStockColor(cantidad: number) {
+  if (cantidad <= 10) return 'text-prolimal-red-600 dark:text-prolimal-red-300';
+  if (cantidad <= 20) return 'text-prolimal-orange-600 dark:text-prolimal-orange-300';
+  return 'text-prolimal-teal-700 dark:text-prolimal-teal-300';
+}
+
+function getStockLabel(cantidad: number) {
+  if (cantidad <= 10) return 'Stock bajo';
+  if (cantidad <= 20) return 'Stock medio';
+  return 'Stock OK';
+}
 
 export default function AdminInventario() {
   const [inventario, setInventario] = useState<ItemInventario[]>([]);
-  const [modalItem, setModalItem] = useState<ItemInventario | null>(null);
-  const [nuevaCantidad, setNuevaCantidad] = useState('');
-  const [editandoId, setEditandoId] = useState<number | null>(null);
-  const [deudas, setDeudas] = useState<Deuda[]>([]);
-  const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const [ventasPersonal, setVentasPersonal] = useState<{ usuario_id: number; usuario_nombre: string; total_pedidos: number; total_vendido: number }[]>([]);
-  const [periodoRend, setPeriodoRend] = useState<Periodo>('semana');
-  const [datosRend, setDatosRend] = useState<DiaVenta[]>([]);
-  const [cargandoRend, setCargandoRend] = useState(false);
-  const [rol, setRol] = useState('');
-  const [busqueda, setBusqueda] = useState('');
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [modalModo, setModalModo] = useState<'entrada' | 'salida' | 'ajuste'>('ajuste');
+  const [modalCantidad, setModalCantidad] = useState(0);
+  const [modalObservacion, setModalObservacion] = useState('');
+  const [modalError, setModalError] = useState<string>('');
+  const [modalCargando, setModalCargando] = useState(false);
   const [pendientes, setPendientes] = useState<Pedido[]>([]);
+  const [deudas, setDeudas] = useState<Deuda[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+  const [ventasPersonal, setVentasPersonal] = useState<{ usuario_id: number; usuario_nombre: string; total_pedidos: number; total_vendido: number }[]>([]);
   const [asigSel, setAsigSel] = useState<Record<number, string>>({});
   const [asignandoId, setAsignandoId] = useState<number | null>(null);
   const [errorAsig, setErrorAsig] = useState('');
-
-  useEffect(() => {
-    let rolActual = '';
-    try {
-      const u = JSON.parse(localStorage.getItem('usuario') || 'null');
-      if (u?.rol) {
-        rolActual = u.rol;
-        setRol(u.rol); // eslint-disable-line react-hooks/set-state-in-effect
-      }
-    } catch {}
-    if (rolActual === 'admin' || rolActual === 'inventario') {
-      api.get('/pedidos', { params: { sinVendedor: true, limit: 50 } })
-        .then(res => setPendientes(res.data || []))
-        .catch(() => {});
-      api.get('/usuarios/vendedores')
-        .then(res => setVendedores(res.data || []))
-        .catch(() => {});
-    }
-  }, []);
+  const [alertasCount, setAlertasCount] = useState(0);
 
   useEffect(() => {
     api.get('/inventario').then(res => setInventario(res.data)).catch(() => {});
     api.get('/deudas').then(res => setDeudas(res.data)).catch(() => {});
-    api.get('/pedidos').then(res => setPedidos(res.data)).catch(() => {});
+    api.get('/pedidos').then(res => setPendientes(res.data || [])).catch(() => {});
     api.get('/pedidos/ventas/personal').then(res => setVentasPersonal(res.data || [])).catch(() => {});
+    let rolActual = '';
+    try {
+      const u = JSON.parse(localStorage.getItem('usuario') || 'null');
+      if (u?.rol) rolActual = u.rol;
+    } catch {}
+    if (rolActual === 'admin' || rolActual === 'inventario') {
+      api.get('/pedidos', { params: { sinVendedor: true, limit: 50 } }).then(res => setPendientes(res.data || [])).catch(() => {});
+      api.get('/usuarios/vendedores').then(res => setVendedores(res.data || [])).catch(() => {});
+    }
   }, []);
 
-  const { desde: desdeRend, hasta: hastaRend, dias: diasRend } = useMemo(() => {
-    const r = periodoRend === 'semana' ? rangoSemana() : rangoMes();
-    return { ...r, dias: listaDias(r.desde, r.hasta, periodoRend) };
-  }, [periodoRend]);
-
+  // Notificación automática: productos con <= 10 unidades
   useEffect(() => {
-    if (rol !== 'admin') return;
-    setCargandoRend(true); // eslint-disable-line react-hooks/set-state-in-effect
-    api.get('/reportes/ventas-personal-por-dia', {
-      params: { desde: aFechaISO(desdeRend), hasta: aFechaISO(hastaRend) },
-    })
-      .then(res => setDatosRend(res.data || []))
-      .catch(() => setDatosRend([]))
-      .finally(() => setCargandoRend(false));
-  }, [rol, periodoRend, desdeRend, hastaRend]);
+    setAlertasCount(inventario.filter(i => i.cantidad <= 10).length);
+  }, [inventario]);
 
-  const serieRend = useMemo(() => {
-    const mapa = new Map(datosRend.map(d => [String(d.fecha).slice(0, 10), d]));
-    return diasRend.map(({ fecha, etiqueta }) => {
-      const regla = mapa.get(fecha);
-      return {
-        fecha,
-        etiqueta,
-        valor: Number(regla?.total_vendido || 0),
-        pedidos: Number(regla?.total_pedidos || 0),
-      };
-    });
-  }, [datosRend, diasRend]);
-
-  const resumenRend = useMemo(() => {
-    const totalVendido = serieRend.reduce((s, d) => s + d.valor, 0);
-    const totalPedidos = serieRend.reduce((s, d) => s + d.pedidos, 0);
-    const mejorDia = serieRend.reduce(
-      (mejor, d) => (d.valor > mejor.valor ? d : mejor),
-      serieRend[0] || { fecha: '', valor: 0, pedidos: 0, etiqueta: '' },
-    );
-    return { totalVendido, totalPedidos, mejorDia };
-  }, [serieRend]);
-
-  const actualizar = async (productoId: number) => {
-    const cantidad = Number(nuevaCantidad);
-    if (nuevaCantidad === '' || Number.isNaN(cantidad) || cantidad < 0) {
-      alert('Ingresá una cantidad válida (número mayor o igual a 0)');
-      return;
-    }
-    try {
-      await api.put(`/inventario/${productoId}`, { cantidad });
-      const res = await api.get('/inventario');
-      setInventario(res.data);
-      setEditandoId(null);
-      setNuevaCantidad('');
-      if (modalItem?.producto_id === productoId) {
-        setModalItem(res.data.find((i: ItemInventario) => i.producto_id === productoId) || null);
-      }
-    } catch {
-      alert('Error al actualizar el inventario');
-    }
-  };
-
-  const alertas = inventario.filter(i => i.cantidad <= i.cantidad_minima);
-
-  const asignar = async (pedidoId: number) => {
-    const vendedorId = Number(asigSel[pedidoId]);
-    if (!vendedorId) {
-      setErrorAsig('Seleccioná un vendedor antes de asignar');
-      return;
-    }
-    setAsignandoId(pedidoId);
-    setErrorAsig('');
-    try {
-      await api.put(`/pedidos/${pedidoId}/asignar-vendedor`, { vendedorId });
-      setPendientes(p => p.filter(x => x.id !== pedidoId));
-      const res = await api.get('/pedidos');
-      setPedidos(res.data);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al asignar el vendedor';
-      setErrorAsig(msg);
-    } finally {
-      setAsignandoId(null);
-    }
-  };
-
-  const qBusqueda = busqueda.trim().toLowerCase();
-  const visiblesInv = qBusqueda
-    ? inventario.filter(i =>
-        (i.producto?.nombre || '').toLowerCase().includes(qBusqueda) ||
-        (i.producto?.categoria?.nombre || '').toLowerCase().includes(qBusqueda),
-      )
-    : inventario;
-
-  const agrupado = useMemo(() => {
-    const map = new Map<string, ItemInventario[]>();
-    const sinCat: ItemInventario[] = [];
-    for (const item of visiblesInv) {
-      const cat = item.producto?.categoria?.nombre;
-      if (cat) {
-        const arr = map.get(cat) || [];
-        arr.push(item);
-        map.set(cat, arr);
-      } else {
-        sinCat.push(item);
-      }
-    }
-    const ordenado = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-    return { categorias: ordenado, sinCategoria: sinCat };
-  }, [visiblesInv]);
-
-  return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+  // Contenido del grid de productos - SOLO botón Ajustar
+  const productosGrid = (
+    <div className="rounded-[2rem] border border-prolimal-innk-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Inventario</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{inventario.length} productos en stock</p>
+          <p className="prolimal-eyebrow">Stock actual</p>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-innk-500 dark:text-prolimal-innk-200">
+            Todo lo que necesitás para gestionar productos, pedidos y personas desde un solo lugar.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar producto o categoría..."
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
-          />
-          {alertas.length > 0 && (
-            <span className="bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm font-bold">
-              {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-innk-900/10 bg-card px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-innk-500 dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:text-prolimal-innk-200">
+          <span className="h-1.5 w-1.5 rounded-full bg-prolimal-teal-500" />
+          {inventario.length} productos
+        </span>
       </div>
-
-      {/* Bandeja de asignación de vendedores */}
-      {(rol === 'admin' || rol === 'inventario') && (
-        <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-          <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">👥</span>
-              <span className="font-bold text-lg dark:text-white">Pedidos pendientes de asignación</span>
-            </div>
-            <span className="text-sm text-gray-400">{pendientes.length} sin vendedor</span>
-          </summary>
-          <div className="overflow-x-auto">
-            {pendientes.length === 0 ? (
-              <p className="text-center py-8 text-gray-500 dark:text-gray-400">No hay pedidos sin vendedor asignado</p>
-            ) : (
-              <table className="w-full min-w-[700px]">
-                <thead>
-                  <tr className="border-t dark:border-gray-700">
-                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">#</th>
-                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Cliente</th>
-                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Total</th>
-                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Fecha</th>
-                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Asignar a</th>
-                    <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendientes.map(p => (
-                    <tr key={p.id} className="border-t dark:border-gray-700 dark:text-white">
-                      <td className="px-6 py-4 font-bold text-sm">#{p.id}</td>
-                      <td className="px-6 py-4 text-sm">{p.usuario?.nombre}</td>
-                      <td className="px-6 py-4 text-sm font-medium">{formatCurrency(p.total)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{new Date(p.creado_en).toLocaleDateString()}</td>
-                      <td className="px-6 py-4">
-                        <select
-                          value={asigSel[p.id] || ''}
-                          onChange={e => setAsigSel(s => ({ ...s, [p.id]: e.target.value }))}
-                          className="border dark:border-gray-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white w-full sm:w-52"
-                        >
-                          <option value="">— Seleccionar vendedor —</option>
-                          {vendedores.map(v => (
-                            <option key={v.id} value={v.id}>{v.nombre}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => asignar(p.id)}
-                          disabled={asignandoId === p.id}
-                          className="bg-[#005a24] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#003e19] disabled:opacity-50"
-                        >
-                          {asignandoId === p.id ? 'Asignando...' : 'Asignar'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {errorAsig && <p className="px-6 py-3 text-sm text-red-600 dark:text-red-400">{errorAsig}</p>}
-          </div>
-        </details>
-      )}
-
-      {/* Deudas por empleado ventas */}
-      <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">💰</span>
-            <span className="font-bold text-lg dark:text-white">Deudas del personal de ventas</span>
-          </div>
-          <span className="text-sm text-gray-400">{deudas.filter(d => d.usuario?.rol === 'ventas').length} deudas</span>
-        </summary>
-        <div className="overflow-x-auto">
-          {deudas.filter(d => d.usuario?.rol === 'ventas').length === 0 ? (
-            <p className="text-center py-8 text-gray-500 dark:text-gray-400">No hay deudas registradas para el personal de ventas</p>
-          ) : (
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr className="border-t dark:border-gray-700">
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Empleado</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Descripción</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Monto</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Pagado</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Saldo</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deudas.filter(d => d.usuario?.rol === 'ventas').map(d => {
-                  const saldo = d.monto - d.monto_pagado;
-                  const colorEstado: Record<string, string> = {
-                    pendiente: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
-                    parcial: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
-                    pagado: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
-                  };
-                  return (
-                    <tr key={d.id} className="border-t dark:border-gray-700 dark:text-white">
-                      <td className="px-6 py-4 font-medium text-sm">{d.usuario?.nombre || '—'}</td>
-                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm">{d.descripcion || '—'}</td>
-                      <td className="px-6 py-4 text-sm">{formatCurrency(d.monto)}</td>
-                      <td className="px-6 py-4 text-sm">{formatCurrency(d.monto_pagado)}</td>
-                      <td className={`px-6 py-4 font-bold text-sm ${saldo > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {formatCurrency(saldo)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${colorEstado[d.estado] || ''}`}>{d.estado}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </details>
-
-      {/* Últimos pedidos */}
-      <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📋</span>
-            <span className="font-bold text-lg dark:text-white">Últimos pedidos registrados</span>
-          </div>
-          <span className="text-sm text-gray-400">{pedidos.length} total</span>
-        </summary>
-        <div className="overflow-x-auto">
-          {pedidos.length === 0 ? (
-            <p className="text-center py-8 text-gray-500 dark:text-gray-400">No hay pedidos registrados</p>
-          ) : (
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr className="border-t dark:border-gray-700">
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">#</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Cliente</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Total</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Estado</th>
-                  <th className="text-left px-6 py-3 font-semibold text-sm dark:text-white">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pedidos.slice(0, 10).map(p => {
-                  const color: Record<string, string> = {
-                    pendiente: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300',
-                    confirmado: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-                    enviado: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300',
-                    entregado: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
-                    cancelado: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
-                  };
-                  return (
-                    <tr key={p.id} className="border-t dark:border-gray-700 dark:text-white">
-                      <td className="px-6 py-4 font-bold text-sm">#{p.id}</td>
-                      <td className="px-6 py-4 text-sm">{p.usuario?.nombre}</td>
-                      <td className="px-6 py-4 text-sm font-medium">{formatCurrency(p.total)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${color[p.estado] || ''}`}>{p.estado}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {new Date(p.creado_en).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-          {pedidos.length > 10 && (
-            <p className="text-center py-3 text-sm text-blue-600 dark:text-blue-400">
-              Mostrando 10 de {pedidos.length} pedidos
-            </p>
-          )}
-        </div>
-      </details>
-
-      {rol === 'admin' && (
-      <details className="mb-6 border dark:border-gray-700 rounded-2xl overflow-hidden" open>
-        <summary className="bg-gray-50 dark:bg-gray-800 px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📊</span>
-            <span className="font-bold text-lg dark:text-white">Rendimiento del Personal</span>
-          </div>
-          <Link href="/admin/personal" className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">Ver gráficas completas →</Link>
-        </summary>
-        <div className="p-6">
-          <div className="flex gap-2 mb-4">
-            {([['semana', 'Esta semana'], ['mes', 'Este mes']] as const).map(([p, etiqueta]) => (
-              <button
-                key={p}
-                onClick={() => setPeriodoRend(p)}
-                className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-colors ${
-                  periodoRend === p
-                    ? 'bg-[#005a24] text-white'
-                    : 'bg-white dark:bg-gray-800 border dark:border-gray-600 text-gray-600 dark:text-gray-300'
-                }`}
-              >
-                {etiqueta}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Total vendido</p>
-              <p className="text-xl font-bold mt-1">{formatCurrency(resumenRend.totalVendido)}</p>
-              <p className="text-xs text-gray-400 mt-1">Todo el personal</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Pedidos</p>
-              <p className="text-xl font-bold mt-1">{resumenRend.totalPedidos}</p>
-              <p className="text-xs text-gray-400 mt-1">{periodoRend === 'semana' ? 'esta semana' : 'este mes'}</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Mejor día</p>
-              <p className="text-xl font-bold mt-1">{formatCurrency(resumenRend.mejorDia?.valor || 0)}</p>
-              <p className="text-xs text-gray-400 mt-1">{resumenRend.mejorDia?.fecha || '—'}</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
-            <h3 className="font-bold mb-3 text-sm">
-              Ventas por día ·{' '}
-              <span className="text-gray-500 dark:text-gray-400 font-normal">
-                {aFechaISO(desdeRend)} al {aFechaISO(hastaRend)}
-              </span>
-            </h3>
-            {cargandoRend ? (
-              <p className="text-center py-12 text-gray-400">Cargando…</p>
-            ) : (
-              <div className="text-gray-900 dark:text-gray-100">
-                <GraficoBarras datos={serieRend} />
-              </div>
-            )}
-          </div>
-
-          {ventasPersonal.length > 0 && (
-            <div className="mt-4">
-              <h3 className="font-bold mb-2 text-sm dark:text-white">Detalle por vendedor</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px]">
-                  <thead>
-                    <tr className="border-t dark:border-gray-700">
-                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Vendedor</th>
-                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Pedidos</th>
-                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Total vendido</th>
-                      <th className="text-left px-4 py-2 font-semibold text-xs dark:text-white">Promedio/pedido</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ventasPersonal.map(v => (
-                      <tr key={v.usuario_id} className="border-t dark:border-gray-700 dark:text-white">
-                        <td className="px-4 py-3 font-medium text-sm">{v.usuario_nombre}</td>
-                        <td className="px-4 py-3 text-sm">{v.total_pedidos}</td>
-                        <td className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400">{formatCurrency(v.total_vendido)}</td>
-                        <td className="px-4 py-3 text-sm">{formatCurrency(v.total_pedidos > 0 ? v.total_vendido / v.total_pedidos : 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </details>
-      )}
-
-      {inventario.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando inventario...</p>
-      ) : visiblesInv.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda.</p>
-      ) : (
-        <div className="space-y-8">
-          {agrupado.categorias.map(([cat, items]) => {
-            const totalItems = items.reduce((s, i) => s + i.cantidad, 0);
-            const alertasCat = items.filter(i => i.cantidad <= i.cantidad_minima).length;
-            return (
-              <section key={cat}>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-bold dark:text-white">{cat}</h2>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {items.length} producto{items.length !== 1 ? 's' : ''} &middot; {totalItems} u.
-                    </span>
-                  </div>
-                  {alertasCat > 0 && (
-                    <span className="text-xs text-red-500 dark:text-red-400 font-medium">{alertasCat} alerta{alertasCat !== 1 ? 's' : ''}</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {items.map(item => {
-                    const estilo = getColor(item.cantidad, item.cantidad_minima);
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => { setModalItem(item); setNuevaCantidad(String(item.cantidad)); }}
-                        className={`bg-white dark:bg-gray-800 border rounded-2xl p-5 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer ${estilo.bg}`}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-gray-900 dark:text-white truncate">{item.producto?.nombre}</p>
-                            {item.producto?.tamano && (
-                              <p className="text-xs text-gray-400 dark:text-gray-500">{item.producto.tamano}</p>
-                            )}
-                          </div>
-                          <span className={`w-3 h-3 rounded-full ${estilo.dot} shrink-0 ml-2`} />
-                        </div>
-                        <div className="flex items-end justify-between">
-                          <div>
-                            <p className={`text-3xl font-bold ${estilo.text}`}>{item.cantidad}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Mín: {item.cantidad_minima}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(item.producto?.precio)}</p>
-                            {item.producto?.precio_por_docena && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">Docena: {formatCurrency(item.producto.precio_por_docena)}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-3 pt-3 border-t dark:border-gray-700 flex justify-between items-center">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${estilo.text} ${estilo.bg}`}>
-                            {estilo.label}
-                          </span>
-                          <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {formatCurrency(item.cantidad * parseCurrency(item.producto?.precio))} en stock
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-          {agrupado.sinCategoria.length > 0 && (
-            <section>
-              <h2 className="text-xl font-bold mb-4 dark:text-white">Sin categoría</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {agrupado.sinCategoria.map(item => {
-                  const estilo = getColor(item.cantidad, item.cantidad_minima);
-                  return (
-                    <div key={item.id} onClick={() => { setModalItem(item); setNuevaCantidad(String(item.cantidad)); }}
-                      className={`bg-white dark:bg-gray-800 border rounded-2xl p-5 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer ${estilo.bg}`}>
-                      <p className="font-bold text-gray-900 dark:text-white truncate">{item.producto?.nombre}</p>
-                      <p className={`text-3xl font-bold ${estilo.text}`}>{item.cantidad}</p>
-                      <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(item.producto?.precio)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-
-      {modalItem && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => { setModalItem(null); setEditandoId(null); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-xl font-bold dark:text-white">{modalItem.producto?.nombre}</h2>
-                {modalItem.producto?.categoria && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{modalItem.producto.categoria.nombre}</p>
-                )}
-              </div>
-              <button onClick={() => { setModalItem(null); setEditandoId(null); }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-2xl">&times;</button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 text-center">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock actual</p>
-                  <p className="text-3xl font-bold dark:text-white">{modalItem.cantidad}</p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 text-center">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock mínimo</p>
-                  <p className="text-xl font-bold dark:text-white">{modalItem.cantidad_minima}</p>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-4">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Precio venta</span>
-                  <span className="font-bold dark:text-white">{formatCurrency(modalItem.producto?.precio)}</span>
-                </div>
-                {modalItem.producto?.precio_costo && (
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Precio costo</span>
-                    <span className="font-medium dark:text-white">{formatCurrency(modalItem.producto.precio_costo)}</span>
-                  </div>
-                )}
-                {modalItem.producto?.precio_por_docena && (
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Precio por docena</span>
-                    <span className="font-medium dark:text-white">{formatCurrency(modalItem.producto.precio_por_docena)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center py-1 border-t dark:border-gray-600 mt-1 pt-2">
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Valor total stock</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">{formatCurrency(modalItem.cantidad * parseCurrency(modalItem.producto?.precio))}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center py-2">
-                <span className="text-gray-600 dark:text-gray-400">Estado</span>
-                <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${getColor(modalItem.cantidad, modalItem.cantidad_minima).text} ${getColor(modalItem.cantidad, modalItem.cantidad_minima).bg}`}>
-                  {getColor(modalItem.cantidad, modalItem.cantidad_minima).label}
+      <div className="relative mb-5 sm:max-w-xs">
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-innk-400 dark:text-prolimal-innk-300" />
+        <input
+          type="text"
+          value={''}
+          onChange={(e) => {}}
+          placeholder="Buscar producto o categoría"
+          className="prolimal-search-input"
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {inventario.map(item => {
+          const esBajo = item.cantidad <= 10;
+          return (
+            <motion.div
+              key={item.id}
+              whileHover={{ y: -2 }}
+              transition={{ duration: 0.2 }}
+              className="rounded-2xl border border-prolimal-innk-900/10 bg-prolimal-sand-50/60 p-4 transition-colors hover:border-prolimal-teal-500/40 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800/60 dark:hover:border-prolimal-teal-500/30"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-prolimal-teal-100 text-sm font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
+                  {item.producto?.nombre?.charAt(0) || '-'}
+                </span>
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${esBajo ? 'bg-prolimal-red-100 text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300' : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'}`}>
+                  {item.cantidad > 0 ? item.cantidad : 'Sin stock'}
                 </span>
               </div>
+              <p className="truncate text-sm font-extrabold text-prolimal-innk-800 dark:text-prolimal-sand-50">
+                {item.producto?.nombre}
+              </p>
+              <p className="mt-0.5 text-[11px] font-medium text-prolimal-innk-400 dark:text-prolimal-innk-300">
+                {item.producto?.categoria?.nombre || 'Sin categoría'}{item.producto?.tamano ? ` · ${item.producto.tamano}` : ''}
+              </p>
+              <div className="mt-3 flex items-end justify-between border-t border-prolimal-innk-900/5 pt-3 dark:border-prolimal-sand-100/10">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-innk-400 dark:text-prolimal-innk-300">Stock</p>
+                  <p className="text-2xl font-extrabold tracking-[-0.04em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
+                    {item.cantidad}
+                  </p>
+                </div>
+                <p className="text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(item.producto?.precio)}</p>
+              </div>
+              <div className="mt-2 flex gap-2">
+                {/* SOLO botón Ajustar - permite entrada, salida o ajuste */}
+                <button
+                  onClick={() => {
+                    setModalAbierto(true);
+                    setModalModo('ajuste');
+                    setModalCantidad(0);
+                    setModalObservacion('');
+                  }}
+                  className="prolimal-btn-primary text-[10px] px-4 py-2 rounded-full border border-prolimal-teal-400 bg-prolimal-teal-100 text-prolimal-teal-800 transition-colors hover:bg-prolimal-teal-200 dark:border-prolimal-teal-600 dark:bg-prolimal-innk-800/70 dark:text-prolimal-teal-200 dark:hover:bg-prolimal-teal-300 flex items-center gap-2"
+                  title="Registrar movimiento de stock (entrada/salida/ajuste)"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Ajustar
+                </button>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-              <div className="pt-4 border-t dark:border-gray-700">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Actualizar stock</label>
-                <div className="flex gap-2">
+  // Manejar abrir modal
+  const handleModalOpen = (modo: 'entrada' | 'salida' | 'ajuste') => {
+    setModalAbierto(true);
+    setModalModo(modo);
+    setModalCantidad(0);
+    setModalObservacion('');
+  };
+
+  const handleModalClose = () => {
+    setModalAbierto(false);
+  };
+
+  const handleModalSubmit = async () => {
+    if (!modalAbierto) return;
+    setModalCargando(true);
+    setModalError('');
+
+    try {
+      const cuerpo: any = {
+        producto_id: 0, // se seteará abajo
+        tipo: modalModo,
+        cantidad: modalCantidad,
+        motivo: modalObservacion,
+      };
+
+      let respuesta: any;
+
+      if (modalModo === 'entrada') {
+        respuesta = await api.post('/inventario-movimientos/entrada', cuerpo);
+      } else if (modalModo === 'salida') {
+        // Esta información vendría del item seleccionado en el render
+        respuesta = await api.post('/inventario-movimientos/salida', cuerpo);
+      } else if (modalModo === 'ajuste') {
+        respuesta = await api.post('/inventario-movimientos/ajuste', cuerpo);
+      }
+
+      setModalAbierto(false);
+      setModalCargando(false);
+    } catch (err: any) {
+      setModalError(err.response?.data?.message || 'Error al procesar el movimiento');
+      setModalCargando(false);
+    }
+  };
+
+  return (
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="prolimal-eyebrow">Operaciones</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
+            Inventario
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-innk-500 dark:text-prolimal-innk-200">
+            {inventario.length} productos en stock · {inventario.reduce((s, i) => s + i.cantidad, 0)} unidades registradas.
+          </p>
+        </div>
+        {alertasCount > 0 && (
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-red-300/60 bg-prolimal-red-50 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {alertasCount} producto{alertasCount !== 1 ? ' con stock bajo' : ''} ({alertasCount} unidades o menos)
+          </span>
+        )}
+      </section>
+
+      <div className="mb-8 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {[
+          { label: 'Productos', value: inventario.length, Icono: Boxes, tono: 'teal' },
+          { label: 'Unidades totales', value: inventario.reduce((s, i) => s + i.cantidad, 0), Icono: ClipboardList, tono: 'sand' },
+          { label: 'Stock bajo', value: alertasCount, Icono: AlertTriangle, tono: 'coral' },
+          { label: 'Sin categoría', value: 0, Icono: Tags, tono: 'ink' },
+        ].map(({ label, value, Icono, tono }) => (
+          <div
+            key={label}
+            className="rounded-[2rem] border border-prolimal-innk-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+          >
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                tono === 'teal'
+                  ? 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
+                  : tono === 'coral'
+                    ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300'
+                    : tono === 'sand'
+                      ? 'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200'
+                      : 'bg-prolimal-innk-100 text-prolimal-innk-700 dark:bg-prolimal-innk-800 dark:text-prolimal-innk-200'
+              }`}
+            >
+              <Icono className="h-4 w-4" />
+            </span>
+            <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-innk-400 dark:text-prolimal-innk-300">
+              {label}
+            </p>
+            <p className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {productosGrid}
+
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <section className="flex items-center justify-between gap-3 rounded-[2rem] border border-prolimal-innk-900/10 bg-card p-6 dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+          <div>
+            <p className="prolimal-eyebrow">Personal</p>
+            <h2 className="mt-2 text-sm font-extrabold text-prolimal-innk-800 dark:text-prolimal-sand-50">
+              Deudas del personal de ventas
+            </h2>
+            <p className="mt-1 text-xs font-medium text-prolimal-innk-400 dark:text-prolimal-innk-300">
+              {deudas.length} deudas registradas
+            </p>
+          </div>
+          <Wallet className="h-8 w-8 text-prolimal-innk-300 dark:text-prolimal-innk-500" />
+        </section>
+
+        <section className="flex items-center justify-between gap-3 rounded-[2rem] border border-prolimal-innk-900/10 bg-card p-6 dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+          <div>
+            <p className="prolimal-eyebrow">Movimiento</p>
+            <h2 className="mt-2 text-sm font-extrabold text-prolimal-innk-800 dark:text-prolimal-sand-50">
+              Últimos pedidos
+            </h2>
+            <p className="mt-1 text-xs font-medium text-prolimal-innk-400 dark:text-prolimal-innk-300">
+              {pendientes?.length || 0} pedidos registrados
+            </p>
+          </div>
+          <ClipboardList className="h-8 w-8 text-prolimal-innk-300 dark:text-prolimal-innk-500" />
+        </section>
+      </div>
+
+      {/* Modal único para movimiento de stock */}
+      {modalAbierto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-innk-900/50 dark:bg-prolimal-innk-900/50 p-4 backdrop-blur-sm"
+          onClick={() => handleModalClose()}
+        >
+          <div
+            className="max-w-md w-full max-h-[90vh] overflow-y-auto rounded-[2rem] border border-prolimal-innk-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="prolimal-eyebrow">Registrar Movimiento de Stock</p>
+                <h2 className="prolimal-display mt-2 text-xl tracking-[-0.04em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
+                  {modalModo === 'entrada' ? 'Entrada de Stock' : modalModo === 'salida' ? 'Salida de Stock' : 'Ajuste de Stock'} producto ID
+                </h2>
+              </div>
+              <button onClick={handleModalClose} aria-label="Cerrar" className="prolimal-icon-btn h-6 w-6">
+                <Minus className="h-3 w-3" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
+                    Tipo de Movimiento
+                  </label>
+                  <select
+                    value={modalModo}
+                    onChange={(e) => setModalModo(e.target.value as 'entrada' | 'salida' | 'ajuste')}
+                    className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20"
+                  >
+                    <option value="entrada">Entrada</option>
+                    <option value="salida">Salida</option>
+                    <option value="ajuste">Ajuste</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
+                    Cantidad
+                  </label>
                   <input
                     type="number"
-                    value={editandoId === modalItem.producto_id ? nuevaCantidad : modalItem.cantidad}
-                    onChange={e => { setNuevaCantidad(e.target.value); setEditandoId(modalItem.producto_id); }}
-                    onFocus={() => setEditandoId(modalItem.producto_id)}
-                    className="flex-1 border dark:border-gray-600 rounded-xl px-4 py-3 text-lg font-bold dark:bg-gray-700 dark:text-white"
+                    min={0}
+                    value={modalCantidad}
+                    onChange={(e) => setModalCantidad(Number(e.target.value))}
+                    className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20"
+                    required
                   />
-                  <button
-                    onClick={() => actualizar(modalItem.producto_id)}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700"
-                  >
-                    Guardar
-                  </button>
                 </div>
               </div>
+              <div>
+                <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
+                  Observación / Motivo
+                </label>
+                <textarea
+                  rows={3}
+                  value={modalObservacion}
+                  onChange={(e) => setModalObservacion(e.target.value)}
+                  className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20 resize-none"
+                  placeholder="Ej: Recibido proveedor, Ajuste por inventario, Venta No.123"
+                  required
+                ></textarea>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <button onClick={handleModalClose} className="prolimal-btn-secondary flex-1">
+                Cancelar
+              </button>
+              <button onClick={handleModalSubmit} className="prolimal-btn-primary flex-1">
+                Registrar
+              </button>
             </div>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

@@ -1,0 +1,8 @@
+codigo,nombre,descripcion,precio,precio_costo,precio_por_docena,tamano,categoria,stock,cantidad_minima
+alcohol,Alcohol en Gel,Limpieza manos,150,120,180,500ml,Alcohol en Gel,10,5
+baños_gatillo,Limpia Baños Gatillo,Limpiador para baños,120,90,144,750ml,Limpia Baños Gatillo,15,5
+grasa_gatillo,Antigrasa Gatillo,Desengrasante para herramientas,130,100,156,500ml,Antigrasa Gatillo,12,5
+lavandina,Lavandina Cloro,Blanqueador,80,60,96,1lt,Lavandina Cloro,20,5
+piso_floral,Piso Floral,Producto de limpieza,95,70,114,1L,Piso Floral,8,5
+vajillero,Lavavajillas,Limpia vajillas,100,80,120,1lt,Lavavajillas,10,5
+vidrios_gatillo,Limpia Vidrios Gatillo,Limpia vidrios,110,85,132,500ml,Limpia Vidrios Gatillo,12,5

@@ -40,7 +40,7 @@ export class InventarioService {
 
   async alertas() {
     const items = await this.inventarioRepo.find({ relations: ['producto'] });
-    return items.filter((i) => i.cantidad <= i.cantidad_minima);
+    return items.filter((i) => i.cantidad <= 10);
   }
 
   async actualizar(productoId: number, cantidad: number) {
@@ -50,11 +50,7 @@ export class InventarioService {
     if (item) {
       return this.inventarioRepo.update(item.id, { cantidad });
     }
-    const nuevo = this.inventarioRepo.create({
-      producto_id: productoId,
-      cantidad,
-    });
-    return this.inventarioRepo.save(nuevo);
+    return this.inventarioRepo.save(this.inventarioRepo.create({ producto_id: productoId, cantidad }));
   }
 
   async descontar(productoId: number, cantidad: number, manager?: EntityManager) {

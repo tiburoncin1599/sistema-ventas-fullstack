@@ -6,8 +6,8 @@ const { Client } = require('pg');
 
 const REGLAS = [
   [/alcohol/, 'Alcohol en Gel'],
-  [/[bñ]?a.{0,2}os.*gatillo|ba.*gatillo/, 'Limpia Baños Gatillo'],
-  [/[bñ]?a.{0,2}os.*recarga|ba.*recarga/, 'Limpia Baños Recarga'],
+  [/[bñ]?a.{0,2}os.*gatillo|ba.*gatillo/, 'Limpia Banos Gatillo'],
+  [/[bñ]?a.{0,2}os.*recarga|ba.*recarga/, 'Limpia Banos Recarga'],
   [/grasa.*gatillo/, 'Antigrasa Gatillo'],
   [/grasa.*recarga/, 'Antigrasa Recarga'],
   [/lavandina/, 'Lavandina Cloro'],

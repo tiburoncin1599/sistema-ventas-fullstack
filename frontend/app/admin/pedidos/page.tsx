@@ -1,7 +1,10 @@
 'use client';
+
 import { useEffect, useState } from 'react';
-import { api, apiFetchBlob, API_URL } from '@/lib/api';
+import { api, API_URL, apiFetchBlob } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import { QrCode, Search, Trash2, X } from 'lucide-react';
 
 interface Pedido {
   id: number;
@@ -22,13 +25,13 @@ interface Detalle {
 
 const getColorEstado = (estado: string) => {
   const colores: Record<string, string> = {
-    pendiente: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300',
-    confirmado: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-    enviado: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300',
-    entregado: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
-    cancelado: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
+    pendiente: 'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200',
+    confirmado: 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300',
+    enviado: 'bg-prolimal-purple-100 text-prolimal-purple-700 dark:bg-prolimal-purple-900/30 dark:text-prolimal-purple-300',
+    entregado: 'bg-prolimal-green-100 text-prolimal-green-700 dark:bg-prolimal-green-900/30 dark:text-prolimal-green-300',
+    cancelado: 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300',
   };
-  return colores[estado] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+  return colores[estado] || 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200';
 };
 
 const ESTADOS = ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado'];
@@ -40,6 +43,13 @@ const TRANSICIONES: Record<string, string[]> = {
   entregado: [],
   cancelado: [],
 };
+
+function EstadoBadge({ estado, className }: { estado: string; className?: string }) {
+  const bgClass = getColorEstado(estado);
+  return (
+    <span className={`${bgClass} ${className ?? ''} shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em]`}>{estado}</span>
+  );
+}
 
 export default function AdminPedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -98,186 +108,250 @@ export default function AdminPedidos() {
   };
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <h1 className="text-3xl font-bold dark:text-white">Pedidos</h1>
-        <div className="flex flex-wrap items-center gap-3">
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="prolimal-eyebrow">Operaciones</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Pedidos
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            {visibles.length} de {pedidos.length} pedidos registrados.
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <select
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value)}
-            className="border dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-sm dark:text-white"
+            className="prolimal-input sm:w-48"
           >
             <option value="">Todos los estados</option>
             {ESTADOS.map(e => (
-              <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+              <option key={e} value={e}>
+                {e.charAt(0).toUpperCase() + e.slice(1)}
+              </option>
             ))}
           </select>
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar #ID, cliente o email..."
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
-          />
-          <span className="text-sm text-gray-500 dark:text-gray-400 self-center">
-            {visibles.length} de {pedidos.length} pedidos
-          </span>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar #ID, cliente o email"
+              className="prolimal-search-input"
+            />
+          </div>
         </div>
-      </div>
+      </section>
 
       {pedidos.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">No hay pedidos todavía</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          No hay pedidos todavía
+        </div>
       ) : visibles.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">Sin resultados para tu búsqueda o filtro.</p>
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Sin resultados para tu búsqueda o filtro.
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visibles.map(pedido => (
-            <div
+            <motion.div
               key={pedido.id}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.2 }}
               onClick={() => abrirDetalle(pedido.id)}
-              className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer"
+              className="group cursor-pointer overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-50px_rgba(11,37,32,0.4)] transition-all hover:border-prolimal-teal-500/40 hover:shadow-[0_30px_70px_-45px_rgba(11,37,32,0.5)] dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:hover:border-prolimal-teal-500/30"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-bold text-lg dark:text-white">#{pedido.id}</p>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mt-0.5">{pedido.usuario?.nombre}</p>
+              <div className="flex items-start justify-between gap-3 border-b border-prolimal-ink-900/5 px-5 py-4 dark:border-prolimal-sand-100/10">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Pedido</p>
+                  <p className="text-lg font-extrabold tracking-[-0.03em] text-prolimal-ink-900 dark:text-prolimal-sand-50">#{pedido.id}</p>
+                  <p className="mt-0.5 truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    {pedido.usuario?.nombre}
+                  </p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getColorEstado(pedido.estado)}`}>
-                  {pedido.estado}
-                </span>
+                <EstadoBadge estado={pedido.estado} />
               </div>
-              <div className="flex items-end justify-between">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {new Date(pedido.creado_en).toLocaleDateString()}
+              <div className="px-5 py-4">
+                <div className="flex items-end justify-between gap-3">
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    {new Date(pedido.creado_en).toLocaleDateString()}
+                  </p>
+                  <p className="text-xl font-extrabold tracking-[-0.04em] text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                    {formatCurrency(pedido.total)}
+                  </p>
                 </div>
-                <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatCurrency(pedido.total)}
-                </p>
+                <div className="mt-4 flex gap-2 border-t border-prolimal-ink-900/5 pt-4 dark:border-prolimal-sand-100/10" onClick={e => e.stopPropagation()}>
+                  <select
+                    value={pedido.estado}
+                    onChange={e => cambiarEstado(pedido.id, e.target.value)}
+                    className="flex-1 rounded-xl border border-prolimal-ink-900/10 bg-white px-2 py-2 text-xs font-semibold text-prolimal-ink-700 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100"
+                  >
+                    <option value="pendiente">Pendiente</option>
+                    <option value="confirmado">Confirmado</option>
+                    <option value="enviado">Enviado</option>
+                    <option value="entregado">Entregado</option>
+                    <option value="cancelado">Cancelado</option>
+                  </select>
+                  <button
+                    onClick={() => abrirDetalle(pedido.id)}
+                    className="rounded-full px-3 py-2 text-xs font-bold text-prolimal-teal-700 transition-colors hover:bg-prolimal-teal-50 dark:text-prolimal-teal-300 dark:hover:bg-prolimal-teal-900/30"
+                  >
+                    Ver detalle
+                  </button>
+                </div>
               </div>
-              <div className="mt-3 pt-3 border-t dark:border-gray-700 flex gap-2" onClick={e => e.stopPropagation()}>
-                <select
-                  value={pedido.estado}
-                  onChange={e => cambiarEstado(pedido.id, e.target.value)}
-                  className="flex-1 border dark:border-gray-600 rounded-lg px-2 py-1.5 text-xs dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="pendiente">Pendiente</option>
-                  <option value="confirmado">Confirmado</option>
-                  <option value="enviado">Enviado</option>
-                  <option value="entregado">Entregado</option>
-                  <option value="cancelado">Cancelado</option>
-                </select>
-                <button
-                  onClick={() => abrirDetalle(pedido.id)}
-                  className="text-xs text-green-600 dark:text-green-400 font-medium border border-green-200 dark:border-green-800 rounded-lg px-2.5 py-1.5 hover:bg-green-50 dark:hover:bg-green-900/30"
-                >
-                  QR
-                </button>
-              </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
 
-      {pedidoSel && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setPedidoSel(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-6">
-              <h2 className="text-2xl font-bold dark:text-white">Pedido #{pedidoSel.id}</h2>
-              <div className="flex gap-2">
-                <button onClick={() => eliminarPedido(pedidoSel.id)}
-                  className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/30">
-                  Eliminar
+      <AnimatePresence>
+        {pedidoSel && (
+          <motion.div
+            key="modal-pedido"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
+            onClick={() => setPedidoSel(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              transition={{ duration: 0.22 }}
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="mb-6 flex items-start justify-between gap-3">
+                <div>
+                  <p className="prolimal-eyebrow">Detalle de pedido</p>
+                  <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                    Pedido #{pedidoSel.id}
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => eliminarPedido(pedidoSel.id)}
+                    className="prolimal-btn-ghost-danger px-3 py-2 text-xs">
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Eliminar
+                  </button>
+                  <button onClick={() => setPedidoSel(null)} aria-label="Cerrar"
+                    className="prolimal-icon-btn h-9 w-9">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Cliente</p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-prolimal-ink-800 dark:text-prolimal-sand-50">{pedidoSel.usuario?.nombre}</p>
+                  <p className="mt-1 truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{pedidoSel.usuario?.email}</p>
+                </div>
+                <div className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Entrega</p>
+                  <p className="mt-1 text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{pedidoSel.direccion_entrega || 'Sin dirección'}</p>
+                </div>
+                <div className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Fecha</p>
+                  <p className="mt-1 text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{new Date(pedidoSel.creado_en).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              <div className="mb-6 flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={pedidoSel.estado}
+                  onChange={e => cambiarEstado(pedidoSel.id, e.target.value)}
+                  className="prolimal-input sm:flex-1"
+                >
+                  {ESTADOS.map(e => (
+                    <option
+                      key={e}
+                      value={e}
+                      disabled={e !== pedidoSel.estado && !(TRANSICIONES[pedidoSel.estado] || []).includes(e)}
+                    >
+                      {e.charAt(0).toUpperCase() + e.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => generarQR(pedidoSel.id)}
+                  className="prolimal-btn-primary whitespace-nowrap"
+                >
+                  <QrCode className="h-4 w-4" />
+                  {qrImg ? 'Regenerar QR' : 'Generar factura QR'}
                 </button>
-                <button onClick={() => setPedidoSel(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-2xl">&times;</button>
               </div>
-            </div>
-            <p className="text-gray-500 dark:text-gray-400 mb-1">Cliente: {pedidoSel.usuario?.nombre} ({pedidoSel.usuario?.email})</p>
-            <p className="text-gray-500 dark:text-gray-400 mb-1">Dirección: {pedidoSel.direccion_entrega}</p>
-            <p className="text-gray-500 dark:text-gray-400 mb-4">Fecha: {new Date(pedidoSel.creado_en).toLocaleDateString()}</p>
 
-            <div className="flex gap-2 mb-6">
-              <select
-                value={pedidoSel.estado}
-                onChange={e => cambiarEstado(pedidoSel.id, e.target.value)}
-                className="border dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
-              >
-                {ESTADOS.map(e => (
-                  <option
-                    key={e}
-                    value={e}
-                    disabled={e !== pedidoSel.estado && !(TRANSICIONES[pedidoSel.estado] || []).includes(e)}
-                  >
-                    {e.charAt(0).toUpperCase() + e.slice(1)}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => generarQR(pedidoSel.id)}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700"
-              >
-                {qrImg ? 'Regenerar QR' : 'Generar Factura QR'}
-              </button>
-            </div>
-
-            <h3 className="font-bold text-lg mb-3 dark:text-white">Productos</h3>
-            <div className="space-y-3 mb-6">
-              {pedidoSel.detalles?.map(d => (
-                <div key={d.id} className="flex items-start gap-4 border dark:border-gray-700 rounded-xl p-3">
-                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
-                    {d.producto?.imagen_url
-                      ? <img src={`${API_URL}${d.producto.imagen_url}`} alt={d.producto.nombre} className="w-full h-full object-contain" />
-                      : <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">Sin img</div>
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium dark:text-white break-words">{d.producto?.nombre}</p>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">x{d.cantidad} @ {formatCurrency(d.precio_unitario)}</p>
-                  </div>
-                  <p className="font-bold dark:text-white shrink-0">{formatCurrency(d.cantidad * parseCurrency(d.precio_unitario))}</p>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-6">Total: {formatCurrency(pedidoSel.total)}</p>
-
-            {qrImg && (
-              <div className="border-t dark:border-gray-700 pt-4 text-center">
-                <h3 className="font-bold mb-3 dark:text-white">Factura QR</h3>
-                <img src={qrImg} alt="Factura QR" className="mx-auto w-48 h-48" />
-                <div className="flex gap-3 mt-4 justify-center">
-                  <button
-                    onClick={() => {
-                      const a = document.createElement('a');
-                      a.href = qrImg;
-                      a.download = `factura-${pedidoSel.id}.png`;
-                      a.click();
-                    }}
-                    className="bg-gray-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-700">
-                    Descargar QR
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const blob = await apiFetchBlob(`/pedidos/${pedidoSel.id}/factura/pdf`);
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `factura-${pedidoSel.id}.pdf`;
-                        a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 1000);
-                      } catch {
-                        alert('Error al descargar el PDF. Revisá que el pedido tenga datos de facturación.');
+              <h3 className="mb-3 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Productos</h3>
+              <div className="mb-6 space-y-2">
+                {pedidoSel.detalles?.map(d => (
+                  <div
+                    key={d.id}
+                    className="flex items-start gap-4 rounded-2xl border border-prolimal-ink-900/5 bg-prolimal-sand-100/60 p-3 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/60">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 dark:bg-prolimal-ink-900">
+                      {d.producto?.imagen_url
+                        ? <img src={`${API_URL}${d.producto.imagen_url}`} alt={d.producto.nombre} className="h-full w-full object-contain" />
+                        : <span className="text-[10px] font-bold uppercase tracking-wide text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin img</span>
                       }
-                    }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700">
-                    Descargar PDF
-                  </button>
-                </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{d.producto?.nombre}</p>
+                      <p className="mt-0.5 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">x{d.cantidad} @ {formatCurrency(d.precio_unitario)}</p>
+                    </div>
+                    <p className="shrink-0 text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(d.cantidad * parseCurrency(d.precio_unitario))}</p>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
-      )}
-    </main>
+
+              <div className="mb-6 flex items-center justify-between rounded-2xl bg-prolimal-ink-900 px-5 py-4 text-prolimal-sand-50 dark:bg-prolimal-ink-800">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-sand-100/60">Total del pedido</span>
+                <span className="text-2xl font-extrabold tracking-[-0.04em]">{formatCurrency(pedidoSel.total)}</span>
+              </div>
+
+              {qrImg && (
+                <div className="border-t border-prolimal-ink-900/5 pt-5 text-center dark:border-prolimal-sand-100/10">
+                  <h3 className="mb-3 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Factura QR</h3>
+                  <img src={qrImg} alt="Factura QR" className="mx-auto h-48 w-48 rounded-2xl bg-white p-2" />
+                  <div className="mt-4 flex flex-wrap justify-center gap-3">
+                    <button
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = qrImg;
+                        a.download = `factura-${pedidoSel.id}.png`;
+                        a.click();
+                      }}
+                      className="prolimal-btn-secondary">
+                      Descargar QR
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const blob = await apiFetchBlob(`/pedidos/${pedidoSel.id}/factura/pdf`);
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `factura-${pedidoSel.id}.pdf`;
+                          a.click();
+                          setTimeout(() => URL.revokeObjectURL(url), 1000);
+                        } catch {
+                          alert('Error al descargar el PDF. Revisá que el pedido tenga datos de facturación.');
+                        }
+                      }}
+                      className="prolimal-btn-primary">
+                      Descargar PDF
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

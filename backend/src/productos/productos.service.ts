@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import { Producto } from './producto.entity';
-import { Inventario } from '../inventario/inventario.entity';
 
 export type ProductoConStock = Producto & { stock: number; disponible: boolean };
 
@@ -11,20 +10,20 @@ export class ProductosService {
   constructor(
     @InjectRepository(Producto)
     private productosRepo: Repository<Producto>,
-    @InjectRepository(Inventario)
-    private inventarioRepo: Repository<Inventario>,
   ) {}
 
   /** Añade al producto únicamente el stock necesario para el catálogo. */
-  private async conStock(lista: Producto[]): Promise<ProductoConStock[]> {
+    private async conStock(lista: Producto[]): Promise<ProductoConStock[]> {
     if (lista.length === 0) return [];
     const ids = lista.map((p) => p.id);
-    const invs = await this.inventarioRepo.find({
-      where: { producto_id: In(ids) },
-    });
-    const mapa = new Map(invs.map((i) => [Number(i.producto_id), Number(i.cantidad)]));
+    const filas: { producto_id: number; cantidad: number }[] =
+      await this.productosRepo.manager.query(
+        'SELECT producto_id, cantidad FROM inventario WHERE producto_id = ANY($1)',
+        [ids],
+      );
+    const mapa = new Map(filas.map((f) => [f.producto_id, Number(f.cantidad)]));
     return lista.map((p) => {
-      const stock = mapa.get(Number(p.id)) ?? 0;
+      const stock = mapa.get(p.id) ?? 0;
       return { ...p, stock, disponible: stock > 0 };
     });
   }
@@ -32,7 +31,6 @@ export class ProductosService {
   async findAll(page = 1, limit = 50) {
     const lista = await this.productosRepo.find({
       where: { activo: true },
-      relations: ['categoria'],
       order: { id: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -42,7 +40,6 @@ export class ProductosService {
 
   async findAllInclusoInactivos() {
     const lista = await this.productosRepo.find({
-      relations: ['categoria'],
     });
     return this.conStock(lista);
   }
@@ -50,7 +47,6 @@ export class ProductosService {
   async findOne(id: number) {
     const producto = await this.productosRepo.findOne({
       where: { id },
-      relations: ['categoria'],
     });
     if (!producto) throw new NotFoundException('Producto no encontrado');
     const [conStock] = await this.conStock([producto]);

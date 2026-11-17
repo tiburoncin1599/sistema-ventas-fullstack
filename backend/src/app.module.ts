@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -26,7 +28,14 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 const rawDatabaseUrl = process.env.DATABASE_URL ?? '';
-const isLocalDatabase = /localhost|127\.0\.0\.1/.test(rawDatabaseUrl);
+const dbSslEnv = process.env.DB_SSL ?? process.env.DATABASE_SSL;
+
+const isLocalDatabase =
+  dbSslEnv === 'false' ||
+  /localhost|127\.0\.0\.1|^postgresql:\/\/[^@]+@db[:/]|^postgresql:\/\/[^@]+@postgres[:/]/.test(
+    rawDatabaseUrl,
+  ) ||
+  /@db:|@postgres:/.test(rawDatabaseUrl);
 
 if (!rawDatabaseUrl) {
   throw new Error(
@@ -47,6 +56,8 @@ function sanitizeSslParams(url: string): string {
 const typeOrmUrl = isLocalDatabase
   ? rawDatabaseUrl
   : sanitizeSslParams(rawDatabaseUrl);
+
+const useSsl = dbSslEnv === 'true' ? true : dbSslEnv === 'false' ? false : !isLocalDatabase;
 
 @Module({
   imports: [
@@ -71,7 +82,7 @@ const typeOrmUrl = isLocalDatabase
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: typeOrmUrl,
-      ssl: isLocalDatabase ? false : { rejectUnauthorized: true },
+      ssl: useSsl ? { rejectUnauthorized: true } : false,
       autoLoadEntities: true,
       synchronize: false,
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
@@ -94,11 +105,13 @@ const typeOrmUrl = isLocalDatabase
     POSModule,
     UbicacionesModule,
   ],
+  controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    AppService,
   ],
 })
 export class AppModule {}

@@ -1,13 +1,25 @@
 import type { Metadata } from 'next';
-import { Geist } from 'next/font/google';
+import { Fraunces, Manrope } from 'next/font/google';
 import './globals.css';
-import Navbar from '@/components/Navbar';
 
-const geist = Geist({ subsets: ['latin'] });
+const manrope = Manrope({
+  subsets: ['latin'],
+  variable: '--font-manrope',
+  display: 'swap',
+});
+
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'Mi Tienda Online',
-  description: 'Sistema de ventas online',
+  title: {
+    default: 'PROLIMAC SRL | Productos de limpieza',
+    template: '%s | PROLIMAC SRL',
+  },
+  description: 'Limpieza que respira. Productos para el hogar, oficinas y empresas, desde Cochabamba, Bolivia.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -19,8 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           async
         />
       </head>
-      <body className={`${geist.className} antialiased`}>
-        <Navbar />
+      <body className={`${manrope.variable} ${fraunces.variable} font-sans antialiased`}>
         {children}
       </body>
     </html>

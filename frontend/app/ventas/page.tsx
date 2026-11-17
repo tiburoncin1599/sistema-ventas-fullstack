@@ -3,6 +3,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import {
+  ChevronRight,
+  ClipboardList,
+  Package,
+  Receipt,
+  TrendingUp,
+  Users,
+  Wallet,
+} from 'lucide-react';
 
 interface Cliente {
   id: number;
@@ -54,85 +63,93 @@ export default function VentasDashboard() {
 
   if (cargando) {
     return (
-      <p className="text-center py-20 text-gray-500 dark:text-gray-400">
-        Cargando panel...
-      </p>
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Cargando panel...
+        </div>
+      </main>
     );
   }
 
+  const stats = [
+    { label: 'Clientes registrados', value: clientes.length, hint: 'En tu cartera', Icono: Users, tono: 'teal' },
+    { label: 'Pedidos pendientes', value: pedidosPendientes.length, hint: `${formatCurrency(montoPendientePedidos)} en pedidos`, Icono: ClipboardList, tono: 'sand' },
+    { label: 'Monto por cobrar', value: formatCurrency(montoPorCobrar), hint: 'En deudas registradas', Icono: Wallet, tono: 'coral' },
+    { label: 'Deudas activas', value: deudasActivas, hint: `${deudas.length} deudas registradas`, Icono: Receipt, tono: 'ink' },
+  ] as const;
+
+  const accesos = [
+    { href: '/ventas/clientes', titulo: 'Clientes', desc: 'Registrá clientes con sus datos y días de visita.', Icono: Users },
+    { href: '/ventas/pedidos', titulo: 'Pedidos', desc: 'Consultá y actualizá el estado de tus pedidos.', Icono: Package },
+    { href: '/ventas/deudas', titulo: 'Deudas', desc: 'Gestioná la cobranza de tus deudas registradas.', Icono: Receipt },
+    { href: '/ventas/rendimiento', titulo: 'Mi Rendimiento', desc: 'Visualizá tus ventas de la semana y el mes.', Icono: TrendingUp },
+  ];
+
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-10">
-      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold dark:text-white">Mis ventas</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            Resumen de tu actividad comercial
-          </p>
-        </div>
+    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
+      <section className="mb-8">
+        <p className="prolimal-eyebrow">Comercial</p>
+        <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+          Mis ventas
+        </h2>
+        <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+          Resumen de tu actividad comercial.
+        </p>
+      </section>
+
+      <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map(({ label, value, hint, Icono, tono }) => (
+          <div
+            key={label}
+            className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+          >
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                tono === 'teal'
+                  ? 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
+                  : tono === 'coral'
+                    ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300'
+                    : tono === 'sand'
+                      ? 'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200'
+                      : 'bg-prolimal-ink-100 text-prolimal-ink-700 dark:bg-prolimal-ink-800 dark:text-prolimal-ink-200'
+              }`}
+            >
+              <Icono className="h-4 w-4" />
+            </span>
+            <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
+            <p className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
+            <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{hint}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
-          <p className="text-blue-600 dark:text-blue-400 font-medium mb-1 text-sm">Clientes registrados</p>
-          <p className="text-4xl font-bold text-blue-700 dark:text-blue-300">{clientes.length}</p>
+      <section>
+        <h3 className="mb-4 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
+          Accesos rápidos
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {accesos.map(({ href, titulo, desc, Icono }) => (
+            <Link
+              key={href}
+              href={href}
+              className="group rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] transition-all hover:-translate-y-0.5 hover:border-prolimal-teal-700/30 dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-prolimal-ink-900 text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900">
+                  <Icono className="h-4 w-4" />
+                </span>
+                <ChevronRight className="h-4 w-4 text-prolimal-ink-300 transition-transform group-hover:translate-x-0.5 dark:text-prolimal-ink-300" />
+              </div>
+              <h4 className="prolimal-display mt-5 text-xl tracking-[-0.03em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                {titulo}
+              </h4>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                {desc}
+              </p>
+            </Link>
+          ))}
         </div>
-        <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6">
-          <p className="text-yellow-600 dark:text-yellow-400 font-medium mb-1 text-sm">Pedidos pendientes</p>
-          <p className="text-4xl font-bold text-yellow-700 dark:text-yellow-300">{pedidosPendientes.length}</p>
-          <p className="text-xs text-yellow-500 dark:text-yellow-400 mt-2">{formatCurrency(montoPendientePedidos)} en pedidos</p>
-        </div>
-        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-2xl p-6">
-          <p className="text-green-600 dark:text-green-400 font-medium mb-1 text-sm">Monto por cobrar</p>
-          <p className="text-2xl font-bold text-green-700 dark:text-green-300 mt-2">
-            {formatCurrency(montoPorCobrar)}
-          </p>
-          <p className="text-xs text-green-500 dark:text-green-400 mt-2">En deudas registradas</p>
-        </div>
-        <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-2xl p-6">
-          <p className="text-purple-600 dark:text-purple-400 font-medium mb-1 text-sm">Deudas activas</p>
-          <p className="text-4xl font-bold text-purple-700 dark:text-purple-300">{deudasActivas}</p>
-          <p className="text-xs text-purple-500 dark:text-purple-400 mt-2">{deudas.length} deudas registradas</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link
-          href="/ventas/clientes"
-          className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6 hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow"
-        >
-          <h2 className="text-xl font-bold mb-2 dark:text-white">🧑‍🤝‍🧑 Clientes</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Registrá clientes con sus datos y días de visita.
-          </p>
-        </Link>
-        <Link
-          href="/ventas/pedidos"
-          className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6 hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow"
-        >
-          <h2 className="text-xl font-bold mb-2 dark:text-white">📦 Pedidos</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Consultá y actualizá el estado de tus pedidos.
-          </p>
-        </Link>
-        <Link
-          href="/ventas/deudas"
-          className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6 hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow"
-        >
-          <h2 className="text-xl font-bold mb-2 dark:text-white">🧾 Deudas</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Gestioná la cobranza de tus deudas registradas.
-          </p>
-        </Link>
-        <Link
-          href="/ventas/rendimiento"
-          className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-6 hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow"
-        >
-          <h2 className="text-xl font-bold mb-2 dark:text-white">📊 Mi Rendimiento</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Visualizá tus ventas de la semana y el mes con gráficas.
-          </p>
-        </Link>
-      </div>
+      </section>
     </main>
   );
 }

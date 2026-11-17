@@ -1,12 +1,14 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { ChevronRight, IdCard, MapPin, Phone, Plus, Search, X } from 'lucide-react';
 
 interface Cliente {
   id: number;
   nombre: string;
   email: string;
-  telefono: string;
+  telefono?: string;
   carnet?: string;
   ubicacion?: string;
   activo: boolean;
@@ -28,8 +30,18 @@ export default function AdminClientes() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    cargar().finally(() => setCargando(false));
+    let activo = true;
+    api.get('/clientes')
+      .then((res) => {
+        if (activo) setClientes(res.data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (activo) setCargando(false);
+      });
+    return () => {
+      activo = false;
+    };
   }, []);
 
   const abrirNuevo = () => {
@@ -77,8 +89,6 @@ export default function AdminClientes() {
     setEditando(false);
   };
 
-  if (cargando) return <p className="text-center py-20 text-gray-500 dark:text-gray-400">Cargando clientes...</p>;
-
   const q = busqueda.trim().toLowerCase();
   const todos = q
     ? clientes.filter(c =>
@@ -92,52 +102,77 @@ export default function AdminClientes() {
   const inactivos = todos.filter(c => !c.activo);
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-8 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div className="pb-10">
+      <section className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold dark:text-white">Clientes</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{activos.length} activos, {inactivos.length} inactivos</p>
+          <p className="prolimal-eyebrow">Relaciones</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Clientes
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            {activos.length} activos · {inactivos.length} inactivos
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="🔎 Buscar por nombre, email, teléfono o CI..."
-            className="border dark:border-gray-600 rounded-xl px-4 py-2.5 bg-white dark:bg-gray-800 text-sm w-full sm:w-72"
-          />
-          <button onClick={abrirNuevo}
-            className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700">
-            + Nuevo
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Nombre, email, teléfono o CI"
+              className="prolimal-search-input"
+            />
+          </div>
+          <button onClick={abrirNuevo} className="prolimal-btn-primary whitespace-nowrap">
+            <Plus className="h-4 w-4" />
+            Nuevo cliente
           </button>
         </div>
-      </div>
+      </section>
 
-      {activos.length === 0 ? (
-        <p className="text-center py-20 text-gray-500 dark:text-gray-400">{q ? 'Sin resultados para tu búsqueda.' : 'No hay clientes registrados'}</p>
+      {cargando ? (
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Cargando clientes...
+        </div>
+      ) : activos.length === 0 ? (
+        <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          {q ? 'Sin resultados para tu búsqueda.' : 'No hay clientes registrados'}
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {activos.map(c => (
             <div
               key={c.id}
-              onClick={() => { abrirEditar(c); setCreando(false); }}
-              className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl p-5 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer"
+              onClick={() => setModalCliente(c)}
+              className="group cursor-pointer rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-50px_rgba(11,37,32,0.4)] transition-all hover:-translate-y-1 hover:border-prolimal-teal-500/40 hover:shadow-[0_30px_70px_-45px_rgba(11,37,32,0.5)] dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:hover:border-prolimal-teal-500/30"
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shrink-0">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-prolimal-teal-100 text-base font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
                   {c.nombre.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-extrabold tracking-[-0.02em] text-prolimal-ink-800 dark:text-prolimal-sand-50">{c.nombre}</p>
+                  <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{c.email}</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white truncate">{c.nombre}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{c.email}</p>
-                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-prolimal-ink-300 transition-transform group-hover:translate-x-0.5 group-hover:text-prolimal-teal-600 dark:text-prolimal-ink-500 dark:group-hover:text-prolimal-teal-300" />
               </div>
-              <div className="mt-3 flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                {c.telefono && <span>{'\uD83D\uDCDE'} {c.telefono}</span>}
-                {c.carnet && <span>{'\uD83D\uDD11'} {c.carnet}</span>}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {c.telefono && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-prolimal-sand-100 px-2.5 py-1 text-[11px] font-semibold text-prolimal-ink-600 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100">
+                    <Phone className="h-3 w-3" /> {c.telefono}
+                  </span>
+                )}
+                {c.carnet && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-prolimal-sand-100 px-2.5 py-1 text-[11px] font-semibold text-prolimal-ink-600 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100">
+                    <IdCard className="h-3 w-3" /> {c.carnet}
+                  </span>
+                )}
               </div>
               {c.ubicacion && (
-                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 truncate">{'\uD83D\uDCCD'} {c.ubicacion}</p>
+                <p className="mt-2.5 flex items-center gap-1.5 truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  <MapPin className="h-3 w-3 shrink-0" /> {c.ubicacion}
+                </p>
               )}
             </div>
           ))}
@@ -145,50 +180,57 @@ export default function AdminClientes() {
       )}
 
       {inactivos.length > 0 && (
-        <details className="mt-8">
-          <summary className="text-sm text-gray-500 dark:text-gray-400 cursor-pointer font-medium">
-            Clientes inactivos ({inactivos.length})
-          </summary>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">
+        <div className="mt-8 rounded-[2rem] border border-prolimal-ink-900/10 bg-prolimal-sand-100/50 p-6 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/40">
+          <div className="mb-4 cursor-pointer text-sm font-bold text-prolimal-ink-500 dark:text-prolimal-ink-200" onClick={() => window.location.reload()}>
+            <span className="underline decoration-prolimal-ink-300 underline-offset-4">Clientes inactivos ({inactivos.length})</span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {inactivos.map(c => (
-              <div key={c.id} className="bg-gray-50 dark:bg-gray-800/50 border dark:border-gray-700 rounded-2xl p-5 opacity-60">
-                <p className="font-medium text-gray-500 dark:text-gray-400">{c.nombre}</p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">{c.email}</p>
+              <div key={c.id} className="rounded-2xl border border-prolimal-ink-900/5 bg-card p-4 dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+                <p className="truncate text-sm font-bold text-prolimal-ink-700 dark:text-prolimal-sand-50">{c.nombre}</p>
+                <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{c.email}</p>
               </div>
             ))}
           </div>
-        </details>
+        </div>
       )}
 
       {creando && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setCreando(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold mb-6 dark:text-white">Nuevo cliente</h2>
-            <div className="space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
+          onClick={() => setCreando(false)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6">
+              <p className="prolimal-eyebrow">Nuevo registro</p>
+              <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Nuevo cliente</h2>
+            </div>
+            <div className="space-y-3">
               <input placeholder="Nombre completo" value={form.nombre}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                className="prolimal-input" />
               <div className="grid grid-cols-2 gap-3">
                 <input placeholder="Carnet / CI" value={form.carnet}
                   onChange={e => setForm({ ...form, carnet: e.target.value })}
-                  className="border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                  className="prolimal-input" />
                 <input placeholder="Teléfono" value={form.telefono}
                   onChange={e => setForm({ ...form, telefono: e.target.value })}
-                  className="border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                  className="prolimal-input" />
               </div>
               <input placeholder="Ubicación / Dirección" value={form.ubicacion}
                 onChange={e => setForm({ ...form, ubicacion: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
-              <p className="text-xs text-gray-400 dark:text-gray-500">Se generará una contraseña automática de acceso</p>
+                className="prolimal-input" />
+              <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Se generará una contraseña automática de acceso</p>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={guardar}
-                className="flex-1 bg-green-600 text-white py-3 rounded-xl font-medium hover:bg-green-700">
-                Guardar cliente
-              </button>
-              <button onClick={() => setCreando(false)}
-                className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-medium dark:text-white">
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+              <button onClick={() => setCreando(false)} className="prolimal-btn-secondary sm:w-auto">
                 Cancelar
+              </button>
+              <button onClick={guardar} className="prolimal-btn-primary flex-1">
+                Guardar cliente
               </button>
             </div>
           </div>
@@ -196,51 +238,57 @@ export default function AdminClientes() {
       )}
 
       {modalCliente && !editando && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setModalCliente(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-lg">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
+          onClick={() => setModalCliente(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-prolimal-teal-100 text-lg font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
                   {modalCliente.nombre.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold dark:text-white">{modalCliente.nombre}</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{modalCliente.email}</p>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-extrabold tracking-[-0.02em] text-prolimal-ink-800 dark:text-prolimal-sand-50">{modalCliente.nombre}</h2>
+                  <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{modalCliente.email}</p>
                 </div>
               </div>
-              <button onClick={() => setModalCliente(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-2xl">&times;</button>
+              <button onClick={() => setModalCliente(null)} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-1">
               {modalCliente.carnet && (
-                <div className="flex justify-between py-2 border-b dark:border-gray-700">
-                  <span className="text-gray-500 dark:text-gray-400">Carnet</span>
-                  <span className="font-medium dark:text-white">{modalCliente.carnet}</span>
+                <div className="flex justify-between gap-4 border-b border-prolimal-ink-900/5 py-3 dark:border-prolimal-sand-100/10">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Carnet</span>
+                  <span className="text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{modalCliente.carnet}</span>
                 </div>
               )}
               {modalCliente.telefono && (
-                <div className="flex justify-between py-2 border-b dark:border-gray-700">
-                  <span className="text-gray-500 dark:text-gray-400">Teléfono</span>
-                  <span className="font-medium dark:text-white">{modalCliente.telefono}</span>
+                <div className="flex justify-between gap-4 border-b border-prolimal-ink-900/5 py-3 dark:border-prolimal-sand-100/10">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Teléfono</span>
+                  <span className="text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{modalCliente.telefono}</span>
                 </div>
               )}
               {modalCliente.ubicacion && (
-                <div className="flex justify-between py-2 border-b dark:border-gray-700">
-                  <span className="text-gray-500 dark:text-gray-400">Ubicación</span>
-                  <span className="font-medium dark:text-white">{modalCliente.ubicacion}</span>
+                <div className="flex justify-between gap-4 border-b border-prolimal-ink-900/5 py-3 dark:border-prolimal-sand-100/10">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Ubicación</span>
+                  <span className="text-right text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{modalCliente.ubicacion}</span>
                 </div>
               )}
-              <div className="flex justify-between py-2 border-b dark:border-gray-700">
-                <span className="text-gray-500 dark:text-gray-400">Registrado</span>
-                <span className="font-medium dark:text-white">{new Date(modalCliente.creado_en).toLocaleDateString()}</span>
+              <div className="flex justify-between gap-4 border-b border-prolimal-ink-900/5 py-3 dark:border-prolimal-sand-100/10">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Registrado</span>
+                <span className="text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{new Date(modalCliente.creado_en).toLocaleDateString()}</span>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => abrirEditar(modalCliente)}
-                className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button onClick={() => abrirEditar(modalCliente)} className="prolimal-btn-primary flex-1">
                 Editar
               </button>
-              <button onClick={() => desactivar(modalCliente.id)}
-                className="flex-1 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 py-3 rounded-xl font-medium hover:bg-red-50 dark:hover:bg-red-900/30">
+              <button onClick={() => desactivar(modalCliente.id)} className="prolimal-btn-ghost-danger flex-1">
                 Desactivar
               </button>
             </div>
@@ -249,46 +297,55 @@ export default function AdminClientes() {
       )}
 
       {modalCliente && editando && (
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => { setModalCliente(null); setEditando(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-lg">
-                {modalCliente.nombre.charAt(0).toUpperCase()}
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
+          onClick={() => { setModalCliente(null); setEditando(false); }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-6 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-prolimal-teal-100 text-lg font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
+                  {modalCliente.nombre.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="prolimal-display truncate text-xl tracking-[-0.03em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Editar cliente</h2>
+                  <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{modalCliente.email}</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-bold dark:text-white">Editar cliente</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{modalCliente.email}</p>
-              </div>
+              <button onClick={() => { setModalCliente(null); setEditando(false); }} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <input placeholder="Nombre completo" value={form.nombre}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                className="prolimal-input" />
               <div className="grid grid-cols-2 gap-3">
                 <input placeholder="Carnet / CI" value={form.carnet}
                   onChange={e => setForm({ ...form, carnet: e.target.value })}
-                  className="border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                  className="prolimal-input" />
                 <input placeholder="Teléfono" value={form.telefono}
                   onChange={e => setForm({ ...form, telefono: e.target.value })}
-                  className="border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                  className="prolimal-input" />
               </div>
               <input placeholder="Ubicación / Dirección" value={form.ubicacion}
                 onChange={e => setForm({ ...form, ubicacion: e.target.value })}
-                className="w-full border dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-white" />
+                className="prolimal-input" />
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={actualizarCliente}
-                className="flex-1 bg-green-600 text-white py-3 rounded-xl font-medium hover:bg-green-700">
-                Guardar cambios
-              </button>
-              <button onClick={() => { setModalCliente(null); setEditando(false); }}
-                className="flex-1 border dark:border-gray-600 py-3 rounded-xl font-medium dark:text-white">
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+              <button onClick={() => { setModalCliente(null); setEditando(false); }} className="prolimal-btn-secondary sm:w-auto">
                 Cancelar
+              </button>
+              <button onClick={actualizarCliente} className="prolimal-btn-primary flex-1">
+                Guardar cambios
               </button>
             </div>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
