@@ -1,597 +1,768 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import GraficoBarras from '@/components/charts/GraficoBarras';
+import GraficoLineasVentas, {
+  type PuntoLinea,
+} from '@/components/charts/GraficoLineasVentas';
+import GraficoBarrasHorizontales from '@/components/charts/GraficoBarrasHorizontales';
 import { aFechaISO, rangoMes } from '@/components/charts/chart-utils';
-import { Search } from 'lucide-react';
+import ToastNotificacion, {
+  type ToastDatos,
+} from '@/components/ui/ToastNotificacion';
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+  MessageCircle,
+} from 'lucide-react';
 
-interface DiaVenta {
+interface VentaDia {
   fecha: string;
   total_pedidos: number;
+  unidades_vendidas: number;
   total_vendido: number;
-  cancelados: number;
+  ticket_promedio: number;
 }
 
-interface FilaProducto {
-  id: number;
+interface Ganancias {
+  ingresos: number;
+  costo: number;
+  utilidad_bruta: number;
+  margen_porcentual: number;
+  total_pedidos: number;
+}
+
+interface ProductoRanking {
+  producto_id: number;
   nombre: string;
-  precio: number;
-  categoria: string | null;
+  codigo: string | null;
   unidades_vendidas: number;
-  total_ingresos: number;
+  ingresos: number;
+  costo: number;
+  utilidad: number;
+  margen_porcentual: number;
 }
 
-interface FilaCategoria {
+interface TopProductos {
+  masVendidos: ProductoRanking[];
+  masRentables: ProductoRanking[];
+}
+
+interface Opcion {
   id: number;
   nombre: string;
-  unidades_vendidas: number;
-  total_ingresos: number;
 }
 
-interface FilaInventario {
+interface RegistroHistorial {
   id: number;
-  nombre: string;
-  precio: number;
-  precio_costo: number;
-  cantidad: number;
-  cantidad_minima: number;
-  categoria: string | null;
+  tipo: 'STOCK_BAJO' | 'REPORTE_VENTAS' | 'COMPROBANTE';
+  destinatario_telefono: string | null;
+  mensaje: string;
+  estado: 'ENVIADO' | 'GENERADO_LINK' | 'ERROR';
+  creado_en: string;
+  usuario?: { nombre: string } | null;
 }
 
-interface FilaCliente {
-  id: number;
-  nombre: string;
-  email: string;
-  total_compras: number;
-  total_gastado: number;
-  ultima_compra: string;
+interface RespuestaHistorial {
+  data: RegistroHistorial[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
-type Seccion = 'ventas' | 'ganancias' | 'producto' | 'categoria' | 'inventario' | 'clientes';
-
-const SECCIONES: { id: Seccion; etiqueta: string }[] = [
-  { id: 'ventas', etiqueta: 'Ventas por fecha' },
-  { id: 'ganancias', etiqueta: 'Ganancias' },
-  { id: 'producto', etiqueta: 'Por producto' },
-  { id: 'categoria', etiqueta: 'Por categoría' },
-  { id: 'inventario', etiqueta: 'Inventario' },
-  { id: 'clientes', etiqueta: 'Clientes frecuentes' },
-];
-
-function descargar(url: string, nombre: string, setCargando: (b: boolean) => void) {
-  setCargando(true);
-  apiFetchBlob(url)
-    .then((blob) => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = nombre;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-    })
-    .catch(() => alert('No se pudo descargar el archivo'))
-    .finally(() => setCargando(false));
+interface RespuestaWhatsapp {
+  modo: 'API' | 'LINK';
+  urlWhatsapp: string | null;
+  registro: RegistroHistorial;
+  error?: string;
 }
+
+const POR_PAGINA = 10;
 
 const th = 'px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300';
 const td = 'px-4 py-4 text-sm text-prolimal-ink-600 dark:text-prolimal-sand-100';
+
+/** Normaliza respuestas que pueden venir como arreglo o como `{ data: [] }`. */
+function comoArreglo<T>(valor: unknown): T[] {
+  if (Array.isArray(valor)) return valor as T[];
+  if (valor && typeof valor === 'object') {
+    const data = (valor as { data?: unknown }).data;
+    if (Array.isArray(data)) return data as T[];
+  }
+  return [];
+}
+
+function rolActual(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem('usuario');
+    if (!raw) return '';
+    return (JSON.parse(raw) as { rol?: string }).rol ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export default function AdminReportes() {
   const hoy = useMemo(() => new Date(), []);
   const inicioMes = useMemo(() => rangoMes().desde, []);
 
-  const [desde, setDesde] = useState(aFechaISO(inicioMes));
-  const [hasta, setHasta] = useState(aFechaISO(hoy));
-  const [seccion, setSeccion] = useState<Seccion>('ventas');
-  const [busqueda, setBusqueda] = useState('');
+  const [fechaInicio, setFechaInicio] = useState(aFechaISO(inicioMes));
+  const [fechaFin, setFechaFin] = useState(aFechaISO(hoy));
+  const [productoId, setProductoId] = useState('');
+  const [vendedorId, setVendedorId] = useState('');
+  const [rol, setRol] = useState('');
+
+  const [productos, setProductos] = useState<Opcion[]>([]);
+  const [vendedores, setVendedores] = useState<Opcion[]>([]);
+
+  const [ventas, setVentas] = useState<VentaDia[]>([]);
+  const [ganancias, setGanancias] = useState<Ganancias | null>(null);
+  const [top, setTop] = useState<TopProductos>({
+    masVendidos: [],
+    masRentables: [],
+  });
 
   const [cargando, setCargando] = useState(false);
-  const [ventasFecha, setVentasFecha] = useState<DiaVenta[]>([]);
-  const [ganancias, setGanancias] = useState<{ ingresos: number; costo: number; ganancia: number } | null>(null);
-  const [productos, setProductos] = useState<FilaProducto[]>([]);
-  const [categorias, setCategorias] = useState<FilaCategoria[]>([]);
-  const [inventario, setInventario] = useState<FilaInventario[]>([]);
-  const [clientes, setClientes] = useState<FilaCliente[]>([]);
-  const [descargando, setDescargando] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [copiado, setCopiado] = useState(false);
+
+  const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(false);
+  const [toast, setToast] = useState<ToastDatos | null>(null);
+  const cerrarToast = useCallback(() => setToast(null), []);
+
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [historial, setHistorial] = useState<RespuestaHistorial>({
+    data: [],
+    total: 0,
+    page: 1,
+    limit: 5,
+  });
+  const [historialPagina, setHistorialPagina] = useState(1);
 
   useEffect(() => {
-    const params = { desde, hasta };
-setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setRol(rolActual());
+  }, []);
+
+  useEffect(() => {
+    setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setPagina(1);
+
+    const params: Record<string, string | number> = {};
+    if (fechaInicio) params.fechaInicio = fechaInicio;
+    if (fechaFin) params.fechaFin = fechaFin;
+    if (productoId) params.productoId = Number(productoId);
+    // Un vendedor no puede enviar vendedorId: el backend fuerza el suyo.
+    if (vendedorId && rol === 'admin') params.vendedorId = Number(vendedorId);
+
     Promise.all([
       api.get('/reportes/ventas-por-fecha', { params }),
       api.get('/reportes/ganancias', { params }),
-      api.get('/reportes/ventas-por-producto', { params }),
-      api.get('/reportes/ventas-por-categoria', { params }),
-      api.get('/reportes/inventario'),
-      api.get('/reportes/clientes-frecuentes'),
+      api.get('/reportes/top-productos', { params }),
     ])
-      .then(([vf, g, pr, ct, inv, cl]) => {
-        setVentasFecha(vf.data || []);
-        setGanancias((g.data && g.data[0]) || null);
-        setProductos(pr.data || []);
-        setCategorias(ct.data || []);
-        setInventario(inv.data || []);
-        setClientes(cl.data || []);
+      .then(([rv, rg, rt]) => {
+        setVentas(comoArreglo<VentaDia>(rv.data));
+        setGanancias((rg.data as Ganancias) ?? null);
+        const respuestaTop = rt.data as Partial<TopProductos> | undefined;
+        setTop({
+          masVendidos: comoArreglo<ProductoRanking>(respuestaTop?.masVendidos),
+          masRentables: comoArreglo<ProductoRanking>(respuestaTop?.masRentables),
+        });
       })
-      .catch(() => {})
+      .catch(() => {
+        setVentas([]);
+        setGanancias(null);
+      })
       .finally(() => setCargando(false));
-  }, [desde, hasta]);
+  }, [fechaInicio, fechaFin, productoId, vendedorId, rol]);
 
-  const serieVentas = useMemo(() => {
-    return [...ventasFecha]
-      .map((d) => ({
+  useEffect(() => {
+    api
+      .get('/productos', { params: { limit: 100 } })
+      .then((r) => setProductos(comoArreglo<Opcion>(r.data)))
+      .catch(() => setProductos([]));
+
+    if (rol === 'admin') {
+      api
+        .get('/usuarios/vendedores')
+        .then((r) => setVendedores(comoArreglo<Opcion>(r.data)))
+        .catch(() => setVendedores([]));
+    }
+  }, [rol]);
+
+  const serieLineas = useMemo<PuntoLinea[]>(
+    () =>
+      ventas.map((d) => ({
         fecha: String(d.fecha).slice(0, 10),
-        etiqueta: String(d.fecha).slice(8, 10),
+        etiqueta: String(d.fecha).slice(5, 10),
         valor: Number(d.total_vendido || 0),
         pedidos: Number(d.total_pedidos || 0),
-      }))
-      .sort((a, b) => a.fecha.localeCompare(b.fecha));
-  }, [ventasFecha]);
+      })),
+    [ventas],
+  );
 
-  const totalesVentas = useMemo(() => {
-    return ventasFecha.reduce(
-      (acc, d) => ({
-        vendido: acc.vendido + Number(d.total_vendido || 0),
-        pedidos: acc.pedidos + Number(d.total_pedidos || 0),
-        cancelados: acc.cancelados + Number(d.cancelados || 0),
-      }),
-      { vendido: 0, pedidos: 0, cancelados: 0 },
-    );
-  }, [ventasFecha]);
+  const totales = useMemo(
+    () =>
+      ventas.reduce(
+        (acc, d) => ({
+          ingresos: acc.ingresos + Number(d.total_vendido || 0),
+          pedidos: acc.pedidos + Number(d.total_pedidos || 0),
+          unidades: acc.unidades + Number(d.unidades_vendidas || 0),
+        }),
+        { ingresos: 0, pedidos: 0, unidades: 0 },
+      ),
+    [ventas],
+  );
 
-  const filtrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) {
-      return {
-        productos,
-        categorias,
-        inventario,
-        clientes,
-      };
+  const ticketPromedio = totales.pedidos
+    ? totales.ingresos / totales.pedidos
+    : 0;
+
+  const paginas = Math.max(1, Math.ceil(ventas.length / POR_PAGINA));
+  const filaInicio = (pagina - 1) * POR_PAGINA;
+  const filasPagina = ventas.slice(filaInicio, filaInicio + POR_PAGINA);
+
+  const rangoTexto = `${fechaInicio || 'inicio'} al ${fechaFin || 'hoy'}`;
+
+  const resumenTexto = useMemo(() => {
+    const lineas = [
+      '📊 *RESUMEN EJECUTIVO — PROLIMAC SRL*',
+      `Período: ${rangoTexto}`,
+      `Ingresos totales: ${formatCurrency(totales.ingresos)}`,
+      `Utilidad bruta estimada: ${formatCurrency(ganancias?.utilidad_bruta || 0)}`,
+      `Margen: ${Number(ganancias?.margen_porcentual || 0).toFixed(2)}%`,
+      `Pedidos: ${totales.pedidos}`,
+      `Ticket promedio: ${formatCurrency(ticketPromedio)}`,
+      '',
+      'Top productos más vendidos:',
+      ...(top.masVendidos.length
+        ? top.masVendidos
+            .slice(0, 5)
+            .map(
+              (p, i) =>
+                `${i + 1}. ${p.nombre} — ${p.unidades_vendidas} uds. (${formatCurrency(p.ingresos)})`,
+            )
+        : ['Sin datos en el período.']),
+    ];
+    return lineas.join('\n');
+  }, [rangoTexto, totales, ganancias, ticketPromedio, top.masVendidos]);
+
+  const copiarResumen = async () => {
+    try {
+      await navigator.clipboard.writeText(resumenTexto);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = resumenTexto;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
     }
-    return {
-      productos: productos.filter((p) =>
-        p.nombre.toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q),
-      ),
-      categorias: categorias.filter((c) => c.nombre.toLowerCase().includes(q)),
-      inventario: inventario.filter((i) =>
-        i.nombre.toLowerCase().includes(q) || (i.categoria || '').toLowerCase().includes(q),
-      ),
-      clientes: clientes.filter((c) =>
-        c.nombre.toLowerCase().includes(q) || c.email.toLowerCase().includes(q),
-      ),
-    };
-  }, [busqueda, productos, categorias, inventario, clientes]);
-
-  const aplicarPreset = (desdeD: Date, hastaD: Date) => {
-    setDesde(aFechaISO(desdeD));
-    setHasta(aFechaISO(hastaD));
+    setCopiado(true);
+    window.setTimeout(() => setCopiado(false), 2200);
   };
 
-  const presets = useMemo(() => {
-    const hoyD = new Date();
-    const hacervicios = (dias: number) => {
-      const d = new Date(hoyD);
-      d.setDate(hoyD.getDate() - (dias - 1));
-      return d;
-    };
-    return {
-      '7 días': [hacervicios(7), hoyD],
-      '30 días': [hacervicios(30), hoyD],
-      'Este mes': [rangoMes().desde, rangoMes().hasta],
-    } as const;
+  const exportar = (tipo: string, nombre: string, conPDF = false) => {
+    const extra = `${fechaInicio ? `&desde=${fechaInicio}` : ''}${fechaFin ? `&hasta=${fechaFin}` : ''}`;
+    const url = conPDF
+      ? `/reportes/exportar/pdf?tipo=${tipo}${extra}`
+      : `/reportes/exportar/csv?tipo=${tipo}${extra}`;
+    apiFetchBlob(url)
+      .then((blob) => {
+        const enlace = document.createElement('a');
+        enlace.href = URL.createObjectURL(blob);
+        enlace.download = `${nombre}.${conPDF ? 'pdf' : 'csv'}`;
+        document.body.appendChild(enlace);
+        enlace.click();
+        document.body.removeChild(enlace);
+        URL.revokeObjectURL(enlace.href);
+      })
+      .catch(() => alert('No se pudo descargar el archivo'));
+  };
+
+  const cargarHistorial = useCallback((paginaHistorial: number) => {
+    api
+      .get<RespuestaHistorial>('/notificaciones/historial', {
+        params: { page: paginaHistorial, limit: 5 },
+      })
+      .then((r) => setHistorial(r.data))
+      .catch(() =>
+        setHistorial({ data: [], total: 0, page: 1, limit: 5 }),
+      );
   }, []);
 
-  const paramActivos = hasta && desde ? `&desde=${desde}&hasta=${hasta}` : '';
-  const exportar = (tipo: string, nombre: string, conPDF?: boolean) => {
-    const base = `/reportes/exportar/csv?tipo=${tipo}${paramActivos}`;
-    if (conPDF) {
-      descargar(`/reportes/exportar/pdf?tipo=${tipo}${paramActivos}`, `${nombre}.pdf`, setDescargando);
-    } else {
-      descargar(base, `${nombre}.csv`, setDescargando);
+  useEffect(() => {
+    if (historialAbierto) cargarHistorial(historialPagina);
+  }, [historialAbierto, historialPagina, cargarHistorial]);
+
+  const enviarReporteWhatsapp = async () => {
+    // Abrimos la pestaña dentro del click: tras un `await` los navegadores
+    // bloquean window.open por perder la activación del usuario.
+    const ventana = window.open('', '_blank');
+    if (ventana) ventana.opener = null;
+
+    setEnviandoWhatsapp(true);
+    try {
+      const { data } = await api.post<RespuestaWhatsapp>(
+        '/notificaciones/whatsapp/reporte',
+        {
+          fechaInicio: fechaInicio || undefined,
+          fechaFin: fechaFin || undefined,
+        },
+      );
+
+      if (data.urlWhatsapp) {
+        if (ventana) ventana.location.href = data.urlWhatsapp;
+        else window.open(data.urlWhatsapp, '_blank', 'noopener,noreferrer');
+      } else {
+        ventana?.close();
+      }
+
+      const fallo = data.registro?.estado === 'ERROR';
+      setToast({
+        id: Date.now(),
+        tipo: fallo ? 'error' : 'exito',
+        mensaje: fallo
+          ? data.error || 'No se pudo enviar el reporte por WhatsApp.'
+          : data.modo === 'LINK'
+            ? 'Enlace de WhatsApp abierto. El envío quedó registrado.'
+            : 'Reporte enviado por WhatsApp.',
+      });
+      setHistorialPagina(1);
+      cargarHistorial(1);
+    } catch {
+      ventana?.close();
+      setToast({
+        id: Date.now(),
+        tipo: 'error',
+        mensaje: 'No se pudo generar el reporte para WhatsApp.',
+      });
+    } finally {
+      setEnviandoWhatsapp(false);
     }
   };
+
+  const kpis = [
+    {
+      etiqueta: 'Ingresos totales',
+      valor: formatCurrency(totales.ingresos),
+      detalle: `${totales.unidades} unidades vendidas`,
+    },
+    {
+      etiqueta: 'Utilidad neta estimada',
+      valor: formatCurrency(ganancias?.utilidad_bruta || 0),
+      detalle: `Margen ${Number(ganancias?.margen_porcentual || 0).toFixed(2)}%`,
+    },
+    {
+      etiqueta: 'Total de pedidos',
+      valor: String(totales.pedidos),
+      detalle: `${ventas.length} días con ventas`,
+    },
+    {
+      etiqueta: 'Ticket promedio',
+      valor: formatCurrency(ticketPromedio),
+      detalle: 'Por pedido concretado',
+    },
+  ];
 
   return (
     <div className="pb-10">
-      <section className="mb-8">
-        <Link href="/admin" className="text-xs font-bold uppercase tracking-[0.14em] text-prolimal-teal-700 hover:underline dark:text-prolimal-teal-300">
-          ← Panel admin
-        </Link>
-        <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
-          Reportes
-        </h2>
-        <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
-          Ventas, ganancias, inventario y clientes con exportación.
-        </p>
+      <section className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Link
+            href="/admin"
+            className="text-xs font-bold uppercase tracking-[0.14em] text-prolimal-teal-700 hover:underline dark:text-prolimal-teal-300"
+          >
+            ← Panel admin
+          </Link>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Reportes ejecutivos
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            Ventas, rentabilidad y ranking de productos en el período seleccionado.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={copiarResumen}
+            className="inline-flex items-center gap-2 rounded-full border border-prolimal-ink-900/10 bg-card px-5 py-3 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:text-prolimal-sand-100"
+          >
+            {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copiado ? 'Resumen copiado' : 'Copiar resumen'}
+          </button>
+          <button
+            onClick={enviarReporteWhatsapp}
+            disabled={enviandoWhatsapp}
+            className="inline-flex items-center gap-2 rounded-full bg-prolimal-teal-700 px-5 py-3 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-60 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900"
+          >
+            <MessageCircle className="h-4 w-4" />
+            {enviandoWhatsapp ? 'Enviando...' : 'Enviar reporte por WhatsApp'}
+          </button>
+        </div>
       </section>
 
+      {/* Barra de filtros */}
       <div className="mb-6 rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-4">
           <label className="block">
-            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Desde</span>
+            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+              Fecha inicio
+            </span>
             <input
               type="date"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
+              value={fechaInicio}
+              onChange={(e) => setFechaInicio(e.target.value)}
               className="prolimal-input"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Hasta</span>
+            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+              Fecha fin
+            </span>
             <input
               type="date"
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
+              value={fechaFin}
+              onChange={(e) => setFechaFin(e.target.value)}
               className="prolimal-input"
             />
           </label>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(presets).map(([etiqueta, [desdeD, hastaD]]) => (
-              <button
-                key={etiqueta}
-                onClick={() => aplicarPreset(desdeD, hastaD)}
-                className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2.5 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
-              >
-                {etiqueta}
-              </button>
-            ))}
-            <button
-              onClick={() => { setDesde(''); setHasta(''); }}
-              className="prolimal-btn-ghost px-4 py-2.5 text-xs"
+          <label className="block">
+            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+              Producto
+            </span>
+            <select
+              value={productoId}
+              onChange={(e) => setProductoId(e.target.value)}
+              className="prolimal-input"
             >
-              Todo
-            </button>
-          </div>
-          {!desde && !hasta && (
-            <span className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin filtro de fechas (todo el historial)</span>
+              <option value="">Todos los productos</option>
+              {productos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          {rol === 'admin' && (
+            <label className="block">
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                Vendedor
+              </span>
+              <select
+                value={vendedorId}
+                onChange={(e) => setVendedorId(e.target.value)}
+                className="prolimal-input"
+              >
+                <option value="">Todos los vendedores</option>
+                {vendedores.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-        </div>
-      </div>
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        {SECCIONES.map((s) => (
           <button
-            key={s.id}
-            onClick={() => setSeccion(s.id)}
-            className={`rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
-              seccion === s.id
-                ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
-                : 'border border-prolimal-ink-900/10 bg-white text-prolimal-ink-600 hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700'
-            }`}
+            onClick={() => {
+              setFechaInicio(aFechaISO(rangoMes().desde));
+              setFechaFin(aFechaISO(new Date()));
+              setProductoId('');
+              setVendedorId('');
+            }}
+            className="prolimal-btn-ghost px-4 py-2.5 text-xs"
           >
-            {s.etiqueta}
+            Limpiar filtros
           </button>
-        ))}
-      </div>
-
-      {(seccion === 'producto' || seccion === 'categoria' || seccion === 'inventario' || seccion === 'clientes') && (
-        <div className="relative mb-6 w-full max-w-sm">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar..."
-            className="prolimal-search-input"
-          />
         </div>
-      )}
+        <p className="mt-3 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          Período activo: {rangoTexto}
+          {rol === 'ventas' && ' · Solo tus propias ventas'}
+        </p>
+      </div>
 
       {cargando ? (
         <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
           Cargando reportes...
         </div>
       ) : (
-        <div>
-          {seccion === 'ventas' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {[
-                  { label: 'Total vendido', value: formatCurrency(totalesVentas.vendido) },
-                  { label: 'Pedidos', value: totalesVentas.pedidos },
-                  { label: 'Cancelados', value: totalesVentas.cancelados },
-                ].map(({ label, value }) => (
-                  <div key={label} className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
-                    <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
-                  </div>
-                ))}
+        <>
+          {/* KPIs */}
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {kpis.map((kpi) => (
+              <div
+                key={kpi.etiqueta}
+                className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  {kpi.etiqueta}
+                </p>
+                <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                  {kpi.valor}
+                </p>
+                <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  {kpi.detalle}
+                </p>
               </div>
+            ))}
+          </div>
 
-              <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
-                    Ventas por día ·{' '}
-                    <span className="font-semibold normal-case tracking-normal text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                      {desde || 'inicio'} al {hasta || 'hoy'}
-                    </span>
-                  </h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => exportar('ventas-por-fecha', 'ventas-por-fecha')}
-                      disabled={descargando}
-                      className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
-                    >
-                      CSV
-                    </button>
-                    <button
-                      onClick={() => exportar('ventas-por-fecha', 'ventas-por-fecha', true)}
-                      disabled={descargando}
-                      className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300"
-                    >
-                      PDF
-                    </button>
-                  </div>
-                </div>
-                {serieVentas.length > 0 ? (
-                  <div className="text-prolimal-ink-900 dark:text-prolimal-sand-50">
-                    <GraficoBarras datos={serieVentas} />
-                  </div>
+          {/* Gráficas */}
+          <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+              <h3 className="mb-4 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
+                Evolución de ventas · {rangoTexto}
+              </h3>
+              <div className="text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                {serieLineas.length ? (
+                  <GraficoLineasVentas datos={serieLineas} />
                 ) : (
-                  <p className="py-10 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin ventas en el período.</p>
+                  <p className="py-10 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Sin ventas en el período.
+                  </p>
                 )}
               </div>
-
-              <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-                <div className="border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
-                  <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Detalle por día</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px]">
-                    <thead>
-                      <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
-                        <th className={th}>Fecha</th>
-                        <th className={th}>Pedidos</th>
-                        <th className={th}>Cancelados</th>
-                        <th className={th}>Total vendido</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ventasFecha.map((d) => (
-                        <tr key={String(d.fecha)} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
-                          <td className={td}>{new Date(String(d.fecha).slice(0, 10)).toLocaleDateString()}</td>
-                          <td className={td}>{d.total_pedidos}</td>
-                          <td className={td}>{d.cancelados}</td>
-                          <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(d.total_vendido))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
-          )}
 
-          {seccion === 'ganancias' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {[
-                  { label: 'Ingresos', value: formatCurrency(Number(ganancias?.ingresos || 0)), tono: 'text-prolimal-ink-900 dark:text-prolimal-sand-50' },
-                  { label: 'Costo', value: formatCurrency(Number(ganancias?.costo || 0)), tono: 'text-prolimal-ink-900 dark:text-prolimal-sand-50' },
-                  { label: 'Ganancia', value: formatCurrency(Number(ganancias?.ganancia || 0)), tono: 'text-prolimal-teal-700 dark:text-prolimal-teal-300' },
-                ].map(({ label, value, tono }) => (
-                  <div key={label} className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
-                    <p className={`mt-1 text-2xl font-extrabold tracking-[-0.04em] ${tono}`}>{value}</p>
-                  </div>
-                ))}
+            <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+              <h3 className="mb-4 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
+                Top productos más vendidos
+              </h3>
+              <div className="text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                <GraficoBarrasHorizontales
+                  datos={top.masVendidos.map((p) => ({
+                    etiqueta: p.nombre,
+                    valor: p.ingresos,
+                    detalle: `${p.unidades_vendidas} unidades`,
+                  }))}
+                />
               </div>
-
-              <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
-                    Resumen de ganancias ·{' '}
-                    <span className="font-semibold normal-case tracking-normal text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                      {desde || 'inicio'} al {hasta || 'hoy'}
-                    </span>
-                  </h3>
-                  <button
-                    onClick={() => exportar('ganancias', 'ganancias', true)}
-                    disabled={descargando}
-                    className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300"
-                  >
-                    PDF
-                  </button>
-                </div>
-                {!ganancias || (Number(ganancias.ingresos) === 0 && Number(ganancias.ganancia) === 0) ? (
-                  <p className="py-10 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin ventas en el período.</p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {[
-                      ['Ingresos', Number(ganancias.ingresos)],
-                      ['Costo', Number(ganancias.costo)],
-                      ['Ganancia', Number(ganancias.ganancia)],
-                    ].map(([label, valor]) => (
-                      <div key={label as string} className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label as string}</p>
-                        <p className="mt-1 text-xl font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(valor as number)}</p>
+              {top.masRentables.length > 0 && (
+                <div className="mt-5 border-t border-prolimal-ink-900/5 pt-4 dark:border-prolimal-sand-100/10">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Más rentables (utilidad)
+                  </p>
+                  <div className="space-y-1.5">
+                    {top.masRentables.slice(0, 4).map((p) => (
+                      <div
+                        key={p.producto_id}
+                        className="flex items-center justify-between gap-3 text-xs"
+                      >
+                        <span className="truncate font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">
+                          {p.nombre}
+                        </span>
+                        <span className="shrink-0 font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                          {formatCurrency(p.utilidad)} · {p.margen_porcentual.toFixed(1)}%
+                        </span>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
-          {seccion === 'producto' && (
-            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
-                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Ventas por producto</h3>
+          {/* Tabla de detalle */}
+          <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+              <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
+                Detalle de ventas filtradas
+              </h3>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => exportar('ventas-por-producto', 'ventas-por-producto')}
-                  disabled={descargando}
-                  className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
+                  onClick={() => exportar('ventas-por-fecha', 'ventas-por-fecha')}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 hover:bg-prolimal-sand-200 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100"
                 >
-                  CSV
+                  <Download className="h-3.5 w-3.5" /> CSV
+                </button>
+                <button
+                  onClick={() => exportar('ventas-por-fecha', 'ventas-por-fecha', true)}
+                  className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white hover:bg-prolimal-ink-900 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900"
+                >
+                  PDF
                 </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
-                  <thead>
-                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
-                      <th className={th}>Producto</th>
-                      <th className={th}>Categoría</th>
-                      <th className={th}>Precio</th>
-                      <th className={th}>Unidades</th>
-                      <th className={th}>Ingresos</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtrados.productos.map((p) => (
-                      <tr key={p.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
-                        <td className={`${td} font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50`}>{p.nombre}</td>
-                        <td className={td}>{p.categoria || '—'}</td>
-                        <td className={td}>{formatCurrency(Number(p.precio))}</td>
-                        <td className={td}>{p.unidades_vendidas}</td>
-                        <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(p.total_ingresos))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
-          )}
 
-          {seccion === 'categoria' && (
-            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
-                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Ventas por categoría</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
+                    <th className={th}>Fecha</th>
+                    <th className={th}>Pedidos</th>
+                    <th className={th}>Unidades</th>
+                    <th className={th}>Total vendido</th>
+                    <th className={th}>Ticket promedio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasPagina.map((d) => (
+                    <tr
+                      key={String(d.fecha)}
+                      className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5"
+                    >
+                      <td className={td}>
+                        {new Date(String(d.fecha).slice(0, 10)).toLocaleDateString()}
+                      </td>
+                      <td className={td}>{Number(d.total_pedidos)}</td>
+                      <td className={td}>{Number(d.unidades_vendidas)}</td>
+                      <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>
+                        {formatCurrency(Number(d.total_vendido))}
+                      </td>
+                      <td className={td}>{formatCurrency(Number(d.ticket_promedio))}</td>
+                    </tr>
+                  ))}
+                  {filasPagina.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-10 text-center text-sm text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        Sin datos para los filtros seleccionados.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+              <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                Página {pagina} de {paginas}
+              </p>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => exportar('ventas-por-categoria', 'ventas-por-categoria')}
-                  disabled={descargando}
-                  className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
+                  onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                  disabled={pagina <= 1}
+                  className="rounded-full border border-prolimal-ink-900/10 p-2 text-prolimal-ink-600 disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-100"
+                  aria-label="Página anterior"
                 >
-                  CSV
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setPagina((p) => Math.min(paginas, p + 1))}
+                  disabled={pagina >= paginas}
+                  className="rounded-full border border-prolimal-ink-900/10 p-2 text-prolimal-ink-600 disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-100"
+                  aria-label="Página siguiente"
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px]">
-                  <thead>
-                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
-                      <th className={th}>Categoría</th>
-                      <th className={th}>Unidades</th>
-                      <th className={th}>Ingresos</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtrados.categorias.map((c) => (
-                      <tr key={c.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
-                        <td className={`${td} font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50`}>{c.nombre}</td>
-                        <td className={td}>{c.unidades_vendidas}</td>
-                        <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(c.total_ingresos))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
-          )}
+          </div>
 
-          {seccion === 'inventario' && (
-            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
-                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Inventario actual</h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => exportar('inventario', 'inventario')}
-                    disabled={descargando}
-                    className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
-                  >
-                    CSV
-                  </button>
-                  <button
-                    onClick={() => exportar('inventario', 'inventario', true)}
-                    disabled={descargando}
-                    className="rounded-full bg-prolimal-teal-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300"
-                  >
-                    PDF
-                  </button>
+          {/* Historial de notificaciones de WhatsApp */}
+          <div className="mt-6 overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+            <button
+              onClick={() => setHistorialAbierto((abierto) => !abierto)}
+              className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left"
+              aria-expanded={historialAbierto}
+            >
+              <span className="flex flex-wrap items-center gap-2 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
+                <MessageCircle className="h-4 w-4" />
+                Historial de notificaciones
+                <span className="rounded-full bg-prolimal-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
+                  {historial.total}
+                </span>
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-prolimal-ink-400 transition-transform dark:text-prolimal-ink-300 ${historialAbierto ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {historialAbierto && (
+              <div className="border-t border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px]">
+                    <thead>
+                      <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
+                        <th className={th}>Fecha</th>
+                        <th className={th}>Tipo</th>
+                        <th className={th}>Destinatario</th>
+                        <th className={th}>Estado</th>
+                        <th className={th}>Vista previa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historial.data.map((n) => (
+                        <tr
+                          key={n.id}
+                          className="border-b border-prolimal-ink-900/5 align-top last:border-0 dark:border-prolimal-sand-100/5"
+                        >
+                          <td className={td}>
+                            {new Date(n.creado_en).toLocaleString()}
+                          </td>
+                          <td className={td}>{n.tipo.replace('_', ' ')}</td>
+                          <td className={td}>
+                            {n.destinatario_telefono || 'Sin número fijo'}
+                          </td>
+                          <td className={td}>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ${
+                                n.estado === 'ERROR'
+                                  ? 'bg-prolimal-red-100 text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300'
+                                  : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
+                              }`}
+                            >
+                              {n.estado}
+                            </span>
+                          </td>
+                          <td className={`${td} max-w-md`}>
+                            <p className="line-clamp-2 whitespace-pre-line text-xs font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">
+                              {n.mensaje}
+                            </p>
+                          </td>
+                        </tr>
+                      ))}
+                      {historial.data.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-4 py-10 text-center text-sm text-prolimal-ink-400 dark:text-prolimal-ink-300"
+                          >
+                            Aún no hay notificaciones registradas.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between border-t border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    {historial.total} registros · Página {historial.page}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        setHistorialPagina((p) => Math.max(1, p - 1))
+                      }
+                      disabled={historialPagina <= 1}
+                      className="rounded-full border border-prolimal-ink-900/10 p-2 text-prolimal-ink-600 disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-100"
+                      aria-label="Página anterior del historial"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setHistorialPagina((p) => p + 1)}
+                      disabled={
+                        historialPagina * historial.limit >= historial.total
+                      }
+                      className="rounded-full border border-prolimal-ink-900/10 p-2 text-prolimal-ink-600 disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-100"
+                      aria-label="Página siguiente del historial"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px]">
-                  <thead>
-                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
-                      <th className={th}>Producto</th>
-                      <th className={th}>Categoría</th>
-                      <th className={th}>Stock</th>
-                      <th className={th}>Mínimo</th>
-                      <th className={th}>Costo</th>
-                      <th className={th}>Precio venta</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtrados.inventario.map((i) => (
-                      <tr key={i.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
-                        <td className={`${td} font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50`}>{i.nombre}</td>
-                        <td className={td}>{i.categoria || '—'}</td>
-                        <td className={td}>
-                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-[0.05em] ${
-                            i.cantidad <= i.cantidad_minima
-                              ? 'bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300'
-                              : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
-                          }`}>
-                            {i.cantidad}
-                          </span>
-                        </td>
-                        <td className={td}>{i.cantidad_minima}</td>
-                        <td className={td}>{formatCurrency(Number(i.precio_costo || 0))}</td>
-                        <td className={`${td} font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50`}>{formatCurrency(Number(i.precio))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {seccion === 'clientes' && (
-            <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
-                <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Clientes frecuentes</h3>
-                <button
-                  onClick={() => exportar('clientes', 'clientes')}
-                  disabled={descargando}
-                  className="rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-100 px-4 py-2 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-200 disabled:opacity-50 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
-                >
-                  CSV
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px]">
-                  <thead>
-                    <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
-                      <th className={th}>Cliente</th>
-                      <th className={th}>Compras</th>
-                      <th className={th}>Total gastado</th>
-                      <th className={th}>Última compra</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtrados.clientes.map((c) => (
-                      <tr key={c.id} className="border-b border-prolimal-ink-900/5 last:border-0 dark:border-prolimal-sand-100/5">
-                        <td className={td}>
-                          <p className="font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{c.nombre}</p>
-                          <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{c.email}</p>
-                        </td>
-                        <td className={td}>{c.total_compras}</td>
-                        <td className={`${td} font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300`}>{formatCurrency(Number(c.total_gastado))}</td>
-                        <td className={td}>
-                          {c.ultima_compra ? new Date(c.ultima_compra).toLocaleDateString() : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </>
       )}
+
+      <ToastNotificacion toast={toast} onClose={cerrarToast} />
     </div>
   );
 }

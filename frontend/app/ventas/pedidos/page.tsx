@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { ChevronDown, MapPin } from 'lucide-react';
+import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface Pedido {
   id: number;
@@ -163,6 +164,9 @@ cargar(); // eslint-disable-line react-hooks/set-state-in-effect
                   </option>
                 ))}
               </select>
+              <div className="mt-3">
+                <BotonComprobantePdf pedidoId={p.id} label="Comprobante PDF" compacta />
+              </div>
             </article>
           ))}
         </div>

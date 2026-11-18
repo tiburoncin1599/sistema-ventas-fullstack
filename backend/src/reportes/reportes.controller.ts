@@ -7,7 +7,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ReportesService } from './reportes.service';
+import { ReportesService, FiltrosEfectivos } from './reportes.service';
+import { FiltroReportesDto } from './dto/filtro-reportes.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -59,18 +60,34 @@ function readImageSize(buf: Buffer): { width: number; height: number } | null {
   if (!logoBuffer) console.warn('[Reportes] No se encontró logo para marca de agua');
 })();
 
+// La nomenclatura real del sistema es `admin` / `ventas`
+// (equivalente a ADMIN / VENDEDOR en la documentación de tesis).
 @Controller('reportes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'ventas')
 export class ReportesController {
   constructor(private readonly reportesService: ReportesService) {}
 
+  /**
+   * Un usuario con rol `ventas` nunca puede consultar las ventas de otro:
+   * se fuerza su propio id aunque el cliente envíe `vendedorId`.
+   */
+  private filtrosDe(
+    req: Request,
+    filtros: FiltroReportesDto,
+  ): FiltrosEfectivos {
+    const user = req.user as { id: number; rol: string };
+    return {
+      fechaInicio: filtros.fechaInicio ?? filtros.desde,
+      fechaFin: filtros.fechaFin ?? filtros.hasta,
+      productoId: filtros.productoId,
+      vendedorId: user.rol === 'ventas' ? user.id : filtros.vendedorId,
+    };
+  }
+
   @Get('ventas-por-fecha')
-  ventasPorFecha(
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
-  ) {
-    return this.reportesService.ventasPorFecha(desde, hasta);
+  ventasPorFecha(@Req() req: Request, @Query() filtros: FiltroReportesDto) {
+    return this.reportesService.ventasPorFecha(this.filtrosDe(req, filtros));
   }
 
   @Get('ventas-personal-por-dia')
@@ -113,11 +130,13 @@ export class ReportesController {
   }
 
   @Get('ganancias')
-  ganancias(
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
-  ) {
-    return this.reportesService.ganancias(desde, hasta);
+  ganancias(@Req() req: Request, @Query() filtros: FiltroReportesDto) {
+    return this.reportesService.ganancias(this.filtrosDe(req, filtros));
+  }
+
+  @Get('top-productos')
+  topProductos(@Req() req: Request, @Query() filtros: FiltroReportesDto) {
+    return this.reportesService.topProductos(this.filtrosDe(req, filtros));
   }
 
   @Get('inventario')
@@ -155,13 +174,30 @@ export class ReportesController {
 
     switch (tipo) {
       case 'ventas-por-fecha':
-        data = await this.reportesService.ventasPorFecha(desde, hasta);
+        data = await this.reportesService.ventasPorFecha({
+          fechaInicio: desde,
+          fechaFin: hasta,
+        });
         titulo = 'Reporte de Ventas por Fecha';
         break;
       case 'ganancias':
-        data = await this.reportesService.ganancias(desde, hasta);
+        data = [
+          await this.reportesService.ganancias({
+            fechaInicio: desde,
+            fechaFin: hasta,
+          }),
+        ];
         titulo = 'Reporte de Ganancias';
         break;
+      case 'top-productos': {
+        const top = await this.reportesService.topProductos({
+          fechaInicio: desde,
+          fechaFin: hasta,
+        });
+        data = top.masVendidos as unknown as Record<string, unknown>[];
+        titulo = 'Reporte de Top Productos';
+        break;
+      }
       case 'inventario':
         data = await this.reportesService.inventarioActual();
         titulo = 'Reporte de Inventario';

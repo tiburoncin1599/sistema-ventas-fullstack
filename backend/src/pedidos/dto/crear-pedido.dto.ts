@@ -42,6 +42,12 @@ export class CrearPedidoDto {
   @IsIn(['contado', 'credito'])
   tipoPago?: string;
 
+  /** Abono al momento de la venta; si es menor al total se registra deuda. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  montoPagado?: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ItemPedidoDto)

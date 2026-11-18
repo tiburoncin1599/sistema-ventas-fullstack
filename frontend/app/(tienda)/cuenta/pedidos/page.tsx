@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Package } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface Pedido {
   id: number;
@@ -137,14 +138,17 @@ export default function MisPedidos() {
                   <p className="text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
                     {formatCurrency(pedido.total)}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => descargarFactura(pedido.id)}
-                    className="prolimal-btn-secondary px-5 py-2.5"
-                  >
-                    <Download className="h-4 w-4" />
-                    Descargar factura
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => descargarFactura(pedido.id)}
+                      className="prolimal-btn-secondary px-5 py-2.5"
+                    >
+                      <Download className="h-4 w-4" />
+                      Descargar factura
+                    </button>
+                    <BotonComprobantePdf pedidoId={pedido.id} label="Comprobante PDF" compacta />
+                  </div>
                 </div>
               </article>
             ))}

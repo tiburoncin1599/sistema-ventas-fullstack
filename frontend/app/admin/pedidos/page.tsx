@@ -5,6 +5,7 @@ import { api, API_URL, apiFetchBlob } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QrCode, Search, Trash2, X } from 'lucide-react';
+import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface Pedido {
   id: number;
@@ -200,6 +201,7 @@ export default function AdminPedidos() {
                   >
                     Ver detalle
                   </button>
+                  <BotonComprobantePdf pedidoId={pedido.id} label="PDF" compacta />
                 </div>
               </div>
             </motion.div>

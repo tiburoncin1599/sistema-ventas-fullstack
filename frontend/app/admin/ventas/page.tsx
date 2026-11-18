@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import GraficoBarras from '@/components/charts/GraficoBarras';
 import { ClipboardList, TrendingUp, Users } from 'lucide-react';
+import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface VentaPersonal {
   usuario_id: number;
@@ -228,6 +229,7 @@ export default function AdminVentas() {
                     'bg-prolimal-sand-200 text-prolimal-sand-800 dark:bg-prolimal-sand-900/30 dark:text-prolimal-sand-200'
                   }`}>{p.estado}</span>
                   <p className="text-sm font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">{formatCurrency(p.total)}</p>
+                  <BotonComprobantePdf pedidoId={p.id} label="PDF" compacta />
                 </div>
               </div>
             ))}

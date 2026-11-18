@@ -11,6 +11,7 @@ import {
   Res,
   Req,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PedidosService } from './pedidos.service';
@@ -22,12 +23,13 @@ import { AsignarVendedorDto } from './dto/asignar-vendedor.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { AuditService } from '../audit/audit.service';
 import { ROLES } from '../auth/roles.constant';
+import { type AuditorPedido } from './pedidos.service';
 import { Response, Request } from 'express';
 import * as QRCode from 'qrcode';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { FacturaService } from './factura.service';
+import { ComprobantesService } from '../comprobantes/comprobantes.service';
 
 @Controller('pedidos')
 export class PedidosController {
@@ -36,8 +38,19 @@ export class PedidosController {
     private readonly configuracionService: ConfiguracionService,
     private readonly facturaService: FacturaService,
     private readonly jwtService: JwtService,
-    private readonly auditService: AuditService,
+    private readonly comprobantesService: ComprobantesService,
   ) {}
+
+  /** Datos del ejecutor que se persisten dentro de la transacción. */
+  private auditor(req: Request): AuditorPedido {
+    const user = req.user as { id: number; rol: string; nombre?: string };
+    return {
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+      usuario_nombre: user.nombre,
+      ip: req.ip,
+    };
+  }
 
   /** Cliente: solo sus pedidos. Vendedor: solo los pedidos que le fueron asignados. */
   private async verificarAcceso(pedidoId: number, user: { id: number; rol: string }) {
@@ -193,6 +206,40 @@ export class PedidosController {
     return { qr, pdf_url: pdfUrl, pedido_id: id };
   }
 
+  /**
+   * Comprobante comercial interno en PDF (inline, nunca como factura fiscal).
+   * Acceso: admin, vendedor asignado o cliente dueño del pedido.
+   */
+  @Get(':id/comprobante-pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.VENTAS, ROLES.CLIENTE)
+  async comprobantePdf(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      await this.verificarAcceso(+id, req.user as { id: number; rol: string });
+      const pdfBuffer = await this.comprobantesService.generarComprobantePDF(+id);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="comprobante-${id}.pdf"`,
+      );
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      res.end(pdfBuffer);
+    } catch (err) {
+      if (!res.headersSent) {
+        const http = err as HttpException;
+        const status = typeof http.getStatus === 'function' ? http.getStatus() : 500;
+        const body = typeof http.getResponse === 'function'
+          ? http.getResponse()
+          : { statusCode: status, message: 'Error al generar el comprobante PDF' };
+        res.status(status).json(body);
+      }
+    }
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard)
   async crear(@Body() body: CrearPedidoDto, @Req() req: Request) {
@@ -200,27 +247,23 @@ export class PedidosController {
     const usuarioId = user.rol === 'cliente' ? user.id : body.usuarioId || user.id;
     const procesadoPor = user.rol === 'cliente' ? undefined : body.procesadoPor || user.id;
     const tipoPago = user.rol === 'cliente' ? undefined : body.tipoPago;
-    this.pedidosService.crear(
+    const montoPagado = user.rol === 'cliente' ? undefined : body.montoPagado;
+
+    const pedido = await this.pedidosService.crear(
       usuarioId,
       body.direccion,
       body.items,
       body.notas,
       procesadoPor,
       tipoPago,
+      montoPagado,
+      this.auditor(req),
     );
-    await this.auditService.registrar({
-      accion: 'crear',
-      entidad: 'pedido',
-      entidad_id: usuarioId,
-      valor_nuevo: {
-        usuario_id: usuarioId,
-        total: body.items.reduce((sum, i) => sum + i.cantidad * i.precio, 0),
-        estado: 'pendiente',
-      },
-      usuario_id: user.id,
-      usuario_rol: user.rol,
-    });
-    return { mensaje: 'Pedido creado correctamente' };
+    return {
+      mensaje: 'Pedido creado correctamente',
+      id: pedido.id,
+      pedidoId: pedido.id,
+    };
   }
 
   @Get('ventas/personal')
@@ -251,20 +294,12 @@ export class PedidosController {
     @Body() body: ActualizarEstadoDto,
     @Req() req: Request,
   ) {
-    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    const pedido = await this.pedidosService.findOne(+id);
-    const estadoAnterior = pedido.estado;
-    this.pedidosService.actualizarEstado(+id, body.estado);
-    await this.auditService.registrar({
-      accion: 'modificar_estado',
-      entidad: 'pedido',
-      entidad_id: +id,
-      valor_anterior: { estado: estadoAnterior },
-      valor_nuevo: { estado: body.estado },
-      usuario_id: user.id,
-      usuario_rol: user.rol,
-    });
+    await this.pedidosService.actualizarEstado(
+      +id,
+      body.estado,
+      this.auditor(req),
+    );
     return this.pedidosService.findOne(+id);
   }
 
@@ -272,27 +307,24 @@ export class PedidosController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async eliminar(@Param('id') id: string, @Req() req: Request) {
-    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    const pedido = await this.pedidosService.findOne(+id);
-    this.pedidosService.eliminar(+id);
-    await this.auditService.registrar({
-      accion: 'eliminar',
-      entidad: 'pedido',
-      entidad_id: +id,
-      valor_anterior: { estado: pedido.estado, total: pedido.total },
-      valor_nuevo: { estado: 'cancelado' },
-      usuario_id: user.id,
-      usuario_rol: user.rol,
-    });
+    await this.pedidosService.eliminar(+id, this.auditor(req));
     return { mensaje: 'Pedido cancelado correctamente' };
   }
 
   @Put(':id/asignar-vendedor')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLES.ADMIN, ROLES.INVENTARIO)
-  asignarVendedor(@Param('id') id: string, @Body() body: AsignarVendedorDto) {
-    return this.pedidosService.asignarVendedor(+id, body.vendedorId);
+  async asignarVendedor(
+    @Param('id') id: string,
+    @Body() body: AsignarVendedorDto,
+    @Req() req: Request,
+  ) {
+    return this.pedidosService.asignarVendedor(
+      +id,
+      body.vendedorId,
+      this.auditor(req),
+    );
   }
 
   @Post(':id/items')
@@ -302,18 +334,12 @@ export class PedidosController {
     @Body() body: AgregarItemsDto,
     @Req() req: Request,
   ) {
-    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    this.pedidosService.agregarItems(+id, body.items);
-    await this.auditService.registrar({
-      accion: 'agregar_items',
-      entidad: 'pedido',
-      entidad_id: +id,
-      valor_anterior: { items: [] },
-      valor_nuevo: { items: body.items.length },
-      usuario_id: user.id,
-      usuario_rol: user.rol,
-    });
+    await this.pedidosService.agregarItems(
+      +id,
+      body.items,
+      this.auditor(req),
+    );
     return this.pedidosService.findOne(+id);
   }
 
@@ -325,7 +351,11 @@ export class PedidosController {
     @Req() req: Request,
   ) {
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    return this.pedidosService.eliminarItem(+id, +itemId);
+    return this.pedidosService.eliminarItem(
+      +id,
+      +itemId,
+      this.auditor(req),
+    );
   }
 
   @Put(':id/items/:itemId')
@@ -336,18 +366,13 @@ export class PedidosController {
     @Body() body: ActualizarItemDto,
     @Req() req: Request,
   ) {
-    const user = req.user as { id: number; rol: string };
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
-    this.pedidosService.actualizarItemCantidad(+id, +itemId, body.cantidad);
-    await this.auditService.registrar({
-      accion: 'actualizar_item',
-      entidad: 'pedido',
-      entidad_id: +id,
-      valor_anterior: { cantidad_anterior: body.cantidad - 10 }, // valor por defecto o se obtendría de la BD
-      valor_nuevo: { cantidad_nueva: body.cantidad },
-      usuario_id: user.id,
-      usuario_rol: user.rol,
-    });
+    await this.pedidosService.actualizarItemCantidad(
+      +id,
+      +itemId,
+      body.cantidad,
+      this.auditor(req),
+    );
     return this.pedidosService.findOne(+id);
   }
 }

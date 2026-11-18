@@ -47,6 +47,10 @@ export class Deuda {
   @Column({ nullable: true })
   descripcion?: string;
 
+  /** Pedido que originó la deuda (crédito o pago parcial). */
+  @Column({ type: 'integer', nullable: true })
+  pedido_id?: number | null;
+
   @Column({ default: 'pendiente' })
   estado!: string;
 

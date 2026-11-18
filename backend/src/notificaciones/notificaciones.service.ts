@@ -24,7 +24,8 @@ export class NotificacionesService {
     };
   }
 
-  private async stockBajo() {
+  /** Productos con existencia <= 10, reutilizado por el mensaje de WhatsApp. */
+  async stockBajo() {
     return this.dataSource.query(`
       SELECT
         i.id,

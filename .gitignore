@@ -28,3 +28,8 @@ Thumbs.db
 
 # Otros
 coverage/
+backups/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

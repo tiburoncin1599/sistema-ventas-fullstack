@@ -88,7 +88,7 @@ export default function AdminLayout({
       )}
 
       <aside
-        className={`h-screen sticky top-0 fixed bottom-0 left-0 z-50 w-[17rem] flex flex-col justify-between bg-prolimal-ink-900 text-prolimal-sand-50 shadow-[20px_0_60px_-40px_rgba(11,37,32,0.8)] transition-transform duration-300 ${
+        className={`fixed inset-y-0 left-0 z-50 w-[17rem] flex flex-col justify-between bg-prolimal-ink-900 text-prolimal-sand-50 shadow-[20px_0_60px_-40px_rgba(11,37,32,0.8)] transition-transform duration-300 ${
           sidebarColapsado ? 'md:-translate-x-full' : 'md:translate-x-0'
         } ${menuOpen ? 'translate-x-0' : '-translate-x-full'} dark:bg-prolimal-ink-900 dark:text-prolimal-sand-50`}
       >

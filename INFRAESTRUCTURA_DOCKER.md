@@ -245,4 +245,55 @@ El archivo `neon.sql` (dump de la base de datos) muestra que la tabla `migration
 La infraestructura Docker **está configurada y es coherente**, pero **no fue verificada ejecutándose**. Los componentes principales (DB, backend, frontend) tienen sus Dockerfiles y composición correcta, y las variables de entorno están documentadas. Se recomienda ejecutar `docker compose up -d` y verificar que todos los servicios queden en estado `healthy`.
 
 ---
-*Documento generado basado exclusivamente en archivos encontrados en el repositorio sistema-ventas-fullstack.*
+
+## 8. Actualización Sprint 5 — Producción y E2E
+
+Las secciones anteriores quedan como diagnóstico histórico. Estado actual:
+
+### Endurecimiento Docker
+- `restart: unless-stopped` en los 3 servicios.
+- Healthchecks: `pg_isready` (db), `wget /health` (backend) y `wget /` (frontend).
+- `depends_on` con `condition: service_healthy` para backend y frontend.
+- Volumen nombrado y aislado `sistema-ventas-fullstack_postgres_data` (nombre
+  explícito para no perder los datos ya existentes).
+- Variables inyectadas con `env_file: .env.production` en los 3 servicios.
+  Plantilla pública: `.env.production.example`.
+- `PORT` se define **por servicio** en compose (backend 3001 / frontend 3000):
+  si se pusiera en `.env.production`, se inyectaría en ambos y Next escucharía
+  en el puerto equivocado.
+- Se quitó el obsoleto `version: '3.9'` (aviso de Docker Compose v5).
+
+### Backup
+```bash
+# Desde la raíz del repo (en Windows, usar Git Bash)
+bash scripts/backup-db.sh
+# o: npm run backup:db
+```
+Ejecuta `pg_dump` **dentro** del contenedor `sistema_ventas_db`, comprime con
+gzip y guarda `backups/prolimac_sistema_ventas_YYYYMMDD_HHMMSS.sql.gz`.
+Aplica retención de `BACKUP_RETENTION_DAYS` (30 por defecto). Las variables se
+leen desde `.env.production` y pueden sobreescribirse por entorno.
+
+### Pruebas E2E
+```bash
+docker compose up -d --build
+cd frontend
+npm install
+npx playwright install chromium   # solo la primera vez
+npm run test:e2e
+npm run test:e2e:report
+```
+Detalle en `frontend/e2e/README.md`.
+
+### Limpieza E2E y edición de stock
+- `DELETE /productos/e2e` (solo `admin`) elimina en una transacción los productos
+  `E2E %`, su inventario, sus movimientos y los pedidos exclusivos de prueba.
+  Se usa en el `afterAll` de los specs y en un `globalTeardown` de seguridad.
+- Limpieza manual equivalente: `scripts/limpiar-e2e.sql`.
+- `PUT /productos/:id` acepta `stock` (o `cantidad`) entero `>= 0`. Si difiere
+  del stock actual, actualiza `inventario.cantidad` y registra el movimiento
+  `AJUSTE` con motivo `Ajuste manual desde edición de producto` en la misma
+  transacción. `/admin/productos` precarga y edita ese valor desde el modal.
+
+---
+*Documento generado basado exclusivamente en archivos encontrados en el repositorio sistema-ventas-fullstack; sección 8 añadida en Sprint 5.*

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Boxes, ClipboardList, Search, Tags, Wallet, Plus, Minus, CheckCircle, Edit } from 'lucide-react';
+import { AlertTriangle, Boxes, ClipboardList, Search, Tags, Wallet, Plus, Minus, CheckCircle, Edit, MessageCircle } from 'lucide-react';
+import ToastNotificacion, { type ToastDatos } from '@/components/ui/ToastNotificacion';
 
 interface ItemInventario {
   id: number;
@@ -64,7 +65,9 @@ export default function AdminInventario() {
   const [inventario, setInventario] = useState<ItemInventario[]>([]);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [modalModo, setModalModo] = useState<'entrada' | 'salida' | 'ajuste'>('ajuste');
-  const [modalCantidad, setModalCantidad] = useState(0);
+  const [modalProductoId, setModalProductoId] = useState(0);
+  const [modalProductoNombre, setModalProductoNombre] = useState('');
+  const [modalCantidad, setModalCantidad] = useState(1);
   const [modalObservacion, setModalObservacion] = useState('');
   const [modalError, setModalError] = useState<string>('');
   const [modalCargando, setModalCargando] = useState(false);
@@ -76,6 +79,9 @@ export default function AdminInventario() {
   const [asignandoId, setAsignandoId] = useState<number | null>(null);
   const [errorAsig, setErrorAsig] = useState('');
   const [alertasCount, setAlertasCount] = useState(0);
+  const [enviandoAlerta, setEnviandoAlerta] = useState(false);
+  const [toast, setToast] = useState<ToastDatos | null>(null);
+  const cerrarToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
     api.get('/inventario').then(res => setInventario(res.data)).catch(() => {});
@@ -159,12 +165,7 @@ export default function AdminInventario() {
               <div className="mt-2 flex gap-2">
                 {/* SOLO botón Ajustar - permite entrada, salida o ajuste */}
                 <button
-                  onClick={() => {
-                    setModalAbierto(true);
-                    setModalModo('ajuste');
-                    setModalCantidad(0);
-                    setModalObservacion('');
-                  }}
+                  onClick={() => handleModalOpen('ajuste', item)}
                   className="prolimal-btn-primary text-[10px] px-4 py-2 rounded-full border border-prolimal-teal-400 bg-prolimal-teal-100 text-prolimal-teal-800 transition-colors hover:bg-prolimal-teal-200 dark:border-prolimal-teal-600 dark:bg-prolimal-innk-800/70 dark:text-prolimal-teal-200 dark:hover:bg-prolimal-teal-300 flex items-center gap-2"
                   title="Registrar movimiento de stock (entrada/salida/ajuste)"
                 >
@@ -179,12 +180,19 @@ export default function AdminInventario() {
     </div>
   );
 
-  // Manejar abrir modal
-  const handleModalOpen = (modo: 'entrada' | 'salida' | 'ajuste') => {
+  // Manejar abrir modal: guardamos el producto de la fila para no enviar id 0.
+  const handleModalOpen = (
+    modo: 'entrada' | 'salida' | 'ajuste',
+    item?: ItemInventario,
+  ) => {
     setModalAbierto(true);
     setModalModo(modo);
-    setModalCantidad(0);
+    setModalProductoId(item?.producto_id ?? 0);
+    setModalProductoNombre(item?.producto?.nombre ?? '');
+    // En 'ajuste' la cantidad es el NUEVO stock; en entrada/salida es un delta.
+    setModalCantidad(modo === 'ajuste' ? Math.max(item?.cantidad ?? 1, 1) : 1);
     setModalObservacion('');
+    setModalError('');
   };
 
   const handleModalClose = () => {
@@ -193,33 +201,83 @@ export default function AdminInventario() {
 
   const handleModalSubmit = async () => {
     if (!modalAbierto) return;
-    setModalCargando(true);
     setModalError('');
 
+    if (!modalProductoId || modalProductoId <= 0) {
+      setModalError('Seleccioná un producto válido desde el listado.');
+      return;
+    }
+    if (!Number.isInteger(modalCantidad) || modalCantidad < 1) {
+      setModalError('La cantidad debe ser un número entero mayor o igual a 1.');
+      return;
+    }
+
+    setModalCargando(true);
+
     try {
-      const cuerpo: any = {
-        producto_id: 0, // se seteará abajo
+      const cuerpo = {
+        producto_id: modalProductoId,
         tipo: modalModo,
         cantidad: modalCantidad,
         motivo: modalObservacion,
       };
 
-      let respuesta: any;
+      const rutas = {
+        entrada: '/inventario-movimientos/entrada',
+        salida: '/inventario-movimientos/salida',
+        ajuste: '/inventario-movimientos/ajuste',
+      } as const;
 
-      if (modalModo === 'entrada') {
-        respuesta = await api.post('/inventario-movimientos/entrada', cuerpo);
-      } else if (modalModo === 'salida') {
-        // Esta información vendría del item seleccionado en el render
-        respuesta = await api.post('/inventario-movimientos/salida', cuerpo);
-      } else if (modalModo === 'ajuste') {
-        respuesta = await api.post('/inventario-movimientos/ajuste', cuerpo);
-      }
+      await api.post(rutas[modalModo], cuerpo);
 
+      // Refrescamos el stock para reflejar el movimiento sin recargar la página.
+      const res = await api.get('/inventario');
+      setInventario(res.data);
       setModalAbierto(false);
-      setModalCargando(false);
     } catch (err: any) {
-      setModalError(err.response?.data?.message || 'Error al procesar el movimiento');
+      const mensaje = err.response?.data?.message;
+      setModalError(
+        Array.isArray(mensaje)
+          ? mensaje.join('. ')
+          : mensaje || 'Error al procesar el movimiento',
+      );
+    } finally {
       setModalCargando(false);
+    }
+  };
+
+  const notificarStockBajo = async () => {
+    const ventana = window.open('', '_blank');
+    if (ventana) ventana.opener = null;
+
+    setEnviandoAlerta(true);
+    try {
+      const { data } = await api.post('/notificaciones/whatsapp/alerta-stock', {});
+      if (data?.urlWhatsapp) {
+        if (ventana) ventana.location.href = data.urlWhatsapp;
+        else window.open(data.urlWhatsapp, '_blank', 'noopener,noreferrer');
+      } else {
+        ventana?.close();
+      }
+      const fallo = data?.registro?.estado === 'ERROR';
+      setToast({
+        id: Date.now(),
+        tipo: fallo ? 'error' : 'exito',
+        mensaje: fallo
+          ? data?.error || 'No se pudo enviar la alerta.'
+          : data?.modo === 'LINK'
+            ? 'Enlace de WhatsApp abierto. Alerta registrada.'
+            : 'Alerta de stock enviada por WhatsApp.',
+      });
+    } catch {
+      ventana?.close();
+      setToast({
+        id: Date.now(),
+        tipo: 'error',
+        mensaje: 'No se pudo generar la alerta de stock.',
+      });
+    } finally {
+      setEnviandoAlerta(false);
     }
   };
 
@@ -236,10 +294,20 @@ export default function AdminInventario() {
           </p>
         </div>
         {alertasCount > 0 && (
-          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-red-300/60 bg-prolimal-red-50 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {alertasCount} producto{alertasCount !== 1 ? ' con stock bajo' : ''} ({alertasCount} unidades o menos)
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-red-300/60 bg-prolimal-red-50 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {alertasCount} producto{alertasCount !== 1 ? ' con stock bajo' : ''} ({alertasCount} unidades o menos)
+            </span>
+            <button
+              onClick={notificarStockBajo}
+              disabled={enviandoAlerta}
+              className="inline-flex items-center gap-2 rounded-full bg-prolimal-teal-700 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-prolimal-ink-900 disabled:opacity-60 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              {enviandoAlerta ? 'Enviando...' : 'Notificar Stock Bajo por WhatsApp'}
+            </button>
+          </div>
         )}
       </section>
 
@@ -321,8 +389,13 @@ export default function AdminInventario() {
               <div>
                 <p className="prolimal-eyebrow">Registrar Movimiento de Stock</p>
                 <h2 className="prolimal-display mt-2 text-xl tracking-[-0.04em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
-                  {modalModo === 'entrada' ? 'Entrada de Stock' : modalModo === 'salida' ? 'Salida de Stock' : 'Ajuste de Stock'} producto ID
+                  {modalModo === 'entrada' ? 'Entrada de Stock' : modalModo === 'salida' ? 'Salida de Stock' : 'Ajuste de Stock'}
                 </h2>
+                {modalProductoNombre && (
+                  <p className="mt-1 text-xs font-semibold text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                    Producto: {modalProductoNombre}
+                  </p>
+                )}
               </div>
               <button onClick={handleModalClose} aria-label="Cerrar" className="prolimal-icon-btn h-6 w-6">
                 <Minus className="h-3 w-3" />
@@ -347,11 +420,11 @@ export default function AdminInventario() {
                 </div>
                 <div>
                   <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
-                    Cantidad
+                    {modalModo === 'ajuste' ? 'Nuevo stock' : 'Cantidad'}
                   </label>
                   <input
                     type="number"
-                    min={0}
+                    min={1}
                     value={modalCantidad}
                     onChange={(e) => setModalCantidad(Number(e.target.value))}
                     className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20"
@@ -374,17 +447,29 @@ export default function AdminInventario() {
               </div>
             </div>
 
+            {modalError && (
+              <p className="mt-4 rounded-xl border border-prolimal-red-300/60 bg-prolimal-red-50 px-4 py-3 text-xs font-semibold text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
+                {modalError}
+              </p>
+            )}
+
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               <button onClick={handleModalClose} className="prolimal-btn-secondary flex-1">
                 Cancelar
               </button>
-              <button onClick={handleModalSubmit} className="prolimal-btn-primary flex-1">
-                Registrar
+              <button
+                onClick={handleModalSubmit}
+                disabled={modalCargando}
+                className="prolimal-btn-primary flex-1 disabled:opacity-60"
+              >
+                {modalCargando ? 'Registrando...' : 'Registrar'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <ToastNotificacion toast={toast} onClose={cerrarToast} />
     </div>
   );
 }

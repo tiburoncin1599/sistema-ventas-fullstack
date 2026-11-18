@@ -73,67 +73,96 @@ export class ProductosController {
   @Roles('admin', 'inventario')
   async crear(@Body() body: CrearProductoDto, @Req() req: AuthRequest) {
     const user = req.user as { id: number; rol: string };
-    this.productosService.crear(body);
+    const producto = await this.productosService.crear(body);
     await this.auditService.registrar({
       accion: 'crear',
       entidad: 'producto',
-      entidad_id: body.codigo ? Number(body.codigo) : 1, // Usar codigo o ID por defecto
+      entidad_id: producto.id,
       valor_nuevo: {
         nombre: body.nombre,
         codigo: body.codigo,
         precio: body.precio,
-        activo: true, // Por defecto al crear
+        activo: true,
       },
       usuario_id: user.id,
       usuario_rol: user.rol,
     });
-    return { mensaje: 'Producto creado correctamente' };
+    return { id: producto.id, mensaje: 'Producto creado correctamente' };
   }
 
-@Put(':id')
+  /**
+   * Limpieza de datos de prueba. Declarada ANTES de @Delete(':id') para que
+   * Nest no interprete "e2e" como un id numérico.
+   */
+  @Delete('e2e')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async limpiarE2E() {
+    const eliminados = await this.productosService.limpiarProductosE2E();
+    return { mensaje: 'Limpieza E2E finalizada', eliminados };
+  }
+
+  @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario')
-  async actualizar(@Param('id') id: string, @Body() body: ActualizarProductoDto, @Req() req: AuthRequest) {
+  async actualizar(
+    @Param('id') id: string,
+    @Body() body: ActualizarProductoDto,
+    @Req() req: AuthRequest,
+  ) {
     const user = req.user as { id: number; rol: string };
-    this.productosService.actualizar(+id, body);
-    // Obtener el producto anterior para el registro de auditoría
-    const productoAnterior = await this.productosService.findOne(+id);
+    const resultado = await this.productosService.actualizar(
+      +id,
+      body,
+      user.id,
+    );
     await this.auditService.registrar({
       accion: 'modificar',
       entidad: 'producto',
       entidad_id: +id,
       valor_anterior: {
-        nombre: productoAnterior?.nombre,
-        precio: productoAnterior?.precio,
-        activo: productoAnterior?.activo,
+        nombre: resultado.anterior.nombre,
+        precio: resultado.anterior.precio,
+        activo: resultado.anterior.activo,
+        stock: resultado.stockAnterior,
       },
       valor_nuevo: {
-        nombre: body.nombre ?? productoAnterior?.nombre,
-        precio: body.precio ?? productoAnterior?.precio,
-        activo: body.activo ?? productoAnterior?.activo,
+        nombre: resultado.actualizado.nombre,
+        precio: resultado.actualizado.precio,
+        activo: resultado.actualizado.activo,
+        stock: resultado.stockNuevo,
       },
       usuario_id: user.id,
       usuario_rol: user.rol,
     });
-    return { mensaje: 'Producto actualizado correctamente' };
+    return {
+      mensaje: 'Producto actualizado correctamente',
+      stock: resultado.stockNuevo,
+      movimiento_kardex: resultado.movimientoRegistrado,
+    };
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario')
-  async desactivar(@Param('id') id: string, @Req() req: AuthRequest, @Body() body: any) {
+  async desactivar(
+    @Param('id') id: string,
+    @Req() req: AuthRequest,
+    @Body() body: any,
+  ) {
     const user = req.user as { id: number; rol: string };
-    this.productosService.desactivar(+id);
+    const anterior = await this.productosService.findOne(+id);
+    await this.productosService.desactivar(+id);
     await this.auditService.registrar({
       accion: 'desactivar',
       entidad: 'producto',
       entidad_id: +id,
       valor_anterior: {
-        nombre: body?.nombre,
+        nombre: anterior.nombre,
         activo: true,
       },
       valor_nuevo: {
-        nombre: body?.nombre,
+        nombre: anterior.nombre,
         activo: false,
       },
       usuario_id: user.id,

@@ -1,12 +1,10 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Store } from 'lucide-react';
 
 export default function VentasLoginPage() {
-  const router = useRouter();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -27,10 +25,18 @@ export default function VentasLoginPage() {
       document.cookie = `usuario=${encodeURIComponent(JSON.stringify(usuario))}; path=/; max-age=604800`;
       window.dispatchEvent(new Event('auth-change'));
       const rol = usuario?.rol;
-      if (rol === 'ventas') router.push('/ventas');
-      else if (rol === 'admin') router.push('/admin');
-      else if (rol === 'inventario') router.push('/admin/inventario');
-      else router.push('/');
+      // Navegación completa: el proxy debe evaluar las cookies recién
+      // escritas; un router.push puede reutilizar un RSC prefetcheado
+      // antes del login (sin sesión) y redirigir de vuelta al formulario.
+      const destino =
+        rol === 'ventas'
+          ? '/ventas'
+          : rol === 'admin'
+            ? '/admin'
+            : rol === 'inventario'
+              ? '/admin/inventario'
+              : '/';
+      window.location.assign(destino);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data

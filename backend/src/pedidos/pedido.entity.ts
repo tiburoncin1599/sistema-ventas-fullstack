@@ -43,7 +43,7 @@ export class Pedido {
   @Column({ nullable: true })
   identificador_publico!: string;
 
-  @Column({ type: 'simple-array', default: [] })
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   historial_estados!: {
     estado: string;
     fecha: Date;

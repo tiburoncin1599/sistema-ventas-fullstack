@@ -2,12 +2,11 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles, User } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 
 function AuthContent() {
-  const router = useRouter();
   const [modo, setModo] = useState<'login' | 'registro'>('login');
   const [form, setForm] = useState({ nombre: '', email: '', password: '' });
   const [error, setError] = useState('');
@@ -35,7 +34,8 @@ function AuthContent() {
       document.cookie = `token=${res.data.token}; path=/; max-age=604800`;
       document.cookie = `usuario=${encodeURIComponent(JSON.stringify(res.data.usuario))}; path=/; max-age=604800`;
       window.dispatchEvent(new Event('auth-change'));
-      router.push('/');
+      // Navegación completa para que el proxy lea las cookies de la sesión.
+      window.location.assign('/');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Ocurrió un error';
       setError(msg);

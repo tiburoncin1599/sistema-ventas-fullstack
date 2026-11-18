@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Audit } from './audit.entity';
 
 @Injectable()
@@ -23,6 +23,20 @@ export class AuditService {
   }) {
     const entry = this.auditRepo.create(params);
     return this.auditRepo.save(entry);
+  }
+
+  /**
+   * Registra la auditoría usando el EntityManager de la transacción activa.
+   * Así el rastro del usuario ejecutor se hace rollback junto con la venta
+   * si cualquiera de los pasos (stock, kardex, deuda) falla.
+   */
+  async registrarEnTransaccion(
+    params: Parameters<AuditService['registrar']>[0],
+    manager: EntityManager,
+  ) {
+    const repo = manager.getRepository(Audit);
+    const entry = repo.create(params);
+    return repo.save(entry);
   }
 
   async findAll(page = 1, limit = 50) {

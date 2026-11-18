@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { Minus, Plus, Search, ShoppingBag, Trash2, X } from 'lucide-react';
+import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface Cliente {
   id: number;
@@ -38,6 +39,7 @@ export default function VentasNuevoPedidoPage() {
   const [exito, setExito] = useState('');
   const [tipoPago, setTipoPago] = useState<'contado' | 'credito'>('contado');
   const [stockMsg, setStockMsg] = useState('');
+  const [pedidoExitosoId, setPedidoExitosoId] = useState<number | null>(null);
 
   const cargarDatos = async () => {
     try {
@@ -138,7 +140,7 @@ export default function VentasNuevoPedidoPage() {
     setGuardando(true);
     setError('');
     try {
-      await api.post('/pedidos', {
+      const res = await api.post('/pedidos', {
         usuarioId: Number(clienteId),
         direccion: direccion.trim() || undefined,
         notas: notas.trim() || undefined,
@@ -150,6 +152,10 @@ export default function VentasNuevoPedidoPage() {
             Number(productos.find(p => p.id === l.producto_id)?.precio) || 0,
         })),
       });
+      const pedidoId = Number(res.data?.pedidoId ?? res.data?.id);
+      if (Number.isFinite(pedidoId) && pedidoId > 0) {
+        setPedidoExitosoId(pedidoId);
+      }
       setExito(
         tipoPago === 'credito'
           ? '✅ Pedido creado y deuda registrada a crédito.'
@@ -280,15 +286,25 @@ export default function VentasNuevoPedidoPage() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-                          s === 0
-                            ? 'text-prolimal-coral-600 dark:text-prolimal-coral-400'
-                            : 'text-prolimal-ink-400 dark:text-prolimal-ink-300'
-                        }`}
-                      >
-                        {s === 0 ? 'Sin stock' : `Stock: ${s}`}
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+                            s === 0
+                              ? 'text-prolimal-coral-600 dark:text-prolimal-coral-400'
+                              : 'text-prolimal-ink-400 dark:text-prolimal-ink-300'
+                          }`}
+                        >
+                          {s === 0 ? 'Sin stock' : `Stock: ${s}`}
+                        </span>
+                        {s > 0 && s <= 10 && (
+                          <span
+                            role="status"
+                            className="text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-coral-600 dark:text-prolimal-coral-400"
+                          >
+                            ⚠️ Stock bajo · quedan {s}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
@@ -439,6 +455,42 @@ export default function VentasNuevoPedidoPage() {
           )}
         </section>
       </div>
+
+      {pedidoExitosoId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/60 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-comprobante"
+        >
+          <div className="prolimal-surface w-full max-w-md rounded-[2rem] p-7 text-center shadow-2xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-prolimal-green-100 text-2xl dark:bg-prolimal-green-900/40">
+              ✅
+            </div>
+            <h2
+              id="titulo-comprobante"
+              className="prolimal-display mt-4 text-2xl tracking-[-0.03em] text-prolimal-ink-900 dark:text-prolimal-sand-50"
+            >
+              ¡Pedido #{pedidoExitosoId} registrado!
+            </h2>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+              El stock, el kardex y el saldo ya fueron actualizados. Descargá o
+              imprimí el comprobante comercial interno.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <BotonComprobantePdf pedidoId={pedidoExitosoId} />
+              <button
+                type="button"
+                onClick={() => setPedidoExitosoId(null)}
+                className="prolimal-btn-secondary"
+              >
+                <X className="h-4 w-4" />
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, MaxLength, Min, IsBoolean } from 'class-validator';
+import { IsString, IsNumber, IsInt, IsOptional, MaxLength, Min, IsBoolean } from 'class-validator';
 
 export class ActualizarProductoDto {
   @IsOptional()
@@ -44,4 +44,15 @@ export class ActualizarProductoDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  /** Nuevo stock absoluto. `cantidad` se acepta como alias. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  stock?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cantidad?: number;
 }

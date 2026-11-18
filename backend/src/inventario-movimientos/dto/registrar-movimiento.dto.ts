@@ -8,6 +8,7 @@ import {
 
 export class RegistrarMovimientoDto {
   @IsNumber()
+  @Min(1)
   producto_id!: number;
 
   @IsString()

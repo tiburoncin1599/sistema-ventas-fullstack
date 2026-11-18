@@ -15,8 +15,18 @@ interface Producto {
   precio_costo?: number;
   imagen_url?: string;
   activo: boolean;
+  stock: number;
   categoria: { id: number; nombre: string };
   categoria_id?: number;
+}
+
+/** Orden alfabético determinista e insensible a mayúsculas/minúsculas (es). */
+function ordenarProductos(lista: Producto[]): Producto[] {
+  return [...lista].sort(
+    (a, b) =>
+      a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }) ||
+      a.id - b.id,
+  );
 }
 
 export default function AdminProductos() {
@@ -25,7 +35,7 @@ export default function AdminProductos() {
   const [busqueda, setBusqueda] = useState('');
   const [modalProducto, setModalProducto] = useState<Producto | null>(null);
   const [creando, setCreando] = useState(false);
-  const [form, setForm] = useState({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
+  const [form, setForm] = useState({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '', stock: '' });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const cargarDatos = async () => {
@@ -33,7 +43,7 @@ export default function AdminProductos() {
       api.get('/productos/admin'),
       api.get('/categorias'),
     ]);
-    setProductos(prods.data);
+    setProductos(ordenarProductos(prods.data));
     setCategorias(cats.data);
   };
 
@@ -45,7 +55,7 @@ export default function AdminProductos() {
     ])
       .then(([prods, cats]) => {
         if (!activo) return;
-        setProductos(prods.data);
+        setProductos(ordenarProductos(prods.data));
         setCategorias(cats.data);
       })
       .catch(() => {});
@@ -67,7 +77,7 @@ export default function AdminProductos() {
   const abrirNuevo = () => {
     setCreando(true);
     setModalProducto(null);
-    setForm({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '' });
+    setForm({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '', stock: '' });
     limpiarArchivo();
   };
 
@@ -81,21 +91,30 @@ export default function AdminProductos() {
       precio: String(parseCurrency(p.precio)),
       precio_costo: p.precio_costo ? String(parseCurrency(p.precio_costo)) : '',
       categoria_id: String(p.categoria_id || ''),
+      stock: String(p.stock ?? 0),
     });
     limpiarArchivo();
   };
 
   const guardar = async () => {
     try {
-      const payload = {
-        ...form,
-        codigo: form.codigo.trim() || undefined,
-        precio: parseCurrency(form.precio),
-        precio_costo: form.precio_costo ? parseCurrency(form.precio_costo) : undefined,
-        categoria_id: +form.categoria_id || undefined,
+      const { stock, ...campos } = form;
+      const payload: Record<string, unknown> = {
+        ...campos,
+        codigo: campos.codigo.trim() || undefined,
+        precio: parseCurrency(campos.precio),
+        precio_costo: campos.precio_costo ? parseCurrency(campos.precio_costo) : undefined,
+        categoria_id: +campos.categoria_id || undefined,
       };
 
       if (!creando && modalProducto) {
+        const stockNuevo = Number(stock);
+        if (!Number.isInteger(stockNuevo) || stockNuevo < 0) {
+          alert('El stock debe ser un número entero mayor o igual a 0.');
+          return;
+        }
+        // El backend valida, ajusta inventario y escribe el Kardex en una transacción.
+        payload.stock = stockNuevo;
         await api.put(`/productos/${modalProducto.id}`, payload);
         if (fileRef.current?.files?.[0]) {
           const fd = new FormData();
@@ -137,13 +156,15 @@ export default function AdminProductos() {
   };
 
   const q = busqueda.trim().toLowerCase();
-  const visibles = q
-    ? productos.filter(p =>
-        p.nombre.toLowerCase().includes(q) ||
-        (p.codigo || '').toLowerCase().includes(q) ||
-        (p.categoria?.nombre || '').toLowerCase().includes(q),
-      )
-    : productos;
+  const visibles = ordenarProductos(
+    q
+      ? productos.filter(p =>
+          p.nombre.toLowerCase().includes(q) ||
+          (p.codigo || '').toLowerCase().includes(q) ||
+          (p.categoria?.nombre || '').toLowerCase().includes(q),
+        )
+      : productos,
+  );
 
   return (
     <div className="pb-10">
@@ -209,9 +230,21 @@ export default function AdminProductos() {
                     {p.activo ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>
-                <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                  {p.categoria?.nombre || 'Sin categoría'}
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    {p.categoria?.nombre || 'Sin categoría'}
+                  </p>
+                  <span
+                    aria-label={`Stock actual: ${p.stock}`}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      p.stock <= 10
+                        ? 'bg-prolimal-red-100 text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300'
+                        : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
+                    }`}
+                  >
+                    {p.stock <= 10 ? `⚠️ Stock bajo · quedan ${p.stock}` : `Stock: ${p.stock}`}
+                  </span>
+                </div>
                 <div className="mt-4 flex items-center justify-between border-t border-prolimal-ink-900/5 pt-4 dark:border-prolimal-sand-100/10">
                   <p className="text-lg font-extrabold tracking-[-0.03em] text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(p.precio)}</p>
                   <div className="flex gap-1" onClick={e => e.stopPropagation()}>
@@ -270,6 +303,26 @@ export default function AdminProductos() {
                     onChange={e => setForm({ ...form, precio_costo: e.target.value })}
                     className="prolimal-input" />
                 </div>
+                {!creando && (
+                  <div>
+                    <label htmlFor="stock-producto" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                      Stock Actual
+                    </label>
+                    <input
+                      id="stock-producto"
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Stock actual"
+                      value={form.stock}
+                      onChange={e => setForm({ ...form, stock: e.target.value })}
+                      className="prolimal-input"
+                    />
+                    <p className="mt-1 text-[11px] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                      Al guardar un valor distinto se registra un ajuste en el Kardex.
+                    </p>
+                  </div>
+                )}
                 <select value={form.categoria_id}
                   onChange={e => setForm({ ...form, categoria_id: e.target.value })}
                   className="prolimal-input">

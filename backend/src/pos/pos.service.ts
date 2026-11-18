@@ -20,7 +20,7 @@ export class POSService {
       LEFT JOIN inventario i ON i.producto_id = p.id
       WHERE p.activo = true
         AND (p.nombre ILIKE $1 OR p.codigo ILIKE $1)
-      ORDER BY p.nombre ASC
+      ORDER BY LOWER(p.nombre) ASC, p.id ASC
       LIMIT 20
     `,
       [`%${termino}%`],

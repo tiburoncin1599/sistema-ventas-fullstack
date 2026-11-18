@@ -1,27 +1,247 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, ObjectLiteral, SelectQueryBuilder } from 'typeorm';
+import { FiltroReportesDto } from './dto/filtro-reportes.dto';
+
+/** Filtros ya resueltos por el controlador (incluye el rol del solicitante). */
+export interface FiltrosEfectivos {
+  fechaInicio?: string;
+  fechaFin?: string;
+  productoId?: number;
+  vendedorId?: number;
+}
+
+export interface PuntoVentaFecha extends Record<string, unknown> {
+  fecha: string;
+  total_pedidos: number;
+  unidades_vendidas: number;
+  total_vendido: number;
+  ticket_promedio: number;
+}
+
+export interface ResumenGanancias extends Record<string, unknown> {
+  ingresos: number;
+  costo: number;
+  utilidad_bruta: number;
+  margen_porcentual: number;
+  total_pedidos: number;
+}
+
+export interface ProductoRanking extends Record<string, unknown> {
+  producto_id: number;
+  nombre: string;
+  codigo: string | null;
+  unidades_vendidas: number;
+  ingresos: number;
+  costo: number;
+  utilidad: number;
+  margen_porcentual: number;
+}
+
+export interface TopProductosResult {
+  masVendidos: ProductoRanking[];
+  masRentables: ProductoRanking[];
+}
+
+const num = (valor: unknown): number => {
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const redondear = (valor: number): number => Math.round(valor * 100) / 100;
+
+/**
+ * En este sistema el flujo operativo usa `pendiente` como estado activo y
+ * `cancelado` como único estado anulado (no existen `completado`/`entregado`).
+ * Por eso "pedidos concretados" se traduce a `estado <> 'cancelado'`: aplicar
+ * un filtro literal por `completado|entregado` dejaría todos los reportes
+ * vacíos con los datos reales de la base.
+ */
+const CONDICION_VENTA = "pe.estado <> 'cancelado'";
 
 @Injectable()
 export class ReportesService {
   constructor(@InjectDataSource() private dataSource: DataSource) {}
 
-  async ventasPorFecha(desde?: string, hasta?: string) {
-    let sql = `
-      SELECT
-        DATE(creado_en) AS fecha,
-        COUNT(*)::int AS total_pedidos,
-        COALESCE(SUM(total), 0) AS total_vendido,
-        COUNT(*) FILTER (WHERE estado = 'cancelado')::int AS cancelados
-      FROM pedidos
-      WHERE 1=1
-    `;
-    const params: unknown[] = [];
-    let idx = 1;
-    if (desde) { sql += ` AND creado_en >= $${idx++}`; params.push(desde); }
-    if (hasta) { sql += ` AND creado_en < ($${idx++})::date + INTERVAL '1 day'`; params.push(hasta); }
-    sql += ` GROUP BY DATE(creado_en) ORDER BY fecha DESC`;
-    return this.dataSource.query(sql, params);
+  /** Resuelve los alias `desde`/`hasta` a los nombres canónicos del DTO. */
+  private resolver(filtros: FiltroReportesDto | FiltrosEfectivos): FiltrosEfectivos {
+    return {
+      fechaInicio: filtros.fechaInicio ?? (filtros as FiltroReportesDto).desde,
+      fechaFin: filtros.fechaFin ?? (filtros as FiltroReportesDto).hasta,
+      productoId: filtros.productoId,
+      vendedorId: filtros.vendedorId,
+    };
+  }
+
+  /** Aplica rango de fechas, producto y vendedor sobre un QueryBuilder de pedidos. */
+  private aplicarFiltros(
+    qb: SelectQueryBuilder<ObjectLiteral>,
+    filtros: FiltrosEfectivos,
+  ): void {
+    qb.andWhere(CONDICION_VENTA);
+
+    if (filtros.fechaInicio) {
+      qb.andWhere('pe.creado_en >= :fechaInicio::date', {
+        fechaInicio: filtros.fechaInicio,
+      });
+    }
+    if (filtros.fechaFin) {
+      qb.andWhere("pe.creado_en < (:fechaFin::date + INTERVAL '1 day')", {
+        fechaFin: filtros.fechaFin,
+      });
+    }
+    if (filtros.productoId) {
+      qb.andWhere('dp.producto_id = :productoId', {
+        productoId: filtros.productoId,
+      });
+    }
+    if (filtros.vendedorId) {
+      // `procesado_por` es el vendedor que gestionó el pedido (ver
+      // ReportesController: un rol 'ventas' nunca puede consultar a otro).
+      qb.andWhere('pe.procesado_por = :vendedorId', {
+        vendedorId: filtros.vendedorId,
+      });
+    }
+  }
+
+  /** Base común: pedidos → detalle → producto, sin depender de metadatos de
+   * entidad (la columna `precio_costo` existe en BD pero no en la entidad
+   * `Producto`, por eso se construye sobre nombres de tabla). */
+  private baseVentas(filtros: FiltrosEfectivos): SelectQueryBuilder<ObjectLiteral> {
+    const qb = this.dataSource
+      .createQueryBuilder()
+      .from('pedidos', 'pe')
+      .innerJoin('detalle_pedido', 'dp', 'dp.pedido_id = pe.id')
+      .innerJoin('productos', 'p', 'p.id = dp.producto_id');
+    this.aplicarFiltros(qb, filtros);
+    return qb;
+  }
+
+  /** Series temporales: total vendido, pedidos y ticket promedio por día/mes. */
+  async ventasPorFecha(
+    filtros: FiltroReportesDto | FiltrosEfectivos,
+  ): Promise<PuntoVentaFecha[]> {
+    const f = this.resolver(filtros);
+    const agrupacion = "TO_CHAR(DATE(pe.creado_en), 'YYYY-MM-DD')";
+
+    const filas = await this.baseVentas(f)
+      .select(agrupacion, 'fecha')
+      .addSelect('COUNT(DISTINCT pe.id)', 'total_pedidos')
+      .addSelect('COALESCE(SUM(dp.cantidad), 0)', 'unidades_vendidas')
+      .addSelect(
+        'COALESCE(SUM(dp.cantidad * dp.precio_unitario), 0)',
+        'total_vendido',
+      )
+      .addSelect(
+        'COALESCE(SUM(dp.cantidad * dp.precio_unitario), 0) / NULLIF(COUNT(DISTINCT pe.id), 0)',
+        'ticket_promedio',
+      )
+      .groupBy(agrupacion)
+      .orderBy('fecha', 'ASC')
+      .getRawMany<Record<string, unknown>>();
+
+    return filas.map((fila) => ({
+      fecha: String(fila.fecha),
+      total_pedidos: num(fila.total_pedidos),
+      unidades_vendidas: num(fila.unidades_vendidas),
+      total_vendido: num(fila.total_vendido),
+      ticket_promedio: num(fila.ticket_promedio),
+    }));
+  }
+
+  /** Ingresos vs. costos: utilidad bruta y margen porcentual. */
+  async ganancias(
+    filtros: FiltroReportesDto | FiltrosEfectivos,
+  ): Promise<ResumenGanancias> {
+    const f = this.resolver(filtros);
+    const fila = await this.baseVentas(f)
+      .select(
+        'COALESCE(SUM(dp.cantidad * dp.precio_unitario), 0)',
+        'ingresos',
+      )
+      .addSelect(
+        'COALESCE(SUM(dp.cantidad * COALESCE(p.precio_costo, 0)), 0)',
+        'costo',
+      )
+      .addSelect(
+        'COALESCE(SUM(dp.cantidad * (dp.precio_unitario - COALESCE(p.precio_costo, 0))), 0)',
+        'utilidad_bruta',
+      )
+      .addSelect('COUNT(DISTINCT pe.id)', 'total_pedidos')
+      .getRawOne<Record<string, unknown>>();
+
+    const ingresos = num(fila?.ingresos);
+    const utilidadBruta = num(fila?.utilidad_bruta);
+    return {
+      ingresos,
+      costo: num(fila?.costo),
+      utilidad_bruta: utilidadBruta,
+      margen_porcentual:
+        ingresos > 0 ? redondear((utilidadBruta / ingresos) * 100) : 0,
+      total_pedidos: num(fila?.total_pedidos),
+    };
+  }
+
+  /** Top 10 por unidades vendidas y Top 10 por utilidad. */
+  async topProductos(
+    filtros: FiltroReportesDto | FiltrosEfectivos,
+  ): Promise<TopProductosResult> {
+    const f = this.resolver(filtros);
+
+    const construir = () =>
+      this.baseVentas(f)
+        .select('p.id', 'producto_id')
+        .addSelect('p.nombre', 'nombre')
+        .addSelect('p.codigo', 'codigo')
+        .addSelect('COALESCE(SUM(dp.cantidad), 0)', 'unidades_vendidas')
+        .addSelect(
+          'COALESCE(SUM(dp.cantidad * dp.precio_unitario), 0)',
+          'ingresos',
+        )
+        .addSelect(
+          'COALESCE(SUM(dp.cantidad * COALESCE(p.precio_costo, 0)), 0)',
+          'costo',
+        )
+        .addSelect(
+          'COALESCE(SUM(dp.cantidad * (dp.precio_unitario - COALESCE(p.precio_costo, 0))), 0)',
+          'utilidad',
+        )
+        .groupBy('p.id')
+        .addGroupBy('p.nombre')
+        .addGroupBy('p.codigo');
+
+    const mapear = (filas: Record<string, unknown>[]): ProductoRanking[] =>
+      filas.map((fila) => {
+        const ingresos = num(fila.ingresos);
+        const utilidad = num(fila.utilidad);
+        return {
+          producto_id: num(fila.producto_id),
+          nombre: String(fila.nombre),
+          codigo: fila.codigo == null ? null : String(fila.codigo),
+          unidades_vendidas: num(fila.unidades_vendidas),
+          ingresos,
+          costo: num(fila.costo),
+          utilidad,
+          margen_porcentual:
+            ingresos > 0 ? redondear((utilidad / ingresos) * 100) : 0,
+        };
+      });
+
+    const [porUnidades, porUtilidad] = await Promise.all([
+      construir()
+        .orderBy('unidades_vendidas', 'DESC')
+        .limit(10)
+        .getRawMany<Record<string, unknown>>(),
+      construir()
+        .orderBy('utilidad', 'DESC')
+        .limit(10)
+        .getRawMany<Record<string, unknown>>(),
+    ]);
+
+    return {
+      masVendidos: mapear(porUnidades),
+      masRentables: mapear(porUtilidad),
+    };
   }
 
   /** Ventas por día de un vendedor (o de todo el personal si no se indica usuarioId). */
@@ -88,24 +308,6 @@ export class ReportesService {
     return this.dataSource.query(sql, params);
   }
 
-  async ganancias(desde?: string, hasta?: string) {
-    let sql = `
-      SELECT
-        COALESCE(SUM(dp.cantidad * dp.precio_unitario), 0) AS ingresos,
-        COALESCE(SUM(dp.cantidad * COALESCE(p.precio_costo, 0)), 0) AS costo,
-        COALESCE(SUM(dp.cantidad * (dp.precio_unitario - COALESCE(p.precio_costo, 0))), 0) AS ganancia
-      FROM detalle_pedido dp
-      JOIN productos p ON p.id = dp.producto_id
-      JOIN pedidos pe ON pe.id = dp.pedido_id
-      WHERE pe.estado != 'cancelado'
-    `;
-    const params: unknown[] = [];
-    let idxG = 1;
-    if (desde) { sql += ` AND pe.creado_en >= $${idxG++}`; params.push(desde); }
-    if (hasta) { sql += ` AND pe.creado_en < ($${idxG++})::date + INTERVAL '1 day'`; params.push(hasta); }
-    return this.dataSource.query(sql, params);
-  }
-
   async inventarioActual() {
     return this.dataSource.query(`
       SELECT
@@ -136,12 +338,21 @@ export class ReportesService {
   }
 
   async exportarCSV(tipo: string, desde?: string, hasta?: string): Promise<string> {
+    const filtros = { fechaInicio: desde, fechaFin: hasta };
     let data: Record<string, unknown>[];
 
     switch (tipo) {
       case 'ventas-por-fecha':
-        data = await this.ventasPorFecha(desde, hasta);
+        data = await this.ventasPorFecha(filtros);
         break;
+      case 'ganancias':
+        data = [await this.ganancias(filtros)];
+        break;
+      case 'top-productos': {
+        const top = await this.topProductos(filtros);
+        data = top.masVendidos as unknown as Record<string, unknown>[];
+        break;
+      }
       case 'ventas-por-producto':
         data = await this.ventasPorProducto(desde, hasta);
         break;
@@ -164,14 +375,16 @@ export class ReportesService {
     const lines = [
       headers.join(','),
       ...data.map((row) =>
-        headers.map((h) => {
-          const val = row[h];
-          if (val === null || val === undefined) return '';
-          const str = String(val);
-          return str.includes(',') || str.includes('"') || str.includes('\n')
-            ? `"${str.replace(/"/g, '""')}"`
-            : str;
-        }).join(','),
+        headers
+          .map((h) => {
+            const val = row[h];
+            if (val === null || val === undefined) return '';
+            const str = String(val);
+            return str.includes(',') || str.includes('"') || str.includes('\n')
+              ? `"${str.replace(/"/g, '""')}"`
+              : str;
+          })
+          .join(','),
       ),
     ];
     return lines.join('\n');

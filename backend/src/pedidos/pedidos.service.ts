@@ -14,6 +14,7 @@ import {
   MoreThanOrEqual,
   LessThanOrEqual,
   FindOptionsWhere,
+  EntityManager,
 } from 'typeorm';
 import { Pedido } from './pedido.entity';
 import { DetallePedido } from './detalle-pedido.entity';
@@ -22,11 +23,21 @@ import { Usuario } from '../usuarios/usuario.entity';
 import { Deuda } from '../deudas/deuda.entity';
 import { InventarioService } from '../inventario/inventario.service';
 import { InventarioMovimientosService } from '../inventario-movimientos/inventario-movimientos.service';
+import { InventarioMovimiento } from '../inventario-movimientos/inventario-movimiento.entity';
+import { AuditService } from '../audit/audit.service';
 
 interface ItemPedido {
   producto_id: number;
   cantidad: number;
   precio: number;
+}
+
+/** Usuario que ejecuta la operación; se persiste dentro de la transacción. */
+export interface AuditorPedido {
+  usuario_id: number;
+  usuario_rol?: string;
+  usuario_nombre?: string;
+  ip?: string;
 }
 
 @Injectable()
@@ -39,6 +50,7 @@ export class PedidosService {
     private inventarioService: InventarioService,
     private inventarioMovimientosService: InventarioMovimientosService,
     @InjectDataSource() private dataSource: DataSource,
+    private readonly auditService: AuditService,
   ) {}
 
   findAll(page = 1, limit = 50) {
@@ -93,23 +105,47 @@ export class PedidosService {
   }
 
   /** Asigna un pedido sin vendedor a un usuario del personal de ventas. */
-  async asignarVendedor(pedidoId: number, vendedorId: number) {
-    const pedido = await this.findOne(pedidoId);
-    if (pedido.procesado_por != null) {
-      throw new BadRequestException(
-        'Este pedido ya tiene un vendedor asignado',
-      );
+  async asignarVendedor(
+    pedidoId: number,
+    vendedorId: number,
+    auditor?: AuditorPedido,
+  ) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
+    try {
+      const pedido = await manager.findOne(Pedido, { where: { id: pedidoId } });
+      if (!pedido) throw new NotFoundException('Pedido no encontrado');
+      if (pedido.procesado_por != null) {
+        throw new BadRequestException(
+          'Este pedido ya tiene un vendedor asignado',
+        );
+      }
+      const vendedor = await manager.findOne(Usuario, {
+        where: { id: vendedorId, rol: 'ventas', activo: true },
+      });
+      if (!vendedor) {
+        throw new BadRequestException(
+          'El vendedor seleccionado no existe o no está activo',
+        );
+      }
+      await manager.update(Pedido, pedidoId, { procesado_por: vendedorId });
+      await this.auditar(manager, {
+        accion: 'asignar_vendedor',
+        entidad_id: pedidoId,
+        valor_anterior: { procesado_por: null },
+        valor_nuevo: { procesado_por: vendedorId },
+        auditor,
+      });
+      await queryRunner.commitTransaction();
+      return this.findOne(pedidoId);
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
-    const vendedor = await this.pedidosRepo.manager.findOne(Usuario, {
-      where: { id: vendedorId, rol: 'ventas', activo: true },
-    });
-    if (!vendedor) {
-      throw new BadRequestException(
-        'El vendedor seleccionado no existe o no está activo',
-      );
-    }
-    await this.pedidosRepo.update(pedidoId, { procesado_por: vendedorId });
-    return this.findOne(pedidoId);
   }
 
   findAllByDateRange(desde?: Date, hasta?: Date) {
@@ -160,12 +196,9 @@ export class PedidosService {
     return { pedido, detalles };
   }
 
-  /**
-   * Resuelve los precios desde la BD: el cliente NUNCA define el precio.
-   * Debe llamarse dentro de la transacción del pedido.
-   */
+  /** Resuelve los precios desde la BD: el cliente NUNCA define el precio. */
   private async preciosDesdeBD(
-    manager: import('typeorm').EntityManager,
+    manager: EntityManager,
     items: ItemPedido[],
   ): Promise<Map<number, number>> {
     const idsUnicos = [...new Set(items.map((i) => i.producto_id))];
@@ -180,6 +213,119 @@ export class PedidosService {
     return new Map(productos.map((p) => [p.id, Number(p.precio)]));
   }
 
+  private nuevoHistorial(estados: string[], auditor?: AuditorPedido) {
+    return estados.map((estado) => ({
+      estado,
+      fecha: new Date(),
+      ...(auditor?.usuario_id ? { usuario: auditor.usuario_id } : {}),
+      observacion: 'Registrado desde el punto de venta',
+    }));
+  }
+
+  /** Auditoría del ejecutor escrita con el manager de la transacción activa. */
+  private async auditar(
+    manager: EntityManager,
+    datos: {
+      accion: string;
+      entidad_id?: number;
+      valor_anterior?: Record<string, unknown>;
+      valor_nuevo?: Record<string, unknown>;
+      auditor?: AuditorPedido;
+    },
+  ) {
+    if (!datos.auditor) return;
+    await this.auditService.registrarEnTransaccion(
+      {
+        accion: datos.accion,
+        entidad: 'pedido',
+        entidad_id: datos.entidad_id,
+        valor_anterior: datos.valor_anterior,
+        valor_nuevo: datos.valor_nuevo,
+        usuario_id: datos.auditor.usuario_id,
+        usuario_nombre: datos.auditor.usuario_nombre,
+        usuario_rol: datos.auditor.usuario_rol,
+        ip: datos.auditor.ip,
+      },
+      manager,
+    );
+  }
+
+  /**
+   * Paso (a)+(b): valida stock con pessimistic_write, descuenta y escribe el
+   * movimiento SALIDA del Kardex con motivo y referencia al pedido.
+   * Cualquier fallo lanza y provoca el rollback de toda la operación.
+   */
+  private async registrarSalida(
+    manager: EntityManager,
+    pedidoId: number,
+    items: { producto_id: number; cantidad: number }[],
+    motivo: string,
+    usuarioId?: number,
+  ) {
+    for (const item of items) {
+      const inventario = await this.inventarioService.descontarConBloqueo(
+        item.producto_id,
+        item.cantidad,
+        manager,
+      );
+      await this.inventarioMovimientosService.registrar(
+        {
+          producto_id: item.producto_id,
+          tipo: 'salida',
+          cantidad: item.cantidad,
+          cantidad_anterior: inventario.cantidadAnterior,
+          cantidad_nueva: inventario.cantidadNueva,
+          motivo,
+          referencia_tipo: 'pedido',
+          referencia_id: pedidoId,
+          usuario_id: usuarioId,
+        },
+        manager,
+      );
+    }
+  }
+
+  /** Devolución de stock y Kardex, también dentro de la transacción. */
+  private async registrarDevolucion(
+    manager: EntityManager,
+    pedidoId: number,
+    items: { producto_id: number; cantidad: number }[],
+    motivo: string,
+    usuarioId?: number,
+  ) {
+    for (const item of items) {
+      await this.inventarioService.devolver(
+        item.producto_id,
+        item.cantidad,
+        manager,
+      );
+      await this.inventarioMovimientosService.registrar(
+        {
+          producto_id: item.producto_id,
+          tipo: 'devolucion',
+          cantidad: item.cantidad,
+          motivo,
+          referencia_tipo: 'pedido',
+          referencia_id: pedidoId,
+          usuario_id: usuarioId,
+        },
+        manager,
+      );
+    }
+  }
+
+  /** ¿Ya se descontó el stock de este pedido? Evita dobles descuentos. */
+  private async stockDescontado(manager: EntityManager, pedidoId: number) {
+    const movimientos = await manager.count(InventarioMovimiento, {
+      where: {
+        tipo: 'salida',
+        referencia_tipo: 'pedido',
+        referencia_id: pedidoId,
+      },
+    });
+    return movimientos > 0;
+  }
+
   async crear(
     usuarioId: number,
     direccion: string | undefined,
@@ -187,74 +333,90 @@ export class PedidosService {
     notas?: string,
     procesadoPor?: number,
     tipoPago?: string,
+    montoPagado?: number,
+    auditor?: AuditorPedido,
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
     try {
-      const precios = await this.preciosDesdeBD(queryRunner.manager, items);
+      const precios = await this.preciosDesdeBD(manager, items);
       const total = items.reduce(
         (sum, i) => sum + (precios.get(i.producto_id) ?? 0) * i.cantidad,
         0,
       );
+      const esCredito = tipoPago === 'credito';
+      // Contado sin monto explícito se considera totalmente pagado.
+      const abono =
+        !esCredito && montoPagado === undefined
+          ? total
+          : Math.min(Math.max(Number(montoPagado ?? 0), 0), total);
+      const contado = !esCredito && abono >= total;
+      const estadoFinal = contado ? 'entregado' : 'pendiente';
 
-      const pedido = queryRunner.manager.create(Pedido, {
+      const pedido = manager.create(Pedido, {
         usuario_id: usuarioId,
         procesado_por: procesadoPor,
         total,
         direccion_entrega: direccion || '',
         notas: notas || '',
-        estado: 'pendiente',
+        estado: estadoFinal,
+        historial_estados: contado
+          ? this.nuevoHistorial(['confirmado', 'enviado', 'entregado'], auditor)
+          : this.nuevoHistorial(['pendiente'], auditor),
       });
-      const pedidoGuardado = await queryRunner.manager.save(pedido);
+      const pedidoGuardado = await manager.save(pedido);
+
+      // Stock + Kardex en la MISMA transacción, antes de cualquier commit.
+      await this.registrarSalida(
+        manager,
+        pedidoGuardado.id,
+        items,
+        'Venta registrada desde el punto de venta',
+        auditor?.usuario_id,
+      );
 
       for (const item of items) {
-        await this.inventarioService.descontar(
-          item.producto_id,
-          item.cantidad,
-          queryRunner.manager,
-        );
-        await this.inventarioMovimientosService.registrar({
-          producto_id: item.producto_id,
-          tipo: 'venta',
-          cantidad: item.cantidad,
-          referencia_tipo: 'pedido',
-          referencia_id: pedidoGuardado.id,
-        }, queryRunner.manager).catch(() => {});
-        const detalle = queryRunner.manager.create(DetallePedido, {
+        const detalle = manager.create(DetallePedido, {
           pedido_id: pedidoGuardado.id,
           producto_id: item.producto_id,
           cantidad: item.cantidad,
           precio_unitario: precios.get(item.producto_id) ?? 0,
         });
-        await queryRunner.manager.save(detalle);
+        await manager.save(detalle);
       }
 
-      // Crédito: registra el saldo pendiente en el módulo de deudas existente,
-      // dentro de la misma transacción del pedido.
-      if (tipoPago === 'credito') {
-        await queryRunner.manager.save(
-          queryRunner.manager.create(Deuda, {
+      // Paso (c): deuda por crédito o pago parcial.
+      if (tipoPago === 'credito' || (abono > 0 && abono < total)) {
+        await manager.save(
+          manager.create(Deuda, {
             usuario_id: usuarioId,
             vendedor_id: procesadoPor,
+            pedido_id: pedidoGuardado.id,
             monto: total,
-            descripcion: `Venta a crédito · Pedido #${pedidoGuardado.id}${notas ? ` — ${notas}` : ''}`,
-            estado: 'pendiente',
-            monto_pagado: 0,
+            descripcion: `Venta a ${tipoPago === 'credito' ? 'crédito' : 'pago parcial'} · Pedido #${pedidoGuardado.id}${notas ? ` — ${notas}` : ''}`,
+            estado: abono >= total ? 'pagado' : 'pendiente',
+            monto_pagado: abono,
           }),
         );
       }
 
+      // Paso (d): auditoría del usuario ejecutor, atómica con el resto.
+      await this.auditar(manager, {
+        accion: 'crear',
+        entidad_id: pedidoGuardado.id,
+        valor_nuevo: {
+          total,
+          estado: estadoFinal,
+          tipoPago: tipoPago || 'contado',
+          monto_pagado: abono,
+          items: items.length,
+        },
+        auditor,
+      });
+
       await queryRunner.commitTransaction();
-
-      // Contado: la operación queda registrada como pagada según la lógica
-      // actual (estado "entregado").
-      if (tipoPago === 'contado') {
-        await this.actualizarEstado(pedidoGuardado.id, 'confirmado');
-        await this.actualizarEstado(pedidoGuardado.id, 'enviado');
-        await this.actualizarEstado(pedidoGuardado.id, 'entregado');
-      }
-
       return this.findOne(pedidoGuardado.id);
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -265,7 +427,7 @@ export class PedidosService {
   }
 
   private async findDetallesConManager(
-    manager: import('typeorm').EntityManager,
+    manager: EntityManager,
     pedidoId: number,
   ) {
     return manager.find(DetallePedido, {
@@ -282,11 +444,7 @@ export class PedidosService {
     cancelado: [],
   };
 
-  /**
-   * Control de edición: un pedido solo se modifica en estado "pendiente".
-   * Confirmado/enviado queda restringido a cambios de estado (quien edite items
-   * alteraría el stock comprometido de una venta ya procesada).
-   */
+  /** Un pedido solo se modifica mientras está en estado "pendiente". */
   private verificarEditable(pedido: Pedido) {
     if (pedido.estado !== 'pendiente') {
       throw new BadRequestException(
@@ -295,7 +453,16 @@ export class PedidosService {
     }
   }
 
-  async actualizarEstado(id: number, estado: string) {
+  /**
+   * Confirma la venta al pasar a "entregado". Si el pedido ya descontó stock
+   * al crearse (flujo POS) no vuelve a hacerlo; si no, ejecuta la validación
+   * con bloqueo pesimista + descuento + Kardex + auditoría de forma atómica.
+   */
+  async actualizarEstado(
+    id: number,
+    estado: string,
+    auditor?: AuditorPedido,
+  ) {
     const pedido = await this.findOne(id);
     const permitidos = this.transiciones[pedido.estado];
     if (!permitidos || !permitidos.includes(estado)) {
@@ -304,35 +471,68 @@ export class PedidosService {
       );
     }
 
-    if (estado !== 'cancelado') {
-      await this.pedidosRepo.update(id, { estado });
-      return this.findOne(id);
-    }
-
-    // Al cancelar se devuelve el stock, dentro de una transacción
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
     try {
-      const detalles = await queryRunner.manager.find(DetallePedido, {
-        where: { pedido_id: id },
-      });
-      for (const detalle of detalles) {
-        await this.inventarioService.devolver(
-          detalle.producto_id,
-          detalle.cantidad,
-          queryRunner.manager,
+      // Bloquea el pedido para evitar dos transiciones concurrentes.
+      const bloqueado = await manager
+        .createQueryBuilder(Pedido, 'pedido')
+        .setLock('pessimistic_write')
+        .where('pedido.id = :id', { id })
+        .getOne();
+      if (!bloqueado) throw new NotFoundException('Pedido no encontrado');
+
+      const permitidosEnBD = this.transiciones[bloqueado.estado] || [];
+      if (!permitidosEnBD.includes(estado)) {
+        throw new BadRequestException(
+          `No se puede cambiar de "${bloqueado.estado}" a "${estado}". Transiciones permitidas: ${permitidosEnBD.join(', ')}`,
         );
-        await this.inventarioMovimientosService.registrar({
-          producto_id: detalle.producto_id,
-          tipo: 'devolucion',
-          cantidad: detalle.cantidad,
-          referencia_tipo: 'pedido',
-          referencia_id: id,
-          motivo: 'Pedido cancelado',
-        }, queryRunner.manager).catch(() => {});
       }
-      await queryRunner.manager.update(Pedido, id, { estado });
+
+      if (estado === 'entregado' && !(await this.stockDescontado(manager, id))) {
+        const detalles = await manager.find(DetallePedido, {
+          where: { pedido_id: id },
+        });
+        await this.registrarSalida(
+          manager,
+          id,
+          detalles,
+          'Pedido marcado como entregado',
+          auditor?.usuario_id,
+        );
+      }
+
+      if (estado === 'cancelado') {
+        const detalles = await manager.find(DetallePedido, {
+          where: { pedido_id: id },
+        });
+        await this.registrarDevolucion(
+          manager,
+          id,
+          detalles,
+          'Pedido cancelado',
+          auditor?.usuario_id,
+        );
+      }
+
+      await manager.update(Pedido, id, {
+        estado,
+        historial_estados: [
+          ...(bloqueado.historial_estados || []),
+          ...this.nuevoHistorial([estado], auditor),
+        ],
+      });
+
+      await this.auditar(manager, {
+        accion: estado === 'entregado' ? 'confirmar_venta' : 'modificar_estado',
+        entidad_id: id,
+        valor_anterior: { estado: bloqueado.estado },
+        valor_nuevo: { estado },
+        auditor,
+      });
+
       await queryRunner.commitTransaction();
       return this.findOne(id);
     } catch (err) {
@@ -343,37 +543,52 @@ export class PedidosService {
     }
   }
 
-  async agregarItems(pedidoId: number, items: ItemPedido[]) {
+  async agregarItems(
+    pedidoId: number,
+    items: ItemPedido[],
+    auditor?: AuditorPedido,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
     try {
       const pedido = await this.findOne(pedidoId);
       this.verificarEditable(pedido);
 
-      const precios = await this.preciosDesdeBD(queryRunner.manager, items);
+      const precios = await this.preciosDesdeBD(manager, items);
+
+      await this.registrarSalida(
+        manager,
+        pedidoId,
+        items,
+        'Items agregados al pedido',
+        auditor?.usuario_id,
+      );
 
       for (const item of items) {
-        await this.inventarioService.descontar(
-          item.producto_id,
-          item.cantidad,
-          queryRunner.manager,
-        );
-        const detalle = queryRunner.manager.create(DetallePedido, {
+        const detalle = manager.create(DetallePedido, {
           pedido_id: pedidoId,
           producto_id: item.producto_id,
           cantidad: item.cantidad,
           precio_unitario: precios.get(item.producto_id) ?? 0,
         });
-        await queryRunner.manager.save(detalle);
+        await manager.save(detalle);
       }
 
-      const detalles = await this.findDetallesConManager(queryRunner.manager, pedidoId);
+      const detalles = await this.findDetallesConManager(manager, pedidoId);
       const total = detalles.reduce(
         (sum, d) => sum + Number(d.precio_unitario) * d.cantidad,
         0,
       );
-      await queryRunner.manager.update(Pedido, pedidoId, { total });
+      await manager.update(Pedido, pedidoId, { total });
+
+      await this.auditar(manager, {
+        accion: 'agregar_items',
+        entidad_id: pedidoId,
+        valor_nuevo: { items: items.length, total },
+        auditor,
+      });
 
       await queryRunner.commitTransaction();
       return this.findFactura(pedidoId);
@@ -385,10 +600,15 @@ export class PedidosService {
     }
   }
 
-  async eliminarItem(pedidoId: number, itemId: number) {
+  async eliminarItem(
+    pedidoId: number,
+    itemId: number,
+    auditor?: AuditorPedido,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
     try {
       const pedido = await this.findOne(pedidoId);
       this.verificarEditable(pedido);
@@ -399,22 +619,16 @@ export class PedidosService {
       if (!detalle)
         throw new NotFoundException('Detalle del pedido no encontrado');
 
-      await this.inventarioService.devolver(
-        detalle.producto_id,
-        detalle.cantidad,
-        queryRunner.manager,
+      await this.registrarDevolucion(
+        manager,
+        pedidoId,
+        [detalle],
+        'Eliminación de item del pedido',
+        auditor?.usuario_id,
       );
-      await this.inventarioMovimientosService.registrar({
-        producto_id: detalle.producto_id,
-        tipo: 'devolucion',
-        cantidad: detalle.cantidad,
-        referencia_tipo: 'pedido',
-        referencia_id: pedidoId,
-        motivo: 'Eliminación de item del pedido',
-      }, queryRunner.manager).catch(() => {});
-      await queryRunner.manager.delete(DetallePedido, itemId);
+      await manager.delete(DetallePedido, itemId);
 
-      const detalles = await this.findDetallesConManager(queryRunner.manager, pedidoId);
+      const detalles = await this.findDetallesConManager(manager, pedidoId);
       const total =
         detalles.length > 0
           ? detalles.reduce(
@@ -422,7 +636,15 @@ export class PedidosService {
               0,
             )
           : 0;
-      await queryRunner.manager.update(Pedido, pedidoId, { total });
+      await manager.update(Pedido, pedidoId, { total });
+
+      await this.auditar(manager, {
+        accion: 'eliminar_item',
+        entidad_id: pedidoId,
+        valor_anterior: { producto_id: detalle.producto_id, cantidad: detalle.cantidad },
+        valor_nuevo: { total },
+        auditor,
+      });
 
       await queryRunner.commitTransaction();
       return this.findFactura(pedidoId);
@@ -434,10 +656,11 @@ export class PedidosService {
     }
   }
 
-  async eliminar(id: number) {
+  async eliminar(id: number, auditor?: AuditorPedido) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
     try {
       const pedido = await this.findOne(id);
       // Un pedido entregado ya se vendió: no devuelve stock
@@ -445,25 +668,26 @@ export class PedidosService {
       const detalles = await this.findDetalles(id);
 
       if (devolverStock) {
-        for (const detalle of detalles) {
-          await this.inventarioService.devolver(
-            detalle.producto_id,
-            detalle.cantidad,
-            queryRunner.manager,
-          );
-          await this.inventarioMovimientosService.registrar({
-            producto_id: detalle.producto_id,
-            tipo: 'devolucion',
-            cantidad: detalle.cantidad,
-            referencia_tipo: 'pedido',
-            referencia_id: id,
-            motivo: 'Pedido eliminado',
-          }, queryRunner.manager).catch(() => {});
-        }
+        await this.registrarDevolucion(
+          manager,
+          id,
+          detalles,
+          'Pedido eliminado',
+          auditor?.usuario_id,
+        );
       }
 
-      await queryRunner.manager.delete(DetallePedido, { pedido_id: id });
-      await queryRunner.manager.delete(Pedido, id);
+      await manager.delete(DetallePedido, { pedido_id: id });
+      await manager.delete(Deuda, { pedido_id: id });
+      await manager.delete(Pedido, id);
+
+      await this.auditar(manager, {
+        accion: 'eliminar',
+        entidad_id: id,
+        valor_anterior: { estado: pedido.estado, total: pedido.total },
+        valor_nuevo: { estado: 'eliminado' },
+        auditor,
+      });
 
       await queryRunner.commitTransaction();
       return { message: 'Pedido eliminado correctamente' };
@@ -479,10 +703,12 @@ export class PedidosService {
     pedidoId: number,
     itemId: number,
     nuevaCantidad: number,
+    auditor?: AuditorPedido,
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
     try {
       const pedido = await this.findOne(pedidoId);
       this.verificarEditable(pedido);
@@ -495,29 +721,41 @@ export class PedidosService {
 
       const diff = nuevaCantidad - detalle.cantidad;
       if (diff > 0) {
-        await this.inventarioService.descontar(
-          detalle.producto_id,
-          diff,
-          queryRunner.manager,
+        await this.registrarSalida(
+          manager,
+          pedidoId,
+          [{ producto_id: detalle.producto_id, cantidad: diff }],
+          'Aumento de cantidad en item del pedido',
+          auditor?.usuario_id,
         );
       } else if (diff < 0) {
-        await this.inventarioService.devolver(
-          detalle.producto_id,
-          Math.abs(diff),
-          queryRunner.manager,
+        await this.registrarDevolucion(
+          manager,
+          pedidoId,
+          [{ producto_id: detalle.producto_id, cantidad: Math.abs(diff) }],
+          'Reducción de cantidad en item del pedido',
+          auditor?.usuario_id,
         );
       }
 
-      await queryRunner.manager.update(DetallePedido, itemId, {
+      await manager.update(DetallePedido, itemId, {
         cantidad: nuevaCantidad,
       });
 
-      const detalles = await this.findDetallesConManager(queryRunner.manager, pedidoId);
+      const detalles = await this.findDetallesConManager(manager, pedidoId);
       const total = detalles.reduce(
         (sum, d) => sum + Number(d.precio_unitario) * d.cantidad,
         0,
       );
-      await queryRunner.manager.update(Pedido, pedidoId, { total });
+      await manager.update(Pedido, pedidoId, { total });
+
+      await this.auditar(manager, {
+        accion: 'actualizar_item',
+        entidad_id: pedidoId,
+        valor_anterior: { cantidad: detalle.cantidad },
+        valor_nuevo: { cantidad: nuevaCantidad, total },
+        auditor,
+      });
 
       await queryRunner.commitTransaction();
       return this.findFactura(pedidoId);
@@ -556,8 +794,6 @@ export class PedidosService {
       .orderBy('total_vendido', 'DESC')
       .getRawMany();
 
-    // Detalle de pedidos por vendedor (para la vista "Ver pedidos").
-    // Incluye cliente y productos para consolidar la información.
     const whereDetalle: FindOptionsWhere<Pedido> = {
       procesado_por: usuarioId ?? Not(IsNull()),
     };

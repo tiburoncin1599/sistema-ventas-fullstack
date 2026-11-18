@@ -12,6 +12,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface Cliente {
   id: number;
@@ -149,6 +150,36 @@ export default function VentasDashboard() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="mt-10">
+        <h3 className="mb-4 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">
+          Pedidos pendientes
+        </h3>
+        {pedidosPendientes.length === 0 ? (
+          <div className="prolimal-surface px-6 py-10 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+            No tenés pedidos pendientes.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-[2rem] border border-prolimal-ink-900/10 bg-card dark:border-prolimal-sand-100/10 dark:bg-card-dark">
+            {pedidosPendientes.map(p => (
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-prolimal-ink-900/5 px-5 py-4 last:border-0 dark:border-prolimal-sand-100/10"
+              >
+                <div>
+                  <p className="text-sm font-bold text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                    Pedido #{p.id}
+                  </p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    {p.estado} · {formatCurrency(p.total)}
+                  </p>
+                </div>
+                <BotonComprobantePdf pedidoId={p.id} label="Comprobante PDF" compacta />
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

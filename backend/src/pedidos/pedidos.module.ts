@@ -9,6 +9,7 @@ import { InventarioMovimientosModule } from '../inventario-movimientos/inventari
 import { ConfiguracionModule } from '../configuracion/configuracion.module';
 import { AuditModule } from '../audit/audit.module';
 import { FacturaService } from './factura.service';
+import { ComprobantesModule } from '../comprobantes/comprobantes.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { FacturaService } from './factura.service';
     InventarioMovimientosModule,
     ConfiguracionModule,
     AuditModule,
+    ComprobantesModule,
   ],
   controllers: [PedidosController],
   providers: [PedidosService, FacturaService],

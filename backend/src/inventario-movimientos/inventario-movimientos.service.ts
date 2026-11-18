@@ -156,9 +156,17 @@ export class InventarioMovimientosService {
 
     let saldo = 0;
     return movimientos.map((m) => {
-      saldo += m.tipo === 'entrada' || m.tipo === 'devolucion'
-        ? m.cantidad
-        : -m.cantidad;
+      const esAjuste = m.tipo === 'AJUSTE' || m.tipo === 'ajuste';
+      const delta = esAjuste
+        ? // En ajustes se guarda la diferencia con signo. Para registros
+          // históricos se reconstruye desde cantidad_anterior/nueva.
+          m.cantidad_anterior !== null && m.cantidad_nueva !== null
+          ? m.cantidad_nueva - m.cantidad_anterior
+          : m.cantidad
+        : m.tipo === 'entrada' || m.tipo === 'devolucion'
+          ? m.cantidad
+          : -m.cantidad;
+      saldo += delta;
       return {
         ...m,
         saldo_actual: saldo,
