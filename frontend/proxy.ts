@@ -21,10 +21,18 @@ const rutasAdmin: { ruta: string; roles: string[] }[] = [
 
 const rolesAdminBase = ['admin', 'inventario', 'ventas'];
 
+function normalizarRol(rol: unknown): string | undefined {
+  return typeof rol === 'string' ? rol.trim().toLowerCase() : undefined;
+}
+
 function leerUsuario(request: NextRequest): { rol?: string } | null {
   const usuarioStr = request.cookies.get('usuario')?.value;
   try {
-    return usuarioStr ? JSON.parse(decodeURIComponent(usuarioStr)) : null;
+    if (!usuarioStr) return null;
+    const usuario = JSON.parse(decodeURIComponent(usuarioStr)) as {
+      rol?: unknown;
+    };
+    return { rol: normalizarRol(usuario.rol) };
   } catch {
     return null;
   }

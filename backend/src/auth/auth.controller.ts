@@ -24,7 +24,9 @@ export class AuthController {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
-    path: '/auth',
+    // El frontend llama a /api/auth/refresh (rewrite de Next); con path '/auth'
+    // el navegador no enviaba la cookie y el refresh siempre fallaba.
+    path: '/',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
   };
 
@@ -46,7 +48,7 @@ export class AuthController {
   }
 
   private clearRefreshCookie(res: Response) {
-    res.clearCookie(this.REFRESH_COOKIE, { path: '/auth' });
+    res.clearCookie(this.REFRESH_COOKIE, { path: '/' });
   }
 
   private entregarSesion(res: Response, result: { token: string; refreshToken: string; usuario: unknown }) {

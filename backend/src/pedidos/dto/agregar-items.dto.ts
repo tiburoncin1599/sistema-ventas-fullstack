@@ -1,13 +1,26 @@
-import { IsNumber, IsArray, Min, ValidateNested } from 'class-validator';
+import {
+  IsNumber,
+  IsArray,
+  IsOptional,
+  IsIn,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+import { TIPOS_PRESENTACION } from '../detalle-pedido.entity';
+import { MinSegunPresentacion } from './validators/min-segun-presentacion.validator';
 
 class ItemAgregarDto {
   @IsNumber()
   producto_id!: number;
 
   @IsNumber()
-  @Min(1)
+  @MinSegunPresentacion()
   cantidad!: number;
+
+  @IsOptional()
+  @IsIn([...TIPOS_PRESENTACION])
+  tipo_presentacion?: string;
 
   @IsNumber()
   @Min(0)

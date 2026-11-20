@@ -246,7 +246,9 @@ export class PedidosController {
     const user = req.user as { id: number; rol: string };
     const usuarioId = user.rol === 'cliente' ? user.id : body.usuarioId || user.id;
     const procesadoPor = user.rol === 'cliente' ? undefined : body.procesadoPor || user.id;
-    const tipoPago = user.rol === 'cliente' ? undefined : body.tipoPago;
+    // Se acepta la forma canónica `tipo_pago` y la legacy `tipoPago`.
+    const tipoPago =
+      user.rol === 'cliente' ? undefined : (body.tipo_pago ?? body.tipoPago);
     const montoPagado = user.rol === 'cliente' ? undefined : body.montoPagado;
 
     const pedido = await this.pedidosService.crear(

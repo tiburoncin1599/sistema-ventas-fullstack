@@ -39,4 +39,11 @@ export class Producto {
 
   @Column({ default: true })
   activo!: boolean;
+
+  /**
+   * Override opcional de "unidades por paquete". Null/ausente significa que
+   * se aplica la regla por nombre de `conversion-paquetes.ts`.
+   */
+  @Column({ type: 'int', nullable: true })
+  factor_paquete?: number | null;
 }

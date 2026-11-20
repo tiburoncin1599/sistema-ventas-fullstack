@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { AlertCircle, ArrowLeft, CheckCircle2, Package, ShoppingCart, Tag } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { useCarrito } from '@/store/carrito';
+import { CANTIDAD_MINIMA, factorConversion } from '@/lib/conversion';
+import { useCarrito, type TipoPresentacion } from '@/store/carrito';
 
 interface Producto {
   id: number;
@@ -17,7 +18,13 @@ interface Producto {
   categoria: { nombre: string };
   stock: number;
   disponible: boolean;
+  factor_paquete?: number | null;
 }
+
+const OPCIONES_PRESENTACION: { valor: TipoPresentacion; titulo: string }[] = [
+  { valor: 'UNIDAD', titulo: 'Unidades' },
+  { valor: 'PAQUETE', titulo: 'Paquetes' },
+];
 
 export default function DetalleProducto() {
   const params = useParams();
@@ -25,7 +32,8 @@ export default function DetalleProducto() {
   const [producto, setProducto] = useState<Producto | null>(null);
   const [cargando, setCargando] = useState(true);
   const [agregado, setAgregado] = useState(false);
-  const [cantidadSel, setCantidadSel] = useState(3);
+  const [tipo, setTipo] = useState<TipoPresentacion>('UNIDAD');
+  const [cantidadSel, setCantidadSel] = useState(CANTIDAD_MINIMA.UNIDAD);
   const { agregar } = useCarrito();
 
   useEffect(() => {
@@ -38,10 +46,15 @@ export default function DetalleProducto() {
 
   const handleAgregar = (cantidad?: number) => {
     if (!producto) return;
-    const q = cantidad ?? cantidadSel;
-    agregar({ ...producto, cantidad: q });
+    const q = Math.max(CANTIDAD_MINIMA[tipo], cantidad ?? cantidadSel);
+    agregar({ ...producto, cantidad: q, tipo_presentacion: tipo });
     setAgregado(true);
     setTimeout(() => setAgregado(false), 2000);
+  };
+
+  const seleccionarTipo = (valor: TipoPresentacion) => {
+    setTipo(valor);
+    setCantidadSel(CANTIDAD_MINIMA[valor]);
   };
 
   if (cargando) return (
@@ -72,6 +85,10 @@ export default function DetalleProducto() {
   );
 
   const stock = typeof producto.stock === 'number' ? producto.stock : 0;
+  const factor = factorConversion(producto);
+  const opcionesCantidad = tipo === 'UNIDAD' ? [3, 6, 12] : [1, 2, 3];
+  const cabe = (cantidad: number) =>
+    stock >= (tipo === 'PAQUETE' ? cantidad * factor : cantidad);
 
   return (
     <main className="prolimal-page min-h-screen">
@@ -144,14 +161,43 @@ export default function DetalleProducto() {
 
               <div className="mt-6">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                  Cantidad
+                  Presentación
+                </p>
+                <div className="mt-3 inline-flex rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-50/60 p-0.5 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/60">
+                  {OPCIONES_PRESENTACION.map(opcion => (
+                    <button
+                      key={opcion.valor}
+                      type="button"
+                      onClick={() => seleccionarTipo(opcion.valor)}
+                      aria-pressed={tipo === opcion.valor}
+                      aria-label={`${opcion.titulo} de ${producto.nombre}`}
+                      className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+                        tipo === opcion.valor
+                          ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                          : 'text-prolimal-ink-500 hover:text-prolimal-teal-700 dark:text-prolimal-ink-200'
+                      }`}
+                    >
+                      {opcion.titulo}
+                    </button>
+                  ))}
+                </div>
+                {tipo === 'PAQUETE' && (
+                  <p className="mt-2 text-[11px] font-bold text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                    1 paquete = {factor} unidades
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-6">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Cantidad (mín. {CANTIDAD_MINIMA[tipo]})
                 </p>
                 <div className="mt-3 flex gap-2">
-                  {[3, 6, 12].map(q => (
+                  {opcionesCantidad.map(q => (
                     <button
                       key={q}
                       type="button"
-                      disabled={stock < q}
+                      disabled={!cabe(q)}
                       onClick={() => setCantidadSel(q)}
                       className={`flex-1 rounded-full border py-3 text-sm font-extrabold transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
                         cantidadSel === q
@@ -168,7 +214,7 @@ export default function DetalleProducto() {
               <button
                 type="button"
                 onClick={() => handleAgregar()}
-                disabled={stock === 0}
+                disabled={!cabe(cantidadSel)}
                 className={`mt-6 flex w-full items-center justify-center gap-2 rounded-full py-4 text-base font-extrabold transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
                   agregado
                     ? 'bg-prolimal-teal-600 text-white'
@@ -178,7 +224,9 @@ export default function DetalleProducto() {
                 <ShoppingCart className="h-5 w-5" />
                 {stock === 0
                   ? 'Agotado'
-                  : agregado ? 'Agregado al carrito' : `Agregar ${cantidadSel === 12 ? 'docena' : cantidadSel} al carrito`}
+                  : agregado
+                    ? 'Agregado al carrito'
+                    : `Agregar ${tipo === 'UNIDAD' ? (cantidadSel === 12 ? 'docena' : cantidadSel) : `${cantidadSel} paq.`} al carrito`}
               </button>
 
               <p className="mt-4 text-center text-[11px] font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">

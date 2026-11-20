@@ -5,9 +5,21 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Package, ShieldCheck, ShoppingCart, Trash2, X } from 'lucide-react';
 import { API_URL } from '@/lib/api';
-import { useCarrito } from '@/store/carrito';
+import {
+  useCarrito,
+  claveLinea,
+  presentacionDe,
+  CANTIDAD_MINIMA,
+  type TipoPresentacion,
+} from '@/store/carrito';
 import { useDrawerAccesible } from '@/lib/useDrawerAccesible';
 import { formatCurrency } from '@/lib/utils';
+import {
+  esPaquete,
+  factorConversion,
+  topePorStock,
+  unidadesDe,
+} from '@/lib/conversion';
 
 interface CarritoDrawerProps {
   abierto: boolean;
@@ -39,7 +51,13 @@ function ImagenItem({ nombre, imagenUrl }: { nombre: string; imagenUrl?: string 
 }
 
 export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps) {
-  const { items, quitar, cambiarCantidad, total, vaciar } = useCarrito();
+  const { items, quitar, cambiarCantidad, cambiarPresentacion, total, vaciar } =
+    useCarrito();
+
+  const opcionesPresentacion: { valor: TipoPresentacion; titulo: string }[] = [
+    { valor: 'UNIDAD', titulo: 'Unidades' },
+    { valor: 'PAQUETE', titulo: 'Paquetes' },
+  ];
   const panelRef = useRef<HTMLElement | null>(null);
 
   useDrawerAccesible({ abierto, onCerrar, panelRef });
@@ -115,10 +133,18 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
               ) : (
                 <ul className="space-y-3">
                   {items.map((item) => {
-                    const maxAlcanzado = typeof item.stock === 'number' && item.cantidad >= item.stock;
+                    const tipo = presentacionDe(item);
+                    const clave = claveLinea(item.id, tipo);
+                    const paso = CANTIDAD_MINIMA[tipo];
+                    const minimo = CANTIDAD_MINIMA[tipo];
+                    const factor = esPaquete(tipo) ? factorConversion(item) : 1;
+                    const unidades = unidadesDe(item);
+                    const tope = topePorStock(item.stock, item);
+                    const maxAlcanzado =
+                      tope !== undefined && item.cantidad >= tope;
                     return (
                       <li
-                        key={item.id}
+                        key={clave}
                         className="rounded-2xl border border-prolimal-ink-900/10 bg-card p-3 dark:border-prolimal-sand-100/10 dark:bg-card-dark"
                       >
                         <div className="flex gap-3">
@@ -133,10 +159,33 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                                 <p className="mt-0.5 text-xs font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">
                                   {formatCurrency(item.precio)} c/u
                                 </p>
+                                {factor > 1 && (
+                                  <p className="mt-1 text-[10px] font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                                    1 paq = {factor} unid.
+                                  </p>
+                                )}
+                                <div className="mt-2 inline-flex rounded-full border border-prolimal-ink-900/10 p-0.5 dark:border-prolimal-sand-100/10">
+                                  {opcionesPresentacion.map(opcion => (
+                                    <button
+                                      key={opcion.valor}
+                                      type="button"
+                                      onClick={() => cambiarPresentacion(clave, opcion.valor)}
+                                      aria-pressed={tipo === opcion.valor}
+                                      aria-label={`${opcion.titulo} de ${item.nombre}`}
+                                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                                        tipo === opcion.valor
+                                          ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                                          : 'text-prolimal-ink-500 dark:text-prolimal-ink-200'
+                                      }`}
+                                    >
+                                      {opcion.titulo}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                               <button
                                 type="button"
-                                onClick={() => quitar(item.id)}
+                                onClick={() => quitar(clave)}
                                 aria-label={`Quitar ${item.nombre}`}
                                 className="shrink-0 rounded-lg p-1.5 text-prolimal-red-500 transition-colors hover:bg-prolimal-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-red-400 dark:hover:bg-prolimal-red-900/30"
                               >
@@ -148,29 +197,42 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                               <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 3))}
-                                  aria-label="Quitar 3 unidades"
+                                  onClick={() => cambiarCantidad(clave, Math.max(0, item.cantidad - paso))}
+                                  aria-label={`Quitar ${paso} ${tipo === 'UNIDAD' ? 'unidades' : 'paquetes'}`}
                                   className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 bg-card text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                                 >
-                                  -3
+                                  -{paso}
                                 </button>
                                 <span className="min-w-8 text-center text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
                                   {item.cantidad}
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() => cambiarCantidad(item.id, item.cantidad + 3)}
+                                  onClick={() => cambiarCantidad(clave, item.cantidad + paso)}
                                   disabled={maxAlcanzado}
-                                  aria-label="Añadir 3 unidades"
+                                  aria-label={`Añadir ${paso} ${tipo === 'UNIDAD' ? 'unidades' : 'paquetes'}`}
                                   className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 bg-card text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                                 >
-                                  +3
+                                  +{paso}
                                 </button>
                               </div>
-                              <p className="text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">
-                                {formatCurrency(item.precio * item.cantidad)}
+                              <p className="text-right text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                                {formatCurrency(item.precio * unidades)}
+                                {factor > 1 && (
+                                  <span className="mt-0.5 block text-[10px] font-bold text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                                    {unidades} unid.
+                                  </span>
+                                )}
                               </p>
                             </div>
+                            {item.cantidad < minimo && (
+                              <p
+                                role="alert"
+                                className="mt-1 text-[10px] font-bold text-prolimal-coral-600 dark:text-prolimal-coral-400"
+                              >
+                                Mínimo {minimo} {tipo === 'UNIDAD' ? 'unidades' : 'paquete'}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </li>

@@ -46,7 +46,7 @@ function ProductosContent({ busquedaInicial }: { busquedaInicial: string }) {
     typeof producto.stock === 'number' ? producto.stock : 0;
 
   const agregarRapido = (producto: Producto, cantidad: number, texto: string) => {
-    agregar({ ...producto, cantidad });
+    agregar({ ...producto, cantidad, tipo_presentacion: 'UNIDAD' });
     setMensaje({ id: producto.id, texto });
     setTimeout(() => setMensaje(null), 1500);
   };

@@ -16,8 +16,13 @@ import {
   FindOptionsWhere,
   EntityManager,
 } from 'typeorm';
-import { Pedido } from './pedido.entity';
-import { DetallePedido } from './detalle-pedido.entity';
+import { Pedido, TIPOS_PAGO, type TipoPago } from './pedido.entity';
+import {
+  DetallePedido,
+  normalizarTipoPresentacion,
+  type TipoPresentacion,
+} from './detalle-pedido.entity';
+import { factorConversion } from './conversion-paquetes';
 import { Producto } from '../productos/producto.entity';
 import { Usuario } from '../usuarios/usuario.entity';
 import { Deuda } from '../deudas/deuda.entity';
@@ -30,6 +35,38 @@ interface ItemPedido {
   producto_id: number;
   cantidad: number;
   precio: number;
+  /** Opcional por compatibilidad; ausente = presentación histórica (UNIDAD). */
+  tipo_presentacion?: string;
+}
+
+/** Ítem ya resuelto: precio desde BD, factor y unidades físicas calculadas. */
+interface ItemResuelto {
+  producto_id: number;
+  cantidad: number;
+  tipo_presentacion: TipoPresentacion;
+  precio_unitario: number;
+  factor_conversion: number;
+  /** `cantidad × factor_conversion`: lo que realmente sale del inventario. */
+  unidades: number;
+}
+
+/** Estructura mínima que necesitan los movimientos de stock/Kardex. */
+interface ItemStock {
+  producto_id: number;
+  cantidad: number;
+  unidades?: number;
+}
+
+/**
+ * Normaliza cualquier variante aceptada por la API (`CONTADO`, `contado`,
+ * `CREDITO`, `credito`) a la forma canónica persistida. Devuelve `undefined`
+ * cuando el llamador no envió el campo, para no inventar un pago inmediato.
+ */
+export function normalizarTipoPago(valor?: string | null): TipoPago | undefined {
+  const limpio = (valor ?? '').trim().toUpperCase();
+  return (TIPOS_PAGO as readonly string[]).includes(limpio)
+    ? (limpio as TipoPago)
+    : undefined;
 }
 
 /** Usuario que ejecuta la operación; se persiste dentro de la transacción. */
@@ -196,11 +233,15 @@ export class PedidosService {
     return { pedido, detalles };
   }
 
-  /** Resuelve los precios desde la BD: el cliente NUNCA define el precio. */
-  private async preciosDesdeBD(
+  /**
+   * Resuelve precios y conversión desde la BD: el cliente NUNCA define ni el
+   * precio ni el factor. Los productos legacy sin `tipo_presentacion` mantienen
+   * factor 1, por lo que su total y su consumo de stock no cambian.
+   */
+  private async resolverItems(
     manager: EntityManager,
     items: ItemPedido[],
-  ): Promise<Map<number, number>> {
+  ): Promise<ItemResuelto[]> {
     const idsUnicos = [...new Set(items.map((i) => i.producto_id))];
     const productos = await manager.find(Producto, {
       where: { id: In(idsUnicos), activo: true },
@@ -210,7 +251,32 @@ export class PedidosService {
         'Uno o más productos no existen o están inactivos',
       );
     }
-    return new Map(productos.map((p) => [p.id, Number(p.precio)]));
+    const porId = new Map(productos.map((p) => [p.id, p]));
+
+    return items.map((item) => {
+      const producto = porId.get(item.producto_id)!;
+      const presentacion =
+        normalizarTipoPresentacion(item.tipo_presentacion) ?? 'UNIDAD';
+      const esPaquete = presentacion === 'PAQUETE';
+      const factor = esPaquete ? factorConversion(producto) : 1;
+      return {
+        producto_id: item.producto_id,
+        cantidad: item.cantidad,
+        tipo_presentacion: presentacion,
+        precio_unitario: Number(producto.precio),
+        factor_conversion: factor,
+        unidades: item.cantidad * factor,
+      };
+    });
+  }
+
+  /** Total de unidad de negocio: precio × unidades físicas. */
+  private totalDesdeDetalles(detalles: DetallePedido[]): number {
+    return detalles.reduce(
+      (sum, d) =>
+        sum + Number(d.precio_unitario) * (d.unidades ?? d.cantidad),
+      0,
+    );
   }
 
   private nuevoHistorial(estados: string[], auditor?: AuditorPedido) {
@@ -258,21 +324,23 @@ export class PedidosService {
   private async registrarSalida(
     manager: EntityManager,
     pedidoId: number,
-    items: { producto_id: number; cantidad: number }[],
+    items: ItemStock[],
     motivo: string,
     usuarioId?: number,
   ) {
     for (const item of items) {
+      // Un paquete consume sus unidades físicas, no una unidad por paquete.
+      const unidades = item.unidades ?? item.cantidad;
       const inventario = await this.inventarioService.descontarConBloqueo(
         item.producto_id,
-        item.cantidad,
+        unidades,
         manager,
       );
       await this.inventarioMovimientosService.registrar(
         {
           producto_id: item.producto_id,
           tipo: 'salida',
-          cantidad: item.cantidad,
+          cantidad: unidades,
           cantidad_anterior: inventario.cantidadAnterior,
           cantidad_nueva: inventario.cantidadNueva,
           motivo,
@@ -289,21 +357,23 @@ export class PedidosService {
   private async registrarDevolucion(
     manager: EntityManager,
     pedidoId: number,
-    items: { producto_id: number; cantidad: number }[],
+    items: ItemStock[],
     motivo: string,
     usuarioId?: number,
   ) {
     for (const item of items) {
+      // Devuelve exactamente lo que se descontó (unidades físicas).
+      const unidades = item.unidades ?? item.cantidad;
       await this.inventarioService.devolver(
         item.producto_id,
-        item.cantidad,
+        unidades,
         manager,
       );
       await this.inventarioMovimientosService.registrar(
         {
           producto_id: item.producto_id,
           tipo: 'devolucion',
-          cantidad: item.cantidad,
+          cantidad: unidades,
           motivo,
           referencia_tipo: 'pedido',
           referencia_id: pedidoId,
@@ -341,18 +411,20 @@ export class PedidosService {
     await queryRunner.startTransaction();
     const manager = queryRunner.manager;
     try {
-      const precios = await this.preciosDesdeBD(manager, items);
-      const total = items.reduce(
-        (sum, i) => sum + (precios.get(i.producto_id) ?? 0) * i.cantidad,
+      const resueltos = await this.resolverItems(manager, items);
+      const total = resueltos.reduce(
+        (sum, i) => sum + i.precio_unitario * i.unidades,
         0,
       );
-      const esCredito = tipoPago === 'credito';
-      // Contado sin monto explícito se considera totalmente pagado.
+      const tipo = normalizarTipoPago(tipoPago);
+      const esCredito = tipo === 'CREDITO';
+      // Solo un contado explícito sin monto se considera totalmente pagado.
+      // Si el campo no viene, el pedido queda pendiente (no se inventa un cobro).
       const abono =
-        !esCredito && montoPagado === undefined
-          ? total
+        montoPagado === undefined
+          ? tipo === 'CONTADO' ? total : 0
           : Math.min(Math.max(Number(montoPagado ?? 0), 0), total);
-      const contado = !esCredito && abono >= total;
+      const contado = tipo === 'CONTADO' && abono >= total;
       const estadoFinal = contado ? 'entregado' : 'pendiente';
 
       const pedido = manager.create(Pedido, {
@@ -362,6 +434,7 @@ export class PedidosService {
         direccion_entrega: direccion || '',
         notas: notas || '',
         estado: estadoFinal,
+        tipo_pago: tipo ?? 'CONTADO',
         historial_estados: contado
           ? this.nuevoHistorial(['confirmado', 'enviado', 'entregado'], auditor)
           : this.nuevoHistorial(['pendiente'], auditor),
@@ -372,30 +445,33 @@ export class PedidosService {
       await this.registrarSalida(
         manager,
         pedidoGuardado.id,
-        items,
+        resueltos,
         'Venta registrada desde el punto de venta',
         auditor?.usuario_id,
       );
 
-      for (const item of items) {
+      for (const item of resueltos) {
         const detalle = manager.create(DetallePedido, {
           pedido_id: pedidoGuardado.id,
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: precios.get(item.producto_id) ?? 0,
+          tipo_presentacion: item.tipo_presentacion,
+          factor_conversion: item.factor_conversion,
+          unidades: item.unidades,
+          precio_unitario: item.precio_unitario,
         });
         await manager.save(detalle);
       }
 
-      // Paso (c): deuda por crédito o pago parcial.
-      if (tipoPago === 'credito' || (abono > 0 && abono < total)) {
+      // Paso (c): deuda por crédito o pago parcial, en la MISMA transacción.
+      if (esCredito || (abono > 0 && abono < total)) {
         await manager.save(
           manager.create(Deuda, {
             usuario_id: usuarioId,
             vendedor_id: procesadoPor,
             pedido_id: pedidoGuardado.id,
             monto: total,
-            descripcion: `Venta a ${tipoPago === 'credito' ? 'crédito' : 'pago parcial'} · Pedido #${pedidoGuardado.id}${notas ? ` — ${notas}` : ''}`,
+            descripcion: `Venta a ${esCredito ? 'crédito' : 'pago parcial'} · Pedido #${pedidoGuardado.id}${notas ? ` — ${notas}` : ''}`,
             estado: abono >= total ? 'pagado' : 'pendiente',
             monto_pagado: abono,
           }),
@@ -409,7 +485,7 @@ export class PedidosService {
         valor_nuevo: {
           total,
           estado: estadoFinal,
-          tipoPago: tipoPago || 'contado',
+          tipo_pago: tipo ?? 'CONTADO',
           monto_pagado: abono,
           items: items.length,
         },
@@ -556,31 +632,31 @@ export class PedidosService {
       const pedido = await this.findOne(pedidoId);
       this.verificarEditable(pedido);
 
-      const precios = await this.preciosDesdeBD(manager, items);
+      const resueltos = await this.resolverItems(manager, items);
 
       await this.registrarSalida(
         manager,
         pedidoId,
-        items,
+        resueltos,
         'Items agregados al pedido',
         auditor?.usuario_id,
       );
 
-      for (const item of items) {
+      for (const item of resueltos) {
         const detalle = manager.create(DetallePedido, {
           pedido_id: pedidoId,
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: precios.get(item.producto_id) ?? 0,
+          tipo_presentacion: item.tipo_presentacion,
+          factor_conversion: item.factor_conversion,
+          unidades: item.unidades,
+          precio_unitario: item.precio_unitario,
         });
         await manager.save(detalle);
       }
 
       const detalles = await this.findDetallesConManager(manager, pedidoId);
-      const total = detalles.reduce(
-        (sum, d) => sum + Number(d.precio_unitario) * d.cantidad,
-        0,
-      );
+      const total = this.totalDesdeDetalles(detalles);
       await manager.update(Pedido, pedidoId, { total });
 
       await this.auditar(manager, {
@@ -629,13 +705,7 @@ export class PedidosService {
       await manager.delete(DetallePedido, itemId);
 
       const detalles = await this.findDetallesConManager(manager, pedidoId);
-      const total =
-        detalles.length > 0
-          ? detalles.reduce(
-              (sum, d) => sum + Number(d.precio_unitario) * d.cantidad,
-              0,
-            )
-          : 0;
+      const total = this.totalDesdeDetalles(detalles);
       await manager.update(Pedido, pedidoId, { total });
 
       await this.auditar(manager, {
@@ -719,12 +789,14 @@ export class PedidosService {
       if (!detalle)
         throw new NotFoundException('Detalle del pedido no encontrado');
 
+      const factor = detalle.factor_conversion ?? 1;
       const diff = nuevaCantidad - detalle.cantidad;
+      const diffFisicas = Math.abs(diff) * factor;
       if (diff > 0) {
         await this.registrarSalida(
           manager,
           pedidoId,
-          [{ producto_id: detalle.producto_id, cantidad: diff }],
+          [{ producto_id: detalle.producto_id, cantidad: diffFisicas }],
           'Aumento de cantidad en item del pedido',
           auditor?.usuario_id,
         );
@@ -732,7 +804,7 @@ export class PedidosService {
         await this.registrarDevolucion(
           manager,
           pedidoId,
-          [{ producto_id: detalle.producto_id, cantidad: Math.abs(diff) }],
+          [{ producto_id: detalle.producto_id, cantidad: diffFisicas }],
           'Reducción de cantidad en item del pedido',
           auditor?.usuario_id,
         );
@@ -740,13 +812,12 @@ export class PedidosService {
 
       await manager.update(DetallePedido, itemId, {
         cantidad: nuevaCantidad,
+        factor_conversion: factor,
+        unidades: nuevaCantidad * factor,
       });
 
       const detalles = await this.findDetallesConManager(manager, pedidoId);
-      const total = detalles.reduce(
-        (sum, d) => sum + Number(d.precio_unitario) * d.cantidad,
-        0,
-      );
+      const total = this.totalDesdeDetalles(detalles);
       await manager.update(Pedido, pedidoId, { total });
 
       await this.auditar(manager, {
@@ -774,8 +845,13 @@ export class PedidosService {
       .select('pedido.procesado_por', 'usuario_id')
       .addSelect('procesador.nombre', 'usuario_nombre')
       .addSelect('COUNT(pedido.id)', 'total_pedidos')
-      .addSelect('SUM(pedido.total)', 'total_vendido')
-      .where('pedido.procesado_por IS NOT NULL');
+      .addSelect('COALESCE(SUM(pedido.total), 0)', 'total_vendido')
+      .addSelect(
+        'COALESCE(SUM(pedido.total), 0) / NULLIF(COUNT(pedido.id), 0)',
+        'promedio_ticket',
+      )
+      .where('pedido.procesado_por IS NOT NULL')
+      .andWhere("pedido.estado <> 'cancelado'");
 
     if (usuarioId) {
       query.andWhere('pedido.procesado_por = :uid', { uid: usuarioId });
@@ -796,6 +872,7 @@ export class PedidosService {
 
     const whereDetalle: FindOptionsWhere<Pedido> = {
       procesado_por: usuarioId ?? Not(IsNull()),
+      estado: Not('cancelado'),
     };
     if (desde || hasta) {
       if (desde && hasta) {
@@ -850,6 +927,7 @@ export class PedidosService {
       usuario_nombre: f.usuario_nombre as string,
       total_pedidos: Number(f.total_pedidos),
       total_vendido: Number(f.total_vendido),
+      promedio_ticket: Number(f.promedio_ticket),
       pedidos: pedidosPorUsuario.get(Number(f.usuario_id)) || [],
     }));
   }

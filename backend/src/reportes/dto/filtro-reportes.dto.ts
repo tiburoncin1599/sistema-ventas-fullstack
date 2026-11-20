@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -48,4 +49,9 @@ export class FiltroReportesDto {
   @IsOptional()
   @IsString()
   hasta?: string;
+
+  /** Granularidad de la serie temporal de ventas. */
+  @IsOptional()
+  @IsIn(['dia', 'semana', 'mes', 'ano'])
+  agrupacion?: 'dia' | 'semana' | 'mes' | 'ano';
 }

@@ -13,6 +13,10 @@ const decimal = () => ({
   to: (v?: number | null) => v,
 });
 
+/** Forma canónica persistida en `pedidos.tipo_pago`. */
+export const TIPOS_PAGO = ['CONTADO', 'CREDITO'] as const;
+export type TipoPago = (typeof TIPOS_PAGO)[number];
+
 @Entity('pedidos')
 export class Pedido {
   @PrimaryGeneratedColumn()
@@ -36,6 +40,10 @@ export class Pedido {
 
   @Column({ default: 'pendiente' })
   estado!: string;
+
+  /** 'CONTADO' = pago inmediato; 'CREDITO' = genera deuda pendiente. */
+  @Column({ type: 'varchar', length: 10, default: 'CONTADO' })
+  tipo_pago!: TipoPago;
 
   @Column({ nullable: true })
   tipo_identificador!: string;  // 'publico' | 'privado'

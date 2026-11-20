@@ -70,7 +70,7 @@ export default function AdminLayout({
     { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Gestión de pedidos', roles: ['admin', 'inventario'], Icono: ClipboardList, esPanel: true },
     { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registro de clientes', roles: ['admin'], Icono: Users, esPanel: true },
     { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestión de usuarios', roles: ['admin'], Icono: Settings, esPanel: true },
-    { href: '/admin/deudas', titulo: 'Deudas', desc: 'Gestión de deudas', roles: ['admin'], Icono: Users, esPanel: true },
+    { href: '/admin/deudas', titulo: 'Deudas', desc: 'Gestión de deudas', roles: ['admin', 'inventario'], Icono: Users, esPanel: true },
     { href: '/admin/reportes', titulo: 'Reportes', desc: 'Reportes del sistema', roles: ['admin'], Icono: Users, esPanel: true },
     { href: '/admin/rendimiento', titulo: 'Rendimiento', desc: 'Mi rendimiento', roles: ['admin'], Icono: Users, esPanel: true },
   ];

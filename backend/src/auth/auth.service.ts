@@ -85,6 +85,10 @@ export class AuthService {
       });
     }
 
+    if (!usuario.activo) {
+      throw new UnauthorizedException('Usuario inactivo. Contacte al administrador.');
+    }
+
     const accessToken = this.generarAccessToken(usuario);
     const refreshToken = await this.generarRefreshToken(usuario.id);
 
@@ -99,6 +103,13 @@ export class AuthService {
 
     const valido = await bcrypt.compare(password, usuario.password_hash);
     if (!valido) throw new UnauthorizedException('Credenciales incorrectas');
+
+    // Evita emitir un token que sería rechazado por JwtStrategy en cada
+    // petición y que obligaría al cliente a cerrar la sesión de forma
+    // inmediata (401 -> refresh fallido -> limpieza de credenciales).
+    if (!usuario.activo) {
+      throw new UnauthorizedException('Usuario inactivo. Contacte al administrador.');
+    }
 
     const accessToken = this.generarAccessToken(usuario);
     const refreshToken = await this.generarRefreshToken(usuario.id);

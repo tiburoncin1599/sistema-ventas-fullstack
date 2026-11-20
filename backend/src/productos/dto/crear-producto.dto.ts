@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, MaxLength, Min } from 'class-validator';
+import { IsString, IsNumber, IsInt, IsOptional, MaxLength, Min } from 'class-validator';
 
 export class CrearProductoDto {
   @IsOptional()
@@ -38,4 +38,10 @@ export class CrearProductoDto {
   @IsOptional()
   @IsNumber()
   categoria_id?: number;
+
+  /** Unidades por paquete. Null/ausente = aplicar la regla por nombre. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  factor_paquete?: number | null;
 }

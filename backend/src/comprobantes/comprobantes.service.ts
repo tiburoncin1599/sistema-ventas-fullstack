@@ -7,6 +7,7 @@ import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { Pedido } from '../pedidos/pedido.entity';
 import { DetallePedido } from '../pedidos/detalle-pedido.entity';
 import { Deuda } from '../deudas/deuda.entity';
+import { instalarMarcaAgua } from '../common/pdf-watermark';
 
 const PIE = 'Comprobante comercial interno - No válido como factura fiscal';
 
@@ -141,6 +142,9 @@ export class ComprobantesService {
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
+
+      // Marca de agua tenue, centrada y detrás del contenido en cada página.
+      instalarMarcaAgua(doc);
 
       try {
         const cfg = datos.configuracion;

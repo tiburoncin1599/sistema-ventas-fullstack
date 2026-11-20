@@ -6,6 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles, User } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 
+function normalizarRol(rol: unknown): string {
+  return typeof rol === 'string' ? rol.trim().toLowerCase() : 'cliente';
+}
+
 function AuthContent() {
   const [modo, setModo] = useState<'login' | 'registro'>('login');
   const [form, setForm] = useState({ nombre: '', email: '', password: '' });
@@ -29,13 +33,25 @@ function AuthContent() {
         : form;
       const url = modo === 'login' ? '/auth/login' : '/auth/registro';
       const res = await api.post(url, data);
+      const usuario = {
+        ...res.data.usuario,
+        rol: normalizarRol(res.data.usuario?.rol),
+      };
       localStorage.setItem('token', res.data.token);
-      localStorage.setItem('usuario', JSON.stringify(res.data.usuario));
+      localStorage.setItem('usuario', JSON.stringify(usuario));
       document.cookie = `token=${res.data.token}; path=/; max-age=604800`;
-      document.cookie = `usuario=${encodeURIComponent(JSON.stringify(res.data.usuario))}; path=/; max-age=604800`;
+      document.cookie = `usuario=${encodeURIComponent(JSON.stringify(usuario))}; path=/; max-age=604800`;
       window.dispatchEvent(new Event('auth-change'));
-      // Navegación completa para que el proxy lea las cookies de la sesión.
-      window.location.assign('/');
+      // Navegación completa para que el proxy lea las cookies recién escritas.
+      const destino =
+        usuario.rol === 'admin'
+          ? '/admin'
+          : usuario.rol === 'inventario'
+            ? '/admin/inventario'
+            : usuario.rol === 'ventas'
+              ? '/ventas'
+              : '/';
+      window.location.assign(destino);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Ocurrió un error';
       setError(msg);

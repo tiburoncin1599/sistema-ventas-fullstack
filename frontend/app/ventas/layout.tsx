@@ -114,9 +114,13 @@ export default function VentasLayout({
         } ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex h-[5.5rem] items-center justify-between gap-3 border-b border-white/10 px-5">
-          <Link href="/ventas" className="flex min-w-0 items-center gap-3" onClick={() => setMenuOpen(false)}>
+          <Link
+            href="/"
+            className="flex min-w-0 cursor-pointer items-center gap-3 transition-opacity hover:opacity-80"
+            onClick={() => setMenuOpen(false)}
+          >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-prolimal-sand-50 p-1.5">
-              <Store className="h-full w-full object-contain" />
+              <img src="/logo.png" alt="Logo PROLIMAC" className="h-full w-full object-contain" />
             </span>
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-sm font-extrabold tracking-[-0.03em]">PROLIMAC</span>

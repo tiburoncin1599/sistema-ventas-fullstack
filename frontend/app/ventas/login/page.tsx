@@ -4,6 +4,10 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Store } from 'lucide-react';
 
+function normalizarRol(rol: unknown): string {
+  return typeof rol === 'string' ? rol.trim().toLowerCase() : 'cliente';
+}
+
 export default function VentasLoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -18,7 +22,10 @@ export default function VentasLoginPage() {
         email: form.email,
         password: form.password,
       });
-      const usuario = res.data.usuario;
+      const usuario = {
+        ...res.data.usuario,
+        rol: normalizarRol(res.data.usuario?.rol),
+      };
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('usuario', JSON.stringify(usuario));
       document.cookie = `token=${res.data.token}; path=/; max-age=604800`;

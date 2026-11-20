@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ClipboardList,
   Package,
+  Plus,
   Receipt,
   TrendingUp,
   Users,
@@ -88,14 +89,23 @@ export default function VentasDashboard() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
-      <section className="mb-8">
-        <p className="prolimal-eyebrow">Comercial</p>
-        <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
-          Mis ventas
-        </h2>
-        <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
-          Resumen de tu actividad comercial.
-        </p>
+      <section className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="prolimal-eyebrow">Comercial</p>
+          <h2 className="prolimal-display mt-2 text-3xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
+            Mis ventas
+          </h2>
+          <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
+            Resumen de tu actividad comercial.
+          </p>
+        </div>
+        <Link
+          href="/ventas/nuevo-pedido"
+          className="prolimal-btn-primary inline-flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Nuevo Pedido
+        </Link>
       </section>
 
       <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

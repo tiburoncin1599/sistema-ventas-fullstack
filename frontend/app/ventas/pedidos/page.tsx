@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { ChevronDown, MapPin } from 'lucide-react';
+import { ChevronDown, MapPin, Plus } from 'lucide-react';
 import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
 interface Pedido {
@@ -88,21 +89,30 @@ cargar(); // eslint-disable-line react-hooks/set-state-in-effect
             {visibles.length} pedido{visibles.length !== 1 ? 's' : ''} en esta vista
           </p>
         </div>
-        <div className="relative w-full sm:w-56">
-          <select
-            value={filtro}
-            onChange={e => setFiltro(e.target.value)}
-            className="prolimal-input appearance-none pr-10"
-            aria-label="Filtrar por estado"
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
+          <Link
+            href="/ventas/nuevo-pedido"
+            className="prolimal-btn-primary inline-flex justify-center gap-2"
           >
-            <option value="">Todos los estados</option>
-            {ESTADOS.map(e => (
-              <option key={e} value={e}>
-                {e.charAt(0).toUpperCase() + e.slice(1)}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+            <Plus className="h-4 w-4" />
+            Nuevo Pedido
+          </Link>
+          <div className="relative w-full sm:w-56">
+            <select
+              value={filtro}
+              onChange={e => setFiltro(e.target.value)}
+              className="prolimal-input appearance-none pr-10"
+              aria-label="Filtrar por estado"
+            >
+              <option value="">Todos los estados</option>
+              {ESTADOS.map(e => (
+                <option key={e} value={e}>
+                  {e.charAt(0).toUpperCase() + e.slice(1)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
+          </div>
         </div>
       </div>
 

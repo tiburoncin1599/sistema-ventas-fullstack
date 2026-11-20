@@ -3,12 +3,15 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { FiltroReportesDto } from './dto/filtro-reportes.dto';
 
+export type AgrupacionVentas = 'dia' | 'semana' | 'mes' | 'ano';
+
 /** Filtros ya resueltos por el controlador (incluye el rol del solicitante). */
 export interface FiltrosEfectivos {
   fechaInicio?: string;
   fechaFin?: string;
   productoId?: number;
   vendedorId?: number;
+  agrupacion?: AgrupacionVentas;
 }
 
 export interface PuntoVentaFecha extends Record<string, unknown> {
@@ -70,6 +73,7 @@ export class ReportesService {
       fechaFin: filtros.fechaFin ?? (filtros as FiltroReportesDto).hasta,
       productoId: filtros.productoId,
       vendedorId: filtros.vendedorId,
+      agrupacion: filtros.agrupacion,
     };
   }
 
@@ -122,7 +126,13 @@ export class ReportesService {
     filtros: FiltroReportesDto | FiltrosEfectivos,
   ): Promise<PuntoVentaFecha[]> {
     const f = this.resolver(filtros);
-    const agrupacion = "TO_CHAR(DATE(pe.creado_en), 'YYYY-MM-DD')";
+    const expresiones: Record<AgrupacionVentas, string> = {
+      dia: "TO_CHAR(DATE(pe.creado_en), 'YYYY-MM-DD')",
+      semana: "TO_CHAR(DATE_TRUNC('week', pe.creado_en), 'YYYY-MM-DD')",
+      mes: "TO_CHAR(DATE_TRUNC('month', pe.creado_en), 'YYYY-MM-DD')",
+      ano: "TO_CHAR(DATE_TRUNC('year', pe.creado_en), 'YYYY-MM-DD')",
+    };
+    const agrupacion = expresiones[f.agrupacion ?? 'dia'];
 
     const filas = await this.baseVentas(f)
       .select(agrupacion, 'fecha')

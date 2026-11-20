@@ -2,6 +2,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import {
+  CANTIDAD_MINIMA,
+  claveLinea,
+  esPaquete,
+  factorConversion,
+  unidadesDe,
+  type TipoPresentacion,
+} from '@/lib/conversion';
 import { Minus, Plus, Search, ShoppingBag, Trash2, X } from 'lucide-react';
 import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
@@ -17,12 +25,35 @@ interface Producto {
   nombre: string;
   precio: number;
   tamano?: string;
+  factor_paquete?: number | null;
 }
 
 interface Linea {
   producto_id: number;
   cantidad: number;
+  tipo_presentacion: TipoPresentacion;
 }
+
+type TipoPago = 'CONTADO' | 'CREDITO';
+
+const OPCIONES_PRESENTACION: { valor: TipoPresentacion; titulo: string }[] = [
+  { valor: 'UNIDAD', titulo: 'Unidades' },
+  { valor: 'PAQUETE', titulo: 'Paquetes' },
+];
+
+const etiquetaPresentacion = (tipo: TipoPresentacion, cantidad = 2) =>
+  tipo === 'UNIDAD'
+    ? cantidad === 1 ? 'unidad' : 'unidades'
+    : cantidad === 1 ? 'paquete' : 'paquetes';
+
+const OPCIONES_PAGO: { valor: TipoPago; titulo: string; detalle: string }[] = [
+  { valor: 'CONTADO', titulo: 'Al Contado', detalle: 'Pago total inmediato' },
+  {
+    valor: 'CREDITO',
+    titulo: 'A Crédito',
+    detalle: 'Genera saldo pendiente por cobrar',
+  },
+];
 
 export default function VentasNuevoPedidoPage() {
   const [cargando, setCargando] = useState(true);
@@ -30,6 +61,9 @@ export default function VentasNuevoPedidoPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [stock, setStock] = useState<Record<number, number>>({});
   const [lineas, setLineas] = useState<Linea[]>([]);
+  const [presentaciones, setPresentaciones] = useState<
+    Record<number, TipoPresentacion>
+  >({});
   const [clienteId, setClienteId] = useState('');
   const [direccion, setDireccion] = useState('');
   const [notas, setNotas] = useState('');
@@ -37,7 +71,7 @@ export default function VentasNuevoPedidoPage() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
-  const [tipoPago, setTipoPago] = useState<'contado' | 'credito'>('contado');
+  const [tipoPago, setTipoPago] = useState<TipoPago>('CONTADO');
   const [stockMsg, setStockMsg] = useState('');
   const [pedidoExitosoId, setPedidoExitosoId] = useState<number | null>(null);
 
@@ -75,40 +109,107 @@ export default function VentasNuevoPedidoPage() {
     return () => clearTimeout(t);
   }, [exito]);
 
-  const cantidadDe = (id: number) =>
-    lineas.find(l => l.producto_id === id)?.cantidad || 0;
+  /** Cantidad de una línea concreta: producto + presentación. */
+  const cantidadDe = (id: number, tipo: TipoPresentacion) =>
+    lineas.find(
+      l => l.producto_id === id && l.tipo_presentacion === tipo,
+    )?.cantidad ?? 0;
 
-  const setCantidad = (id: number, n: number) => {
+  const presentacionDe = (id: number): TipoPresentacion =>
+    presentaciones[id] ?? 'UNIDAD';
+
+  const minimoDe = (id: number) => CANTIDAD_MINIMA[presentacionDe(id)];
+
+  const factorDe = (p: Producto, tipo: TipoPresentacion) =>
+    esPaquete(tipo) ? factorConversion(p) : 1;
+
+  const unidadesDeLinea = (l: Linea) => {
+    const p = productos.find(x => x.id === l.producto_id);
+    return p ? unidadesDe({ ...p, cantidad: l.cantidad, tipo_presentacion: l.tipo_presentacion }) : l.cantidad;
+  };
+
+  /** Tope de la línea activo descontando lo ya comprometido por la otra presentación. */
+  const topeDe = (
+    id: number,
+    tipo: TipoPresentacion,
+    factor: number,
+    s: number,
+  ) => {
+    const ocupadas = lineas
+      .filter(l => l.producto_id === id && l.tipo_presentacion !== tipo)
+      .reduce((sum, l) => sum + unidadesDeLinea(l), 0);
+    return Math.max(0, Math.floor((s - ocupadas) / factor));
+  };
+
+  /**
+   * El selector elige qué presentación se está editando; NO convierte la
+   * línea existente. Así un mismo producto puede tener simultáneamente una
+   * línea de Unidades (mín. 3) y otra de Paquetes (mín. 1).
+   */
+  const setPresentacion = (id: number, tipo: TipoPresentacion) => {
+    setPresentaciones(prev => ({ ...prev, [id]: tipo }));
+    setStockMsg('');
+  };
+
+  const setCantidad = (id: number, tipo: TipoPresentacion, n: number) => {
+    const minimo = CANTIDAD_MINIMA[tipo];
     if (n <= 0) {
-      setLineas(prev => prev.filter(l => l.producto_id !== id));
+      setLineas(prev =>
+        prev.filter(
+          l => !(l.producto_id === id && l.tipo_presentacion === tipo),
+        ),
+      );
       return;
     }
+    const cantidad = Math.max(minimo, n);
     setLineas(prev => {
-      const existente = prev.find(l => l.producto_id === id);
-      if (existente) {
-        return prev.map(l => (l.producto_id === id ? { ...l, cantidad: n } : l));
+      const existe = prev.some(
+        l => l.producto_id === id && l.tipo_presentacion === tipo,
+      );
+      if (existe) {
+        return prev.map(l =>
+          l.producto_id === id && l.tipo_presentacion === tipo
+            ? { ...l, cantidad }
+            : l,
+        );
       }
-      return [...prev, { producto_id: id, cantidad: n }];
+      return [...prev, { producto_id: id, cantidad, tipo_presentacion: tipo }];
     });
   };
 
-  const manejarCantidad = (id: number, v: number, s: number) => {
-    if (Number.isNaN(v) || v < 0 || v === 0) {
-      setCantidad(id, 0);
+  const manejarCantidad = (
+    id: number,
+    tipo: TipoPresentacion,
+    v: number,
+    s: number,
+    factor: number,
+  ) => {
+    const minimo = CANTIDAD_MINIMA[tipo];
+    if (Number.isNaN(v) || v <= 0) {
+      setCantidad(id, tipo, 0);
       setStockMsg('');
       return;
     }
-    if (s > 0 && v > s) {
-      setCantidad(id, s);
-      setStockMsg(`Stock insuficiente. Stock disponible: ${s} unid.`);
+    if (v < 0) return;
+    // El stock está en unidades físicas y se reparte entre las dos líneas.
+    const tope = topeDe(id, tipo, factor, s);
+    if (tope < minimo) {
+      setCantidad(id, tipo, 0);
+      setStockMsg(
+        `Stock insuficiente. Se necesitan ${minimo} ${
+          minimo === 1 ? (factor > 1 ? 'paquete' : 'unidad') : 'unidades'
+        } (stock disponible: ${s} unid.).`,
+      );
       return;
     }
-    if (s === 0) {
-      setCantidad(id, 0);
-      setStockMsg('Stock insuficiente. Stock disponible: 0 unidades.');
+    if (v > tope) {
+      setCantidad(id, tipo, tope);
+      setStockMsg(
+        `Stock insuficiente. Stock disponible: ${s} unid. (${tope} ${factor > 1 ? 'paq.' : 'un.'})`,
+      );
       return;
     }
-    setCantidad(id, v);
+    setCantidad(id, tipo, Math.max(minimo, v));
     setStockMsg('');
   };
 
@@ -116,7 +217,7 @@ export default function VentasNuevoPedidoPage() {
     () =>
       lineas.reduce((sum, l) => {
         const p = productos.find(x => x.id === l.producto_id);
-        return sum + (p ? Number(p.precio) : 0) * l.cantidad;
+        return sum + (p ? Number(p.precio) : 0) * unidadesDeLinea(l);
       }, 0),
     [lineas, productos],
   );
@@ -137,6 +238,19 @@ export default function VentasNuevoPedidoPage() {
       setError('Agregá al menos un producto al pedido.');
       return;
     }
+    const lineaInvalida = lineas.find(
+      l => l.cantidad < CANTIDAD_MINIMA[l.tipo_presentacion],
+    );
+    if (lineaInvalida) {
+      const nombre =
+        productos.find(p => p.id === lineaInvalida.producto_id)?.nombre ??
+        'producto';
+      const min = CANTIDAD_MINIMA[lineaInvalida.tipo_presentacion];
+      setError(
+        `"${nombre}": el pedido mínimo es de ${min} ${etiquetaPresentacion(lineaInvalida.tipo_presentacion, min)}. Ajustá la cantidad antes de continuar.`,
+      );
+      return;
+    }
     setGuardando(true);
     setError('');
     try {
@@ -144,10 +258,11 @@ export default function VentasNuevoPedidoPage() {
         usuarioId: Number(clienteId),
         direccion: direccion.trim() || undefined,
         notas: notas.trim() || undefined,
-        tipoPago,
+        tipo_pago: tipoPago,
         items: lineas.map(l => ({
           producto_id: l.producto_id,
           cantidad: l.cantidad,
+          tipo_presentacion: l.tipo_presentacion,
           precio:
             Number(productos.find(p => p.id === l.producto_id)?.precio) || 0,
         })),
@@ -157,11 +272,12 @@ export default function VentasNuevoPedidoPage() {
         setPedidoExitosoId(pedidoId);
       }
       setExito(
-        tipoPago === 'credito'
+        tipoPago === 'CREDITO'
           ? '✅ Pedido creado y deuda registrada a crédito.'
           : '✅ Pedido creado y registrado como pagado (contado).',
       );
       setLineas([]);
+      setPresentaciones({});
       setClienteId('');
       setDireccion('');
       setNotas('');
@@ -260,7 +376,11 @@ export default function VentasNuevoPedidoPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {visibles.map(p => {
                 const s = stock[p.id] ?? 0;
-                const c = cantidadDe(p.id);
+                const tipo = presentacionDe(p.id);
+                const minimo = minimoDe(p.id);
+                const c = cantidadDe(p.id, tipo);
+                const factor = factorDe(p, tipo);
+                const tope = topeDe(p.id, tipo, factor, s);
                 return (
                   <div
                     key={p.id}
@@ -285,6 +405,39 @@ export default function VentasNuevoPedidoPage() {
                         {formatCurrency(p.precio)}
                       </span>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        Presentación
+                      </span>
+                      <div className="inline-flex rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-50/60 p-0.5 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/60">
+                        {OPCIONES_PRESENTACION.map(opcion => {
+                          const activo = tipo === opcion.valor;
+                          return (
+                            <button
+                              key={opcion.valor}
+                              type="button"
+                              onClick={() => setPresentacion(p.id, opcion.valor)}
+                              aria-pressed={activo}
+                              aria-label={`${opcion.titulo} de ${p.nombre}`}
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                                activo
+                                  ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                                  : 'text-prolimal-ink-500 hover:text-prolimal-teal-700 dark:text-prolimal-ink-200'
+                              }`}
+                            >
+                              {opcion.titulo}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {esPaquete(tipo) && (
+                        <span className="rounded-full bg-prolimal-teal-50 px-2 py-0.5 text-[10px] font-extrabold text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300">
+                          1 paq = {factor} unid.
+                        </span>
+                      )}
+                    </div>
+
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex flex-col gap-0.5">
                         <span
@@ -308,7 +461,7 @@ export default function VentasNuevoPedidoPage() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => setCantidad(p.id, c - 1)}
+                          onClick={() => setCantidad(p.id, tipo, c - minimo)}
                           disabled={c === 0}
                           className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
                           aria-label="Restar"
@@ -317,19 +470,25 @@ export default function VentasNuevoPedidoPage() {
                         </button>
                         <input
                           type="number"
-                          min={0}
-                          max={s || undefined}
-                          value={c}
+                          min={minimo}
+                          max={tope || undefined}
+                          value={c > 0 ? c : minimo}
                           onChange={e => {
-                            manejarCantidad(p.id, parseInt(e.target.value, 10), s);
+                            manejarCantidad(
+                              p.id,
+                              tipo,
+                              parseInt(e.target.value, 10),
+                              s,
+                              factor,
+                            );
                           }}
                           className="w-10 border-0 bg-transparent text-center text-sm font-bold text-prolimal-ink-900 outline-none [appearance:textfield] dark:text-prolimal-sand-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           aria-label={`Cantidad de ${p.nombre}`}
                         />
                         <button
                           type="button"
-                          onClick={() => setCantidad(p.id, c + 1)}
-                          disabled={s === 0 || c >= s}
+                          onClick={() => setCantidad(p.id, tipo, c + minimo)}
+                          disabled={s === 0 || tope < minimo || c >= tope}
                           className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
                           aria-label="Sumar"
                         >
@@ -337,6 +496,22 @@ export default function VentasNuevoPedidoPage() {
                         </button>
                       </div>
                     </div>
+
+                    {c > 0 && factor > 1 && (
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                        {c} paq. = {c * factor} unid.
+                      </p>
+                    )}
+
+                    {s > 0 && tope < minimo && (
+                      <p
+                        role="alert"
+                        className="text-[10px] font-bold text-prolimal-coral-600 dark:text-prolimal-coral-400"
+                      >
+                        Stock insuficiente para el mínimo de {minimo}{' '}
+                        {etiquetaPresentacion(tipo, minimo)}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -362,23 +537,33 @@ export default function VentasNuevoPedidoPage() {
               {lineas.map(l => {
                 const p = productos.find(x => x.id === l.producto_id);
                 if (!p) return null;
+                const factor = factorDe(p, l.tipo_presentacion);
+                const unidades = unidadesDeLinea(l);
                 return (
-                  <li key={l.producto_id} className="flex items-center justify-between gap-2">
+                  <li
+                    key={claveLinea(l.producto_id, l.tipo_presentacion)}
+                    className="flex items-center justify-between gap-2"
+                  >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-prolimal-ink-900 dark:text-prolimal-sand-50">
                         {p.nombre}
                       </p>
                       <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                        {l.cantidad} × {formatCurrency(p.precio)}
+                        {esPaquete(l.tipo_presentacion) ? 'Paquete' : 'Unidad'} ·{' '}
+                        {l.cantidad} {esPaquete(l.tipo_presentacion) ? 'paq.' : 'un.'} ×{' '}
+                        {formatCurrency(p.precio)}
+                        {factor > 1 && ` · ${unidades} unid.`}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="text-sm font-bold text-prolimal-ink-900 dark:text-prolimal-sand-50">
-                        {formatCurrency(Number(p.precio) * l.cantidad)}
+                        {formatCurrency(Number(p.precio) * unidades)}
                       </span>
                       <button
                         type="button"
-                        onClick={() => setCantidad(l.producto_id, 0)}
+                        onClick={() =>
+                          setCantidad(l.producto_id, l.tipo_presentacion, 0)
+                        }
                         className="flex h-7 w-7 items-center justify-center rounded-full text-prolimal-coral-600 transition-colors hover:bg-prolimal-coral-50 dark:text-prolimal-coral-400 dark:hover:bg-prolimal-coral-900/25"
                         aria-label="Quitar producto"
                       >
@@ -413,17 +598,43 @@ export default function VentasNuevoPedidoPage() {
             className="prolimal-input mb-4 mt-1.5 resize-none"
           />
 
-          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-            Tipo de pago
-          </label>
-          <select
-            value={tipoPago}
-            onChange={e => setTipoPago(e.target.value as 'contado' | 'credito')}
-            className="prolimal-input mb-4 mt-1.5"
-          >
-            <option value="contado">Contado — pago inmediato</option>
-            <option value="credito">Crédito — registra saldo pendiente</option>
-          </select>
+          <fieldset className="mb-4 mt-5">
+            <legend className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+              Tipo de pago
+            </legend>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {OPCIONES_PAGO.map(opcion => {
+                const seleccionado = tipoPago === opcion.valor;
+                return (
+                  <label
+                    key={opcion.valor}
+                    className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition-colors ${
+                      seleccionado
+                        ? 'border-prolimal-teal-500/50 bg-prolimal-teal-50/60 dark:border-prolimal-teal-400/40 dark:bg-prolimal-teal-900/20'
+                        : 'border-prolimal-ink-900/10 bg-prolimal-sand-50/40 hover:border-prolimal-teal-500/30 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/40'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="tipo_pago"
+                      value={opcion.valor}
+                      checked={seleccionado}
+                      onChange={() => setTipoPago(opcion.valor)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-prolimal-teal-700"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                        {opcion.titulo}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] font-medium leading-snug text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        {opcion.detalle}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <div className="mt-5 flex items-end justify-between border-t border-prolimal-ink-900/10 pt-4 dark:border-prolimal-sand-100/10">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Total</span>
@@ -445,6 +656,8 @@ export default function VentasNuevoPedidoPage() {
               type="button"
               onClick={() => {
                 setLineas([]);
+                setPresentaciones({});
+                setStockMsg('');
                 setError('');
               }}
               className="prolimal-btn-ghost-danger mt-2 w-full"

@@ -1,76 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { join } from 'path';
-import { existsSync, readFileSync } from 'fs';
-
-let logoBuffer: Buffer | null = null;
-let logoWidth = 0;
-let logoHeight = 0;
-
-/** Lee ancho y alto reales desde un buffer PNG o JPEG sin dependencias externas. */
-function readImageSize(buf: Buffer): { width: number; height: number } | null {
-  try {
-    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
-      // PNG: dimensions at fixed offsets 16 and 20 (big-endian)
-      return {
-        width: buf.readUInt32BE(16),
-        height: buf.readUInt32BE(20),
-      };
-    }
-    if (buf[0] === 0xff && buf[1] === 0xd8) {
-      // JPEG: scan for SOF0/SOF2 marker (0xFF 0xC0 / 0xFF 0xC2)
-      let i = 2;
-      while (i < buf.length) {
-        if (buf[i] !== 0xff) { i++; continue; }
-        if (buf[i + 1] === 0xc0 || buf[i + 1] === 0xc2) {
-          return {
-            height: buf.readUInt16BE(i + 5),
-            width: buf.readUInt16BE(i + 7),
-          };
-        }
-        const segLen = buf.readUInt16BE(i + 2);
-        i += 2 + segLen;
-      }
-    }
-  } catch {}
-  return null;
-}
-
-(() => {
-  const cwd = process.cwd();
-  const candidates = [
-    { path: join(cwd, 'assets', 'logo.jpg'), label: 'backend/assets/logo.jpg' },
-    { path: join(cwd, 'assets', 'logo.png'), label: 'backend/assets/logo.png' },
-  ];
-  console.log('[FacturaService] process.cwd() =', cwd);
-  for (const { path: fp, label } of candidates) {
-    console.log('[FacturaService] Probando ruta:', fp);
-    try {
-      if (existsSync(fp)) {
-        console.log('[FacturaService] ✓ Archivo existe:', fp);
-        logoBuffer = readFileSync(fp);
-        console.log('[FacturaService] ✓ readFileSync OK — tamaño:', logoBuffer.length, 'bytes, ruta:', label);
-        const dim = readImageSize(logoBuffer);
-        if (dim) {
-          logoWidth = dim.width;
-          logoHeight = dim.height;
-          console.log('[FacturaService] ✓ Dimensiones reales:', logoWidth, 'x', logoHeight);
-        } else {
-          console.warn('[FacturaService] ⚠ No se pudieron leer dimensiones, se usará centrado aproximado');
-        }
-        break;
-      } else {
-        console.log('[FacturaService] ✗ No existe:', fp);
-      }
-    } catch (err) {
-      console.error('[FacturaService] ✗ Error al leer', fp, ':', err);
-    }
-  }
-  if (!logoBuffer) {
-    console.warn('[FacturaService] ⚠ No se encontró ningún archivo de logo. La marca de agua usará texto.');
-  } else {
-    console.log('[FacturaService] ✅ Logo listo para marca de agua');
-  }
-})();
+import { existsSync } from 'fs';
+import { instalarMarcaAgua } from '../common/pdf-watermark';
 
 @Injectable()
 export class FacturaService {
@@ -100,45 +30,8 @@ export class FacturaService {
         const green = '#005a24';
         const gray = '#666';
 
-        // Watermark — behind all content on every page
-        const drawWatermark = () => {
-          const savedY = doc.y;
-          const pageW = doc.page.width;
-          const pageH = doc.page.height;
-          const wmWidth = pageW * 0.60;
-          const wmX = (pageW - wmWidth) / 2;
-
-          doc.save();
-          doc.opacity(0.12);
-
-          if (logoBuffer && logoHeight > 0 && logoWidth > 0) {
-            const ratio = logoHeight / logoWidth;
-            const wmHeight = wmWidth * ratio;
-            const wmY = (pageH - wmHeight) / 2;
-            try {
-              doc.image(logoBuffer, wmX, wmY, { width: wmWidth });
-            } catch (err) {
-              console.error('[watermark] Error al dibujar logo:', err);
-            }
-          } else if (logoBuffer) {
-            const wmY = (pageH - wmWidth) / 2;
-            try {
-              doc.image(logoBuffer, wmX, wmY, { width: wmWidth });
-            } catch (err) {
-              console.error('[watermark] Error al dibujar logo:', err);
-            }
-          } else {
-            const wmY = pageH / 3;
-            doc.font('Helvetica-Bold').fontSize(60).fillColor('#000')
-              .text(empresa, 0, wmY, { align: 'center' });
-          }
-
-          doc.restore();
-          doc.y = savedY;
-        };
-
-        drawWatermark();
-        doc.on('pageAdded', () => { drawWatermark(); });
+        // Marca de agua en todas las páginas, detrás del contenido.
+        instalarMarcaAgua(doc, { textoRespaldo: empresa });
 
         // Logo
         if (cfg.logo_url && existsSync(cfg.logo_url)) {

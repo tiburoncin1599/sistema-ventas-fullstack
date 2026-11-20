@@ -2,12 +2,38 @@
 
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, Package, ShoppingCart, Trash2 } from 'lucide-react';
-import { useCarrito } from '@/store/carrito';
+import {
+  useCarrito,
+  claveLinea,
+  presentacionDe,
+  CANTIDAD_MINIMA,
+  type TipoPresentacion,
+} from '@/store/carrito';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
+import {
+  esPaquete,
+  factorConversion,
+  topePorStock,
+  unidadesDe,
+} from '@/lib/conversion';
 import { API_URL } from '@/lib/api';
 
+const OPCIONES_PRESENTACION: { valor: TipoPresentacion; titulo: string }[] = [
+  { valor: 'UNIDAD', titulo: 'Unidades' },
+  { valor: 'PAQUETE', titulo: 'Paquetes' },
+];
+
+const pasosDe = (tipo: TipoPresentacion) =>
+  tipo === 'UNIDAD' ? [3, 6, 12] : [1, 2, 3];
+
+const etiquetaPresentacion = (tipo: TipoPresentacion, cantidad = 2) =>
+  tipo === 'UNIDAD'
+    ? cantidad === 1 ? 'unidad' : 'unidades'
+    : cantidad === 1 ? 'paquete' : 'paquetes';
+
 export default function CarritoPage() {
-  const { items, quitar, cambiarCantidad, total } = useCarrito();
+  const { items, quitar, cambiarCantidad, cambiarPresentacion, total } =
+    useCarrito();
 
   if (items.length === 0) {
     return (
@@ -57,9 +83,15 @@ export default function CarritoPage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.45fr_0.55fr]">
           <div className="space-y-4">
-            {items.map(item => (
+            {items.map(item => {
+              const tipo = presentacionDe(item);
+              const clave = claveLinea(item.id, tipo);
+              const factor = esPaquete(tipo) ? factorConversion(item) : 1;
+              const unidades = unidadesDe(item);
+              const tope = topePorStock(item.stock, item);
+              return (
               <article
-                key={item.id}
+                key={clave}
                 className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-4 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-5"
               >
                 <div className="flex flex-col gap-4 sm:flex-row">
@@ -87,13 +119,16 @@ export default function CarritoPage() {
                         >
                           {item.nombre}
                         </Link>
-                        <p className="mt-1 text-sm font-semibold text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                          {tipo === 'UNIDAD' ? 'Unidades' : 'Paquete'}
+                        </p>
+                        <p className="mt-0.5 text-sm font-semibold text-prolimal-ink-400 dark:text-prolimal-ink-300">
                           {formatCurrency(item.precio)} c/u
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => quitar(item.id)}
+                        onClick={() => quitar(clave)}
                         aria-label={`Quitar ${item.nombre}`}
                         className="shrink-0 rounded-full p-2 text-prolimal-red-500 transition-colors hover:bg-prolimal-red-50 dark:hover:bg-prolimal-red-900/30"
                       >
@@ -101,54 +136,99 @@ export default function CarritoPage() {
                       </button>
                     </div>
 
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        Presentación
+                      </span>
+                      <div className="inline-flex rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-50/60 p-0.5 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/60">
+                        {OPCIONES_PRESENTACION.map(opcion => {
+                          const activo = tipo === opcion.valor;
+                          return (
+                            <button
+                              key={opcion.valor}
+                              type="button"
+                              onClick={() =>
+                                cambiarPresentacion(clave, opcion.valor)
+                              }
+                              aria-pressed={activo}
+                              aria-label={`${opcion.titulo} de ${item.nombre}`}
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                                activo
+                                  ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                                  : 'text-prolimal-ink-500 hover:text-prolimal-teal-700 dark:text-prolimal-ink-200'
+                              }`}
+                            >
+                              {opcion.titulo}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {factor > 1 && (
+                        <span className="rounded-full bg-prolimal-teal-50 px-2 py-0.5 text-[10px] font-extrabold text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300">
+                          1 paq = {factor} unid.
+                        </span>
+                      )}
+                    </div>
+
                     <div className="mt-auto flex flex-col gap-3 pt-5 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                          Cantidad
+                          Cantidad (mín.{' '}
+                          {CANTIDAD_MINIMA[tipo]})
                         </p>
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 3))}
+                            onClick={() => cambiarCantidad(clave, Math.max(0, item.cantidad - pasosDe(tipo)[0]))}
                             className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
                           >
-                            -3
+                            -{pasosDe(tipo)[0]}
                           </button>
                           <button
                             type="button"
-                            onClick={() => cambiarCantidad(item.id, Math.max(0, item.cantidad - 6))}
+                            onClick={() => cambiarCantidad(clave, Math.max(0, item.cantidad - pasosDe(tipo)[1]))}
                             className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
                           >
-                            -6
+                            -{pasosDe(tipo)[1]}
                           </button>
-                          <span className="min-w-10 text-center text-base font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">
-                            {item.cantidad}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => cambiarCantidad(item.id, item.cantidad + 3)}
-                            disabled={typeof item.stock === 'number' && item.cantidad >= item.stock}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
-                          >
-                            +3
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => cambiarCantidad(item.id, item.cantidad + 6)}
-                            disabled={typeof item.stock === 'number' && item.cantidad >= item.stock}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
-                          >
-                            +6
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => cambiarCantidad(item.id, item.cantidad + 12)}
-                            disabled={typeof item.stock === 'number' && item.cantidad >= item.stock}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
-                          >
-                            +12
-                          </button>
+                          <input
+                            type="number"
+                            min={CANTIDAD_MINIMA[tipo]}
+                            max={tope}
+                            value={item.cantidad}
+                            onChange={e => {
+                              const n = parseInt(e.target.value, 10);
+                              if (!Number.isNaN(n)) cambiarCantidad(clave, n);
+                            }}
+                            aria-label={`Cantidad de ${item.nombre}`}
+                            className="w-14 rounded-lg border border-prolimal-ink-900/10 bg-transparent py-1 text-center text-base font-extrabold text-prolimal-ink-900 outline-none dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-50"
+                          />
+                          {pasosDe(tipo).map(paso => (
+                            <button
+                              key={paso}
+                              type="button"
+                              onClick={() => cambiarCantidad(clave, item.cantidad + paso)}
+                              disabled={tope !== undefined && item.cantidad >= tope}
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
+                            >
+                              +{paso}
+                            </button>
+                          ))}
                         </div>
+                        {item.cantidad <
+                          CANTIDAD_MINIMA[tipo] && (
+                          <p
+                            role="alert"
+                            className="mt-2 text-[10px] font-bold text-prolimal-coral-600 dark:text-prolimal-coral-400"
+                          >
+                            El pedido mínimo es de{' '}
+                            {CANTIDAD_MINIMA[tipo]}{' '}
+                            {etiquetaPresentacion(
+                              tipo,
+                              CANTIDAD_MINIMA[tipo],
+                            )}
+                          </p>
+                        )}
                       </div>
 
                       <div className="text-left sm:text-right">
@@ -156,20 +236,28 @@ export default function CarritoPage() {
                           Subtotal
                         </p>
                         <p className="mt-1 text-xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
-                          {formatCurrency(parseCurrency(item.precio) * item.cantidad)}
+                          {formatCurrency(parseCurrency(item.precio) * unidades)}
+                          {factor > 1 && (
+                            <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-teal-700 dark:text-prolimal-teal-300">
+                              {item.cantidad} paq. = {unidades} unid.
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
 
                     {typeof item.stock === 'number' && (
                       <p className="mt-3 text-[11px] font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                        Máximo disponible: {item.stock}
+                        Máximo disponible: {item.stock} unid.
+                        {tope !== undefined &&
+                          ` · hasta ${tope} ${factor > 1 ? 'paq.' : 'un.'}`}
                       </p>
                     )}
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
 
           <aside className="lg:sticky lg:top-28 lg:self-start">

@@ -41,6 +41,12 @@ export class ActualizarProductoDto {
   @IsNumber()
   categoria_id?: number;
 
+  /** Unidades por paquete. Null/ausente = aplicar la regla por nombre. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  factor_paquete?: number | null;
+
   @IsOptional()
   @IsBoolean()
   activo?: boolean;

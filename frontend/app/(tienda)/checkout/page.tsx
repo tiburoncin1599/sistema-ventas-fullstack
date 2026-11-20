@@ -4,11 +4,22 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, CheckCircle2, MessageCircle, Package, ShieldCheck } from 'lucide-react';
-import { useCarrito } from '@/store/carrito';
+import {
+  useCarrito,
+  claveLinea,
+  presentacionDe,
+  CANTIDAD_MINIMA,
+} from '@/store/carrito';
 import { api } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
+import { unidadesDe } from '@/lib/conversion';
 
 const WHATSAPP_NUMERO = process.env.NEXT_PUBLIC_WHATSAPP || '59170000000';
+
+const etiquetaPresentacion = (tipo: string, cantidad = 2) =>
+  tipo === 'UNIDAD'
+    ? cantidad === 1 ? 'unidad' : 'unidades'
+    : cantidad === 1 ? 'paquete' : 'paquetes';
 
 export default function CheckoutPage() {
   const { items, total, vaciar } = useCarrito();
@@ -31,9 +42,24 @@ export default function CheckoutPage() {
     setCargando(true);
     setError('');
 
-    const sinStock = items.find(i => typeof i.stock === 'number' && i.cantidad > i.stock!);
+    // El stock se mide en unidades físicas: 1 paquete puede consumir 12.
+    const sinStock = items.find(i =>
+      typeof i.stock === 'number' && unidadesDe(i) > i.stock!,
+    );
     if (sinStock) {
-      setError(`Stock insuficiente de "${sinStock.nombre}". Solo hay ${sinStock.stock} unidades disponibles.`);
+      setError(`Stock insuficiente de "${sinStock.nombre}". Solo hay ${sinStock.stock} unidades disponibles (se necesitan ${unidadesDe(sinStock)}).`);
+      setCargando(false);
+      return;
+    }
+
+    const bajoMinimo = items.find(
+      i => i.cantidad < CANTIDAD_MINIMA[presentacionDe(i)],
+    );
+    if (bajoMinimo) {
+      const tipo = presentacionDe(bajoMinimo);
+      setError(
+        `"${bajoMinimo.nombre}": el pedido mínimo es de ${CANTIDAD_MINIMA[tipo]} ${etiquetaPresentacion(tipo, CANTIDAD_MINIMA[tipo])}. Ajustá la cantidad en el carrito.`,
+      );
       setCargando(false);
       return;
     }
@@ -45,6 +71,7 @@ export default function CheckoutPage() {
         items: items.map(i => ({
           producto_id: i.id,
           cantidad: i.cantidad,
+          tipo_presentacion: presentacionDe(i),
           precio: parseCurrency(i.precio),
         })),
       });
@@ -136,21 +163,29 @@ export default function CheckoutPage() {
               Tu selección
             </h2>
             <div className="mt-4 divide-y divide-prolimal-ink-900/10 dark:divide-prolimal-sand-100/10">
-              {items.map(item => (
-                <div key={item.id} className="flex items-center justify-between gap-4 py-4 first:pt-0">
-                  <div className="min-w-0">
-                    <p className="break-words font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
-                      {item.nombre}
-                    </p>
-                    <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                      x{item.cantidad}
+              {items.map(item => {
+                const unidades = unidadesDe(item);
+                const esPaquete = presentacionDe(item) === 'PAQUETE';
+                return (
+                  <div
+                    key={claveLinea(item.id, presentacionDe(item))}
+                    className="flex items-center justify-between gap-4 py-4 first:pt-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="break-words font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
+                        {item.nombre}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                        x{item.cantidad} · {esPaquete ? 'paquetes' : 'unidades'}
+                        {esPaquete && ` · ${unidades} unid.`}
+                      </p>
+                    </div>
+                    <p className="shrink-0 font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                      {formatCurrency(parseCurrency(item.precio) * unidades)}
                     </p>
                   </div>
-                  <p className="shrink-0 font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">
-                    {formatCurrency(parseCurrency(item.precio) * item.cantidad)}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-4 flex items-center justify-between rounded-2xl bg-prolimal-sand-100 px-4 py-4 dark:bg-prolimal-ink-800">
