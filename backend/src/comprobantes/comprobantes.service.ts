@@ -8,6 +8,7 @@ import { Pedido } from '../pedidos/pedido.entity';
 import { DetallePedido } from '../pedidos/detalle-pedido.entity';
 import { Deuda } from '../deudas/deuda.entity';
 import { instalarMarcaAgua } from '../common/pdf-watermark';
+import { desglosarMontos } from '../common/impuesto';
 
 const PIE = 'Comprobante comercial interno - No válido como factura fiscal';
 
@@ -77,23 +78,34 @@ export class ComprobantesService {
     });
     const configuracion = await this.configuracionService.obtener();
 
-    const items: ItemComprobante[] = detalles.map((d) => ({
-      codigo: d.producto?.codigo || `P-${d.producto_id}`,
-      nombre: d.producto?.nombre || `Producto #${d.producto_id}`,
-      cantidad: d.cantidad,
-      precioUnitario: Number(d.precio_unitario),
-      subtotal: d.cantidad * Number(d.precio_unitario),
-    }));
+    // El precio es por unidad física: un paquete de 12 debe facturarse por 12.
+    const items: ItemComprobante[] = detalles.map((d) => {
+      const unidades = Number(d.unidades ?? d.cantidad);
+      return {
+        codigo: d.producto?.codigo || `P-${d.producto_id}`,
+        nombre: d.producto?.nombre || `Producto #${d.producto_id}`,
+        cantidad: unidades,
+        precioUnitario: Number(d.precio_unitario),
+        subtotal: unidades * Number(d.precio_unitario),
+      };
+    });
 
-    const subtotal = items.reduce((sum, i) => sum + i.subtotal, 0);
     const total = Number(pedido.total);
-    const impuestoPct = Number(configuracion.impuesto_porcentaje) || 0;
-    const impuesto = impuestoPct > 0 && total > subtotal ? total - subtotal : 0;
-    const descuento = total < subtotal ? subtotal - total : 0;
+    const desglose = desglosarMontos({
+      subtotalDetalles: items.reduce((sum, i) => sum + i.subtotal, 0),
+      total,
+      impuestoPorcentaje: configuracion.impuesto_porcentaje,
+    });
     const saldo = deuda
       ? Math.max(Number(deuda.monto) - Number(deuda.monto_pagado), 0)
       : 0;
-    const pagado = deuda ? Number(deuda.monto_pagado) : total;
+    // Un pedido CONTADO entregado está cobrado. Los pedidos pendientes sin
+    // deuda no tienen pago registrado: no debe afirmarse lo contrario.
+    const pagado = deuda
+      ? Number(deuda.monto_pagado)
+      : pedido.estado === 'entregado' && pedido.tipo_pago === 'CONTADO'
+        ? total
+        : 0;
 
     return {
       numero: `CMP-${String(pedido.id).padStart(6, '0')}`,
@@ -108,10 +120,10 @@ export class ComprobantesService {
         direccion: pedido.direccion_entrega || pedido.usuario?.ubicacion,
       },
       items,
-      subtotal,
-      descuento,
-      impuesto,
-      total,
+      subtotal: desglose.subtotal,
+      descuento: desglose.descuento,
+      impuesto: desglose.impuesto,
+      total: desglose.total,
       pagado,
       saldo,
       moneda: configuracion.moneda_simbolo || configuracion.moneda || 'Bs',

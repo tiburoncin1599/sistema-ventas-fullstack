@@ -1,9 +1,19 @@
-import { Controller, Get, Put, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Param,
+  Body,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { InventarioService } from './inventario.service';
 import { ActualizarInventarioDto } from './dto/actualizar-inventario.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { Request } from 'express';
 
 @Controller('inventario')
 export class InventarioController {
@@ -36,7 +46,13 @@ export class InventarioController {
   actualizar(
     @Param('productoId') productoId: string,
     @Body() body: ActualizarInventarioDto,
+    @Req() req: Request,
   ) {
-    return this.inventarioService.actualizar(+productoId, body.cantidad);
+    const user = req.user as { id: number; rol: string };
+    return this.inventarioService.actualizar(+productoId, body.cantidad, {
+      usuario_id: user.id,
+      usuario_rol: user.rol,
+      motivo: 'Ajuste manual de inventario',
+    });
   }
 }

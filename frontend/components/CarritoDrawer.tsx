@@ -59,6 +59,18 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
     { valor: 'PAQUETE', titulo: 'Paquetes' },
   ];
   const panelRef = useRef<HTMLElement | null>(null);
+  const [cambiandoPresentacion, setCambiandoPresentacion] = useState<string | null>(null);
+
+  const cambiar = async (clave: string, tipo: TipoPresentacion) => {
+    setCambiandoPresentacion(clave);
+    try {
+      await cambiarPresentacion(clave, tipo);
+    } catch {
+      // La acción del carrito ya conserva los valores actuales si falla.
+    } finally {
+      setCambiandoPresentacion(null);
+    }
+  };
 
   useDrawerAccesible({ abierto, onCerrar, panelRef });
 
@@ -169,10 +181,11 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                                     <button
                                       key={opcion.valor}
                                       type="button"
-                                      onClick={() => cambiarPresentacion(clave, opcion.valor)}
+                                      onClick={() => void cambiar(clave, opcion.valor)}
+                                      disabled={cambiandoPresentacion === clave}
                                       aria-pressed={tipo === opcion.valor}
                                       aria-label={`${opcion.titulo} de ${item.nombre}`}
-                                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                                         tipo === opcion.valor
                                           ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                                           : 'text-prolimal-ink-500 dark:text-prolimal-ink-200'

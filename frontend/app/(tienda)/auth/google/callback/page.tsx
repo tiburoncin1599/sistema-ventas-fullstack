@@ -1,6 +1,15 @@
 'use client';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { normalizarRol } from '@/lib/roles';
+
+/** Mismo mapa de destino que la pantalla de login de la tienda. */
+function destinoPorRol(rol: string): string {
+  if (rol === 'admin') return '/admin';
+  if (rol === 'inventario') return '/admin/inventario';
+  if (rol === 'ventas') return '/ventas';
+  return '/';
+}
 
 function CallbackContent() {
   const params = useSearchParams();
@@ -11,13 +20,14 @@ function CallbackContent() {
     const usuarioStr = params.get('usuario');
     if (token && usuarioStr) {
       try {
-        const usuario = JSON.parse(decodeURIComponent(usuarioStr));
+        const datos = JSON.parse(decodeURIComponent(usuarioStr)) as { rol?: unknown };
+        const usuario = { ...datos, rol: normalizarRol(datos.rol) };
         localStorage.setItem('token', token);
         localStorage.setItem('usuario', JSON.stringify(usuario));
         document.cookie = `token=${token}; path=/; max-age=604800`;
         document.cookie = `usuario=${encodeURIComponent(JSON.stringify(usuario))}; path=/; max-age=604800`;
         window.dispatchEvent(new Event('auth-change'));
-        window.location.href = '/';
+        window.location.href = destinoPorRol(usuario.rol);
       } catch {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setError('Error al procesar la autenticación');

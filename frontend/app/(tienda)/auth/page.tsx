@@ -5,10 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles, User } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
-
-function normalizarRol(rol: unknown): string {
-  return typeof rol === 'string' ? rol.trim().toLowerCase() : 'cliente';
-}
+import { normalizarRol } from '@/lib/roles';
 
 function AuthContent() {
   const [modo, setModo] = useState<'login' | 'registro'>('login');

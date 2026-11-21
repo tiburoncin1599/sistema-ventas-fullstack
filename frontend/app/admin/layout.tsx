@@ -5,17 +5,21 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
+  BarChart3,
   Boxes,
   ChevronLeft,
   ClipboardList,
+  MapPin,
   Menu,
   Package,
   Settings,
   Store,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
 import DarkModeToggle from '@/components/DarkModeToggle';
+import { esRol, etiquetaRol, normalizarRol } from '@/lib/roles';
 
 interface SeccionMenu {
   href: string;
@@ -34,7 +38,12 @@ function useAuth() {
       if (typeof window !== 'undefined') {
         try {
           const u = localStorage.getItem('usuario');
-          setUsuario(u ? JSON.parse(u) : null);
+          if (!u) {
+            setUsuario(null);
+            return;
+          }
+          const datos = JSON.parse(u) as { nombre: string; rol: string };
+          setUsuario({ ...datos, rol: normalizarRol(datos.rol) });
         } catch { setUsuario(null); }
       }
     };
@@ -68,14 +77,16 @@ export default function AdminLayout({
     { href: '/admin/productos', titulo: 'Productos', desc: 'Gestión de productos', roles: ['admin', 'inventario'], Icono: Package, esPanel: true },
     { href: '/admin/inventario', titulo: 'Inventario', desc: 'Control de existencias', roles: ['admin', 'inventario'], Icono: Boxes, esPanel: true },
     { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Gestión de pedidos', roles: ['admin', 'inventario'], Icono: ClipboardList, esPanel: true },
+    { href: '/admin/ubicaciones', titulo: 'Ubicaciones', desc: 'Seguimiento de vendedores', roles: ['admin', 'inventario'], Icono: MapPin, esPanel: true },
     { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registro de clientes', roles: ['admin'], Icono: Users, esPanel: true },
     { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestión de usuarios', roles: ['admin'], Icono: Settings, esPanel: true },
-    { href: '/admin/deudas', titulo: 'Deudas', desc: 'Gestión de deudas', roles: ['admin', 'inventario'], Icono: Users, esPanel: true },
-    { href: '/admin/reportes', titulo: 'Reportes', desc: 'Reportes del sistema', roles: ['admin'], Icono: Users, esPanel: true },
-    { href: '/admin/rendimiento', titulo: 'Rendimiento', desc: 'Mi rendimiento', roles: ['admin'], Icono: Users, esPanel: true },
+    { href: '/admin/ventas', titulo: 'Ventas', desc: 'Ventas y comprobantes', roles: ['admin', 'inventario', 'ventas'], Icono: Store, esPanel: true },
+    { href: '/admin/deudas', titulo: 'Deudas', desc: 'Gestión de deudas', roles: ['admin', 'inventario', 'ventas'], Icono: Wallet, esPanel: true },
+    { href: '/admin/reportes', titulo: 'Reportes', desc: 'Reportes del sistema', roles: ['admin'], Icono: BarChart3, esPanel: true },
+    { href: '/admin/rendimiento', titulo: 'Rendimiento', desc: 'Ventas por vendedor', roles: ['admin'], Icono: BarChart3, esPanel: true },
   ];
 
-  const visibles = seccionesAdmin.filter(s => s.roles.includes(usuario?.rol ?? ''));
+  const visibles = seccionesAdmin.filter(s => esRol(usuario?.rol, ...s.roles));
 
   return (
     <div className="prolimal-page min-h-screen text-prolimal-ink-900 dark:text-prolimal-sand-50">
@@ -183,7 +194,7 @@ export default function AdminLayout({
               {usuario?.nombre || 'Usuario'}
             </p>
             <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-prolimal-teal-300">
-              {usuario?.rol || 'Sin rol'}
+              {etiquetaRol(usuario?.rol)}
             </p>
           </div>
           <Link

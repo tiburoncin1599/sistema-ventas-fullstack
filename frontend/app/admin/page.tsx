@@ -8,7 +8,9 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
+  MapPin,
   Package,
+  Store,
   UserCog,
   Users,
   Wallet,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
+import { esRol, etiquetaRol, normalizarRol } from '@/lib/roles';
 
 interface UsuarioAdmin {
   nombre: string;
@@ -33,7 +36,8 @@ interface SeccionAdmin {
 function parseUsuario(raw: string | null): UsuarioAdmin | null {
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as UsuarioAdmin;
+    const datos = JSON.parse(raw) as UsuarioAdmin;
+    return { ...datos, rol: normalizarRol(datos.rol) };
   } catch {
     return null;
   }
@@ -60,11 +64,13 @@ const seccionesAdmin: SeccionAdmin[] = [
   { href: '/admin/productos', titulo: 'Productos', desc: 'Crear, editar y desactivar productos del catálogo', roles: ['admin', 'inventario'], Icono: Package },
   { href: '/admin/inventario', titulo: 'Inventario', desc: 'Controlar stock y cantidades mínimas', roles: ['admin', 'inventario'], Icono: Boxes },
   { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Administrar pedidos de clientes', roles: ['admin', 'inventario'], Icono: ClipboardList },
+  { href: '/admin/ubicaciones', titulo: 'Ubicaciones', desc: 'Seguimiento de vendedores en el mapa', roles: ['admin', 'inventario'], Icono: MapPin },
   { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registrar y administrar clientes', roles: ['admin'], Icono: Users },
   { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestionar empleados y asignar roles', roles: ['admin'], Icono: UserCog },
+  { href: '/admin/ventas', titulo: 'Ventas', desc: 'Ventas y comprobantes del equipo', roles: ['admin', 'inventario', 'ventas'], Icono: Store },
   { href: '/admin/deudas', titulo: 'Deudas', desc: 'Deudas del personal y generación de facturas', roles: ['admin', 'inventario', 'ventas'], Icono: Wallet },
   { href: '/admin/reportes', titulo: 'Reportes', desc: 'Ventas, ganancias e inventario con exportación', roles: ['admin'], Icono: BarChart3 },
-  { href: '/admin/personal', titulo: 'Rendimiento', desc: 'Gráficas semanales y mensuales de ventas por vendedor', roles: ['admin'], Icono: BarChart3 },
+  { href: '/admin/rendimiento', titulo: 'Rendimiento', desc: 'Gráficas semanales y mensuales de ventas por vendedor', roles: ['admin'], Icono: BarChart3 },
 ];
 
 export default function AdminDashboard() {
@@ -75,7 +81,7 @@ export default function AdminDashboard() {
   );
   const usuario = parseUsuario(usuarioRaw);
   const rol = usuario?.rol;
-  const esAdmin = rol === 'admin';
+  const esAdmin = esRol(rol, 'admin');
   const [stats, setStats] = useState({
     productos: 0,
     pedidos: 0,
@@ -92,10 +98,10 @@ export default function AdminDashboard() {
       api.get<unknown[]>('/productos'),
       api.get<unknown[]>('/pedidos'),
     ];
-    if (rol === 'admin' || rol === 'inventario') {
+    if (esRol(rol, 'admin', 'inventario')) {
       peticiones.push(api.get<unknown[]>('/inventario/alertas'));
     }
-    if (rol === 'admin') {
+    if (esRol(rol, 'admin')) {
       peticiones.push(api.get<unknown[]>('/usuarios'));
     }
 
@@ -137,7 +143,7 @@ export default function AdminDashboard() {
         </div>
         <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-ink-900/10 bg-card px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-500 dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:text-prolimal-ink-200">
           <span className="h-1.5 w-1.5 rounded-full bg-prolimal-teal-500" />
-          {usuario?.rol || 'Sin rol'}
+          {etiquetaRol(rol)}
         </span>
       </section>
 
@@ -200,7 +206,7 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {seccionesAdmin
-          .filter((seccion) => usuario && seccion.roles.includes(usuario.rol))
+          .filter((seccion) => esRol(rol, ...seccion.roles))
           .map(({ href, titulo, desc, Icono }, index) => (
             <motion.div
               key={href}

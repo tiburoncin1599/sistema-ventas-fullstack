@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Query,
@@ -12,6 +13,7 @@ import { FiltroReportesDto } from './dto/filtro-reportes.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { ROLES, normalizarRol } from '../auth/roles.constant';
 import { instalarMarcaAgua } from '../common/pdf-watermark';
 
 // La nomenclatura real del sistema es `admin` / `ventas`
@@ -28,14 +30,18 @@ export class ReportesController {
    */
   private filtrosDe(
     req: Request,
-    filtros: FiltroReportesDto,
+    filtros: Partial<FiltroReportesDto>,
   ): FiltrosEfectivos {
     const user = req.user as { id: number; rol: string };
     return {
       fechaInicio: filtros.fechaInicio ?? filtros.desde,
       fechaFin: filtros.fechaFin ?? filtros.hasta,
       productoId: filtros.productoId,
-      vendedorId: user.rol === 'ventas' ? user.id : filtros.vendedorId,
+      vendedorId:
+        normalizarRol(user.rol) === ROLES.VENTAS ? user.id : filtros.vendedorId,
+      categoriaId: filtros.categoriaId ?? filtros.categoria_id,
+      tipo: filtros.tipo,
+      usuarioId: filtros.usuarioId,
       agrupacion: filtros.agrupacion,
     };
   }
@@ -48,40 +54,49 @@ export class ReportesController {
   @Get('ventas-personal-por-dia')
   ventasPersonalPorDia(
     @Req() req: Request,
-    @Query('usuarioId') usuarioId?: string,
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
+    @Query() filtros: FiltroReportesDto,
   ) {
     const user = req.user as { id: number; rol: string };
     // Un vendedor solo puede consultar su propio rendimiento: se ignora
     // cualquier usuarioId recibido desde el cliente.
-    const uid = user.rol === 'ventas' ? String(user.id) : usuarioId;
+    const uid =
+      normalizarRol(user.rol) === ROLES.VENTAS
+        ? user.id
+        : filtros.usuarioId;
+    const { fechaInicio, fechaFin } = this.filtrosDe(req, filtros);
     return this.reportesService.ventasPersonalPorDia(
-      uid ? +uid : undefined,
-      desde,
-      hasta,
+      uid,
+      fechaInicio,
+      fechaFin,
     );
   }
 
   @Get('ventas-por-producto')
   ventasPorProducto(
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
-    @Query('categoria_id') categoria_id?: string,
+    @Req() req: Request,
+    @Query() filtros: FiltroReportesDto,
   ) {
+    const f = this.filtrosDe(req, filtros);
     return this.reportesService.ventasPorProducto(
-      desde,
-      hasta,
-      categoria_id ? +categoria_id : undefined,
+      f.fechaInicio,
+      f.fechaFin,
+      f.categoriaId,
+      f.vendedorId,
+      f.productoId,
     );
   }
 
   @Get('ventas-por-categoria')
   ventasPorCategoria(
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
+    @Req() req: Request,
+    @Query() filtros: FiltroReportesDto,
   ) {
-    return this.reportesService.ventasPorCategoria(desde, hasta);
+    const f = this.filtrosDe(req, filtros);
+    return this.reportesService.ventasPorCategoria(
+      f.fechaInicio,
+      f.fechaFin,
+      f.vendedorId,
+    );
   }
 
   @Get('ganancias')
@@ -100,18 +115,24 @@ export class ReportesController {
   }
 
   @Get('clientes-frecuentes')
-  clientesFrecuentes() {
-    return this.reportesService.clientesFrecuentes();
+  clientesFrecuentes(@Req() req: Request) {
+    const { vendedorId } = this.filtrosDe(req, {});
+    return this.reportesService.clientesFrecuentes(vendedorId);
   }
 
   @Get('exportar/csv')
   async exportarCSV(
+    @Req() req: Request,
     @Res() res: Response,
-    @Query('tipo') tipo: string,
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
+    @Query() filtros: FiltroReportesDto,
   ) {
-    const csv = await this.reportesService.exportarCSV(tipo, desde, hasta);
+    const tipo = filtros.tipo;
+    if (!tipo) {
+      throw new BadRequestException('tipo es requerido para exportar');
+    }
+    // Exportaciones y JSON comparten los mismos filtros canónicos y el scope.
+    const efectivos = this.filtrosDe(req, filtros);
+    const csv = await this.reportesService.exportarCSV(tipo, efectivos);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${tipo}-${Date.now()}.csv"`);
     res.send(csv);
@@ -119,43 +140,58 @@ export class ReportesController {
 
   @Get('exportar/pdf')
   async exportarPDF(
+    @Req() req: Request,
     @Res() res: Response,
-    @Query('tipo') tipo: string,
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
+    @Query() filtros: FiltroReportesDto,
   ) {
+    const tipo = filtros.tipo;
+    if (!tipo) {
+      throw new BadRequestException('tipo es requerido para exportar');
+    }
+    const f = this.filtrosDe(req, filtros);
     let data: Record<string, unknown>[];
     let titulo: string;
 
     switch (tipo) {
       case 'ventas-por-fecha':
-        data = await this.reportesService.ventasPorFecha({
-          fechaInicio: desde,
-          fechaFin: hasta,
-        });
+        data = await this.reportesService.ventasPorFecha(f);
         titulo = 'Reporte de Ventas por Fecha';
         break;
       case 'ganancias':
-        data = [
-          await this.reportesService.ganancias({
-            fechaInicio: desde,
-            fechaFin: hasta,
-          }),
-        ];
+        data = [await this.reportesService.ganancias(f)];
         titulo = 'Reporte de Ganancias';
         break;
       case 'top-productos': {
-        const top = await this.reportesService.topProductos({
-          fechaInicio: desde,
-          fechaFin: hasta,
-        });
+        const top = await this.reportesService.topProductos(f);
         data = top.masVendidos as unknown as Record<string, unknown>[];
         titulo = 'Reporte de Top Productos';
         break;
       }
+      case 'ventas-por-producto':
+        data = await this.reportesService.ventasPorProducto(
+          f.fechaInicio,
+          f.fechaFin,
+          f.categoriaId,
+          f.vendedorId,
+          f.productoId,
+        );
+        titulo = 'Reporte de Ventas por Producto';
+        break;
+      case 'ventas-por-categoria':
+        data = await this.reportesService.ventasPorCategoria(
+          f.fechaInicio,
+          f.fechaFin,
+          f.vendedorId,
+        );
+        titulo = 'Reporte de Ventas por Categoría';
+        break;
       case 'inventario':
         data = await this.reportesService.inventarioActual();
         titulo = 'Reporte de Inventario';
+        break;
+      case 'clientes':
+        data = await this.reportesService.clientesFrecuentes(f.vendedorId);
+        titulo = 'Reporte de Clientes Frecuentes';
         break;
       default:
         data = [];
@@ -188,13 +224,13 @@ export class ReportesController {
 
       doc.font('Helvetica').fontSize(7);
       data.forEach((row, rowIdx) => {
-        const y = doc.y;
-        if (y > doc.page.height - 50) {
+        const yFila = doc.y;
+        if (yFila > doc.page.height - 50) {
           doc.addPage();
         }
         headers.forEach((h, i) => {
           const val = row[h]?.toString() || '';
-          doc.text(val, 30 + i * colWidth, doc.y, { width: colWidth, align: 'left' });
+          doc.text(val, 30 + i * colWidth, yFila, { width: colWidth, align: 'left' });
         });
         if (rowIdx < data.length - 1) doc.moveDown(0.3);
       });

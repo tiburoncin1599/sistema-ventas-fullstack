@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { existsSync } from 'fs';
 import { instalarMarcaAgua } from '../common/pdf-watermark';
+import { desglosarMontos } from '../common/impuesto';
 
 @Injectable()
 export class FacturaService {
@@ -128,21 +129,28 @@ export class FacturaService {
         doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(0.3);
 
-        // Detalles
-        let subtotal = 0;
+        // Detalles: el precio es por unidad física, no por presentación.
+        let subtotalDetalles = 0;
         data.detalles.forEach((d) => {
           const y = doc.y;
-          const sub = d.cantidad * Number(d.precio_unitario);
-          subtotal += sub;
+          const unidades = Number(d.unidades ?? d.cantidad);
+          const sub = unidades * Number(d.precio_unitario);
+          subtotalDetalles += sub;
           doc.fillColor('#333').font('Helvetica').fontSize(10);
           doc.text(d.producto?.nombre || `Producto #${d.producto_id}`, col1, y, { width: 170 });
-          doc.text(String(d.cantidad), col2, y, { width: 50, align: 'center' });
+          doc.text(String(unidades), col2, y, { width: 50, align: 'center' });
           doc.text(`${moneda}${Number(d.precio_unitario).toFixed(2)}`, col3, y, {
             width: 100,
             align: 'right',
           });
           doc.text(`${moneda}${sub.toFixed(2)}`, col4, y, { width: 80, align: 'right' });
           doc.moveDown(0.8);
+        });
+
+        const desglose = desglosarMontos({
+          subtotalDetalles,
+          total: Number(data.pedido.total),
+          impuestoPorcentaje: impuestoPct,
         });
 
         // Subtotal
@@ -152,48 +160,36 @@ export class FacturaService {
         doc.moveDown(0.5);
         doc.fillColor(green).font('Helvetica-Bold').fontSize(12);
         doc.text('Subtotal:', 40, doc.y, { width: 100 });
-        doc.text(`${moneda}${subtotal.toFixed(2)}`, 440, doc.y, { width: 100, align: 'right' });
+        doc.text(`${moneda}${desglose.subtotal.toFixed(2)}`, 440, doc.y, {
+          width: 100,
+          align: 'right',
+        });
 
-        // El TOTAL mostrado SIEMPRE coincide con el total registrado del pedido
-        const totalRegistrado = Number(data.pedido.total);
-
-        if (impuestoPct > 0 && totalRegistrado > subtotal) {
-          const impuesto = totalRegistrado - subtotal;
+        if (desglose.impuesto > 0) {
           doc.moveDown(0.5);
           doc.fontSize(11).fillColor('#333');
           doc.text(`Impuesto (${impuestoPct}%):`, 40, doc.y, { width: 150 });
-          doc.text(`${moneda}${impuesto.toFixed(2)}`, 440, doc.y, { width: 100, align: 'right' });
-
-          doc.moveDown(0.5);
-          doc.strokeColor(green).lineWidth(1.5);
-          doc.moveTo(340, doc.y).lineTo(550, doc.y).stroke();
-          doc.moveDown(0.5);
-
-          doc.fillColor(green).font('Helvetica-Bold').fontSize(14);
-          doc.text('TOTAL:', 40, doc.y, { width: 100 });
-          doc.text(`${moneda}${totalRegistrado.toFixed(2)}`, 440, doc.y, {
+          doc.text(`${moneda}${desglose.impuesto.toFixed(2)}`, 440, doc.y, {
             width: 100,
             align: 'right',
           });
-        } else {
-          if (impuestoPct > 0) {
-            doc.moveDown(0.5);
-            doc.fontSize(11).fillColor('#333');
-            doc.text(`Impuesto incluido (${impuestoPct}%)`, 40, doc.y, { width: 200 });
-          }
-
+        } else if (impuestoPct > 0 && desglose.impuestoIncluido) {
           doc.moveDown(0.5);
-          doc.strokeColor(green).lineWidth(1.5);
-          doc.moveTo(340, doc.y).lineTo(550, doc.y).stroke();
-          doc.moveDown(0.5);
-
-          doc.fillColor(green).font('Helvetica-Bold').fontSize(14);
-          doc.text('TOTAL:', 40, doc.y, { width: 100 });
-          doc.text(`${moneda}${totalRegistrado.toFixed(2)}`, 440, doc.y, {
-            width: 100,
-            align: 'right',
-          });
+          doc.fontSize(11).fillColor('#333');
+          doc.text(`Impuesto incluido (${impuestoPct}%)`, 40, doc.y, { width: 200 });
         }
+
+        doc.moveDown(0.5);
+        doc.strokeColor(green).lineWidth(1.5);
+        doc.moveTo(340, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.5);
+
+        doc.fillColor(green).font('Helvetica-Bold').fontSize(14);
+        doc.text('TOTAL:', 40, doc.y, { width: 100 });
+        doc.text(`${moneda}${desglose.total.toFixed(2)}`, 440, doc.y, {
+          width: 100,
+          align: 'right',
+        });
 
         // Estado
         doc.moveDown(1.5);

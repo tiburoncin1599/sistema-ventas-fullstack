@@ -10,14 +10,15 @@ import {
   IsNull,
   Repository,
   DataSource,
-  Between,
+  And,
   MoreThanOrEqual,
-  LessThanOrEqual,
+  LessThan,
   FindOptionsWhere,
   EntityManager,
 } from 'typeorm';
 import { Pedido, TIPOS_PAGO, type TipoPago } from './pedido.entity';
 import {
+  CANTIDAD_MINIMA_POR_PRESENTACION,
   DetallePedido,
   normalizarTipoPresentacion,
   type TipoPresentacion,
@@ -190,11 +191,7 @@ export class PedidosService {
     if (desde || hasta) {
       where.creado_en = {};
       if (desde) where.creado_en['>='] = desde;
-      if (hasta) {
-        const hastaFin = new Date(hasta);
-        hastaFin.setHours(23, 59, 59, 999);
-        where.creado_en['<='] = hastaFin;
-      }
+      if (hasta) where.creado_en['<'] = this.finDelDia(hasta);
     }
     return this.pedidosRepo.find({
       where,
@@ -257,6 +254,12 @@ export class PedidosService {
       const producto = porId.get(item.producto_id)!;
       const presentacion =
         normalizarTipoPresentacion(item.tipo_presentacion) ?? 'UNIDAD';
+      const minimo = CANTIDAD_MINIMA_POR_PRESENTACION[presentacion];
+      if (!Number.isInteger(item.cantidad) || item.cantidad < minimo) {
+        throw new BadRequestException(
+          `Cantidad inválida para ${producto.nombre}: se requieren al menos ${minimo} ${presentacion === 'PAQUETE' ? 'paquete(s)' : 'unidad(es)'} enteras`,
+        );
+      }
       const esPaquete = presentacion === 'PAQUETE';
       const factor = esPaquete ? factorConversion(producto) : 1;
       return {
@@ -277,6 +280,122 @@ export class PedidosService {
         sum + Number(d.precio_unitario) * (d.unidades ?? d.cantidad),
       0,
     );
+  }
+
+  private estadoDeuda(monto: number, pagado: number): 'pagado' | 'parcial' | 'pendiente' {
+    if (pagado >= monto) return 'pagado';
+    if (pagado > 0) return 'parcial';
+    return 'pendiente';
+  }
+
+  /**
+   * Mantiene `Deuda` alineada con el total del pedido después de cualquier
+   * modificación de ítems. El saldo pagado nunca se reescribe: solo se
+   * recalcula el estado (pagado/parcial/pendiente).
+   */
+  private async sincronizarDeuda(
+    manager: EntityManager,
+    pedido: Pedido,
+    total: number,
+  ) {
+    const deuda = await manager.findOne(Deuda, {
+      where: { pedido_id: pedido.id },
+    });
+
+    if (!deuda) {
+      if (normalizarTipoPago(pedido.tipo_pago) === 'CREDITO') {
+        await manager.save(
+          manager.create(Deuda, {
+            usuario_id: pedido.usuario_id,
+            vendedor_id: pedido.procesado_por,
+            pedido_id: pedido.id,
+            monto: total,
+            monto_pagado: 0,
+            descripcion: `Venta a crédito · Pedido #${pedido.id}`,
+            estado: 'pendiente',
+          }),
+        );
+      }
+      return;
+    }
+
+    const pagado = Number(deuda.monto_pagado) || 0;
+    const estado = this.estadoDeuda(total, pagado);
+    await manager.update(Deuda, deuda.id, {
+      monto: total,
+      estado,
+      ...(estado === 'pagado' && !deuda.fecha_pago
+        ? { fecha_pago: new Date() }
+        : {}),
+    });
+  }
+
+  /** Pedido bloqueado dentro de la transacción para mutaciones concurrentes. */
+  private async findPedidoBloqueado(manager: EntityManager, id: number) {
+    const pedido = await manager.findOne(Pedido, {
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!pedido) throw new NotFoundException('Pedido no encontrado');
+    return pedido;
+  }
+
+  /**
+   * Devuelve únicamente el stock que sigue pendiente de devolución para este
+   * pedido. Así cancelar y después eliminar (o eliminar tras borrar un ítem)
+   * no genera stock fantasma.
+   */
+  private async devolverStockPendiente(
+    manager: EntityManager,
+    pedidoId: number,
+    detalles: DetallePedido[],
+    motivo: string,
+    usuarioId?: number,
+  ) {
+    const movimientos = await manager.find(InventarioMovimiento, {
+      where: {
+        referencia_tipo: 'pedido',
+        referencia_id: pedidoId,
+        tipo: In(['salida', 'venta', 'devolucion']),
+      },
+    });
+
+    const netoPorProducto = new Map<number, number>();
+    for (const movimiento of movimientos) {
+      const tipo = String(movimiento.tipo).toLowerCase();
+      const delta =
+        tipo === 'devolucion'
+          ? -Number(movimiento.cantidad)
+          : Number(movimiento.cantidad);
+      netoPorProducto.set(
+        movimiento.producto_id,
+        (netoPorProducto.get(movimiento.producto_id) ?? 0) + delta,
+      );
+    }
+
+    const unidadesPorProducto = new Map<number, number>();
+    for (const detalle of detalles) {
+      const unidades = Number(detalle.unidades ?? detalle.cantidad);
+      unidadesPorProducto.set(
+        detalle.producto_id,
+        (unidadesPorProducto.get(detalle.producto_id) ?? 0) + unidades,
+      );
+    }
+
+    const items: ItemStock[] = [];
+    for (const [producto_id, unidades] of unidadesPorProducto) {
+      const pendiente = Math.max(
+        0,
+        Math.min(netoPorProducto.get(producto_id) ?? 0, unidades),
+      );
+      if (pendiente > 0) {
+        items.push({ producto_id, cantidad: pendiente, unidades: pendiente });
+      }
+    }
+
+    if (items.length > 0) {
+      await this.registrarDevolucion(manager, pedidoId, items, motivo, usuarioId);
+    }
   }
 
   private nuevoHistorial(estados: string[], auditor?: AuditorPedido) {
@@ -364,7 +483,7 @@ export class PedidosService {
     for (const item of items) {
       // Devuelve exactamente lo que se descontó (unidades físicas).
       const unidades = item.unidades ?? item.cantidad;
-      await this.inventarioService.devolver(
+      const inventario = await this.inventarioService.devolver(
         item.producto_id,
         unidades,
         manager,
@@ -374,6 +493,8 @@ export class PedidosService {
           producto_id: item.producto_id,
           tipo: 'devolucion',
           cantidad: unidades,
+          cantidad_anterior: inventario.cantidadAnterior,
+          cantidad_nueva: inventario.cantidadNueva,
           motivo,
           referencia_tipo: 'pedido',
           referencia_id: pedidoId,
@@ -388,7 +509,9 @@ export class PedidosService {
   private async stockDescontado(manager: EntityManager, pedidoId: number) {
     const movimientos = await manager.count(InventarioMovimiento, {
       where: {
-        tipo: 'salida',
+        // Según el origen del pedido el egreso histórico se registró como
+        // 'salida' o como 'venta'. Ambos significan stock ya descontado.
+        tipo: In(['salida', 'venta']),
         referencia_tipo: 'pedido',
         referencia_id: pedidoId,
       },
@@ -424,8 +547,9 @@ export class PedidosService {
         montoPagado === undefined
           ? tipo === 'CONTADO' ? total : 0
           : Math.min(Math.max(Number(montoPagado ?? 0), 0), total);
-      const contado = tipo === 'CONTADO' && abono >= total;
-      const estadoFinal = contado ? 'entregado' : 'pendiente';
+      // Un crédito totalmente cancelado tampoco debe quedar como pendiente.
+      const pagadoTotalmente = abono >= total;
+      const estadoFinal = pagadoTotalmente ? 'entregado' : 'pendiente';
 
       const pedido = manager.create(Pedido, {
         usuario_id: usuarioId,
@@ -435,7 +559,7 @@ export class PedidosService {
         notas: notas || '',
         estado: estadoFinal,
         tipo_pago: tipo ?? 'CONTADO',
-        historial_estados: contado
+        historial_estados: pagadoTotalmente
           ? this.nuevoHistorial(['confirmado', 'enviado', 'entregado'], auditor)
           : this.nuevoHistorial(['pendiente'], auditor),
       });
@@ -472,8 +596,9 @@ export class PedidosService {
             pedido_id: pedidoGuardado.id,
             monto: total,
             descripcion: `Venta a ${esCredito ? 'crédito' : 'pago parcial'} · Pedido #${pedidoGuardado.id}${notas ? ` — ${notas}` : ''}`,
-            estado: abono >= total ? 'pagado' : 'pendiente',
+            estado: this.estadoDeuda(total, abono),
             monto_pagado: abono,
+            ...(pagadoTotalmente ? { fecha_pago: new Date() } : {}),
           }),
         );
       }
@@ -584,7 +709,9 @@ export class PedidosService {
         const detalles = await manager.find(DetallePedido, {
           where: { pedido_id: id },
         });
-        await this.registrarDevolucion(
+        // Solo se devuelve lo que aún no había sido devuelto por borrados
+        // parciales de ítems o reducciones de cantidad.
+        await this.devolverStockPendiente(
           manager,
           id,
           detalles,
@@ -629,7 +756,7 @@ export class PedidosService {
     await queryRunner.startTransaction();
     const manager = queryRunner.manager;
     try {
-      const pedido = await this.findOne(pedidoId);
+      const pedido = await this.findPedidoBloqueado(manager, pedidoId);
       this.verificarEditable(pedido);
 
       const resueltos = await this.resolverItems(manager, items);
@@ -658,6 +785,7 @@ export class PedidosService {
       const detalles = await this.findDetallesConManager(manager, pedidoId);
       const total = this.totalDesdeDetalles(detalles);
       await manager.update(Pedido, pedidoId, { total });
+      await this.sincronizarDeuda(manager, pedido, total);
 
       await this.auditar(manager, {
         accion: 'agregar_items',
@@ -686,16 +814,16 @@ export class PedidosService {
     await queryRunner.startTransaction();
     const manager = queryRunner.manager;
     try {
-      const pedido = await this.findOne(pedidoId);
+      const pedido = await this.findPedidoBloqueado(manager, pedidoId);
       this.verificarEditable(pedido);
 
-      const detalle = await this.detalleRepo.findOne({
+      const detalle = await manager.findOne(DetallePedido, {
         where: { id: itemId, pedido_id: pedidoId },
       });
       if (!detalle)
         throw new NotFoundException('Detalle del pedido no encontrado');
 
-      await this.registrarDevolucion(
+      await this.devolverStockPendiente(
         manager,
         pedidoId,
         [detalle],
@@ -707,6 +835,7 @@ export class PedidosService {
       const detalles = await this.findDetallesConManager(manager, pedidoId);
       const total = this.totalDesdeDetalles(detalles);
       await manager.update(Pedido, pedidoId, { total });
+      await this.sincronizarDeuda(manager, pedido, total);
 
       await this.auditar(manager, {
         accion: 'eliminar_item',
@@ -732,13 +861,13 @@ export class PedidosService {
     await queryRunner.startTransaction();
     const manager = queryRunner.manager;
     try {
-      const pedido = await this.findOne(id);
-      // Un pedido entregado ya se vendió: no devuelve stock
+      const pedido = await this.findPedidoBloqueado(manager, id);
+      // Un pedido entregado ya se vendió: no devuelve stock.
       const devolverStock = pedido.estado !== 'entregado';
-      const detalles = await this.findDetalles(id);
+      const detalles = await this.findDetallesConManager(manager, id);
 
       if (devolverStock) {
-        await this.registrarDevolucion(
+        await this.devolverStockPendiente(
           manager,
           id,
           detalles,
@@ -780,14 +909,23 @@ export class PedidosService {
     await queryRunner.startTransaction();
     const manager = queryRunner.manager;
     try {
-      const pedido = await this.findOne(pedidoId);
+      const pedido = await this.findPedidoBloqueado(manager, pedidoId);
       this.verificarEditable(pedido);
 
-      const detalle = await this.detalleRepo.findOne({
+      const detalle = await manager.findOne(DetallePedido, {
         where: { id: itemId, pedido_id: pedidoId },
       });
       if (!detalle)
         throw new NotFoundException('Detalle del pedido no encontrado');
+
+      const presentacion =
+        normalizarTipoPresentacion(detalle.tipo_presentacion) ?? 'UNIDAD';
+      const minimo = CANTIDAD_MINIMA_POR_PRESENTACION[presentacion];
+      if (!Number.isInteger(nuevaCantidad) || nuevaCantidad < minimo) {
+        throw new BadRequestException(
+          `El pedido mínimo es de ${minimo} ${presentacion === 'PAQUETE' ? 'paquete(s)' : 'unidad(es)'}`,
+        );
+      }
 
       const factor = detalle.factor_conversion ?? 1;
       const diff = nuevaCantidad - detalle.cantidad;
@@ -819,6 +957,7 @@ export class PedidosService {
       const detalles = await this.findDetallesConManager(manager, pedidoId);
       const total = this.totalDesdeDetalles(detalles);
       await manager.update(Pedido, pedidoId, { total });
+      await this.sincronizarDeuda(manager, pedido, total);
 
       await this.auditar(manager, {
         accion: 'actualizar_item',
@@ -836,6 +975,14 @@ export class PedidosService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  /** Cierre de día canónico para filtros inclusivos por fecha. */
+  private finDelDia(hasta: Date | string): Date {
+    const fin = new Date(hasta);
+    fin.setHours(0, 0, 0, 0);
+    fin.setDate(fin.getDate() + 1);
+    return fin;
   }
 
   async ventasPersonal(desde?: Date, hasta?: Date, usuarioId?: number) {
@@ -859,9 +1006,10 @@ export class PedidosService {
 
     if (desde) query.andWhere('pedido.creado_en >= :desde', { desde });
     if (hasta) {
-      const hastaFin = new Date(hasta);
-      hastaFin.setHours(23, 59, 59, 999);
-      query.andWhere('pedido.creado_en <= :hasta', { hasta: hastaFin });
+      // Cierre de día unificado: < (fecha + 1 día), sin setHours(23,59,59,999).
+      query.andWhere('pedido.creado_en < :hasta', {
+        hasta: this.finDelDia(hasta),
+      });
     }
 
     const filas = await query
@@ -874,18 +1022,13 @@ export class PedidosService {
       procesado_por: usuarioId ?? Not(IsNull()),
       estado: Not('cancelado'),
     };
-    if (desde || hasta) {
-      if (desde && hasta) {
-        const hastaFin = new Date(hasta);
-        hastaFin.setHours(23, 59, 59, 999);
-        whereDetalle.creado_en = Between(desde, hastaFin);
-      } else if (desde) {
-        whereDetalle.creado_en = MoreThanOrEqual(desde);
-      } else {
-        const hastaFin = new Date(hasta!);
-        hastaFin.setHours(23, 59, 59, 999);
-        whereDetalle.creado_en = LessThanOrEqual(hastaFin);
-      }
+    const fin = hasta ? this.finDelDia(hasta) : undefined;
+    if (desde && fin) {
+      whereDetalle.creado_en = And(MoreThanOrEqual(desde), LessThan(fin));
+    } else if (desde) {
+      whereDetalle.creado_en = MoreThanOrEqual(desde);
+    } else if (fin) {
+      whereDetalle.creado_en = LessThan(fin);
     }
     const pedidosDetalle = await this.pedidosRepo.find({
       where: whereDetalle,

@@ -190,7 +190,6 @@ export default function VentasNuevoPedidoPage() {
       setStockMsg('');
       return;
     }
-    if (v < 0) return;
     // El stock está en unidades físicas y se reparte entre las dos líneas.
     const tope = topeDe(id, tipo, factor, s);
     if (tope < minimo) {
@@ -251,6 +250,22 @@ export default function VentasNuevoPedidoPage() {
       );
       return;
     }
+
+    // El stock se comparte entre las líneas UNIDAD y PAQUETE del mismo
+    // producto: la suma de unidades físicas no puede superar el disponible.
+    const productoExcedido = [...new Set(lineas.map(l => l.producto_id))].find(
+      id =>
+        lineas
+          .filter(l => l.producto_id === id)
+          .reduce((sum, l) => sum + unidadesDeLinea(l), 0) > (stock[id] ?? 0),
+    );
+    if (productoExcedido !== undefined) {
+      const nombre =
+        productos.find(p => p.id === productoExcedido)?.nombre ?? 'el producto';
+      setError(`Stock insuficiente para ${nombre}. Ajustá las cantidades antes de continuar.`);
+      return;
+    }
+
     setGuardando(true);
     setError('');
     try {
@@ -461,7 +476,15 @@ export default function VentasNuevoPedidoPage() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => setCantidad(p.id, tipo, c - minimo)}
+                          onClick={() =>
+                            manejarCantidad(
+                              p.id,
+                              tipo,
+                              c - minimo,
+                              s,
+                              factor,
+                            )
+                          }
                           disabled={c === 0}
                           className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
                           aria-label="Restar"
@@ -487,7 +510,15 @@ export default function VentasNuevoPedidoPage() {
                         />
                         <button
                           type="button"
-                          onClick={() => setCantidad(p.id, tipo, c + minimo)}
+                          onClick={() =>
+                            manejarCantidad(
+                              p.id,
+                              tipo,
+                              c + minimo,
+                              s,
+                              factor,
+                            )
+                          }
                           disabled={s === 0 || tope < minimo || c >= tope}
                           className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
                           aria-label="Sumar"

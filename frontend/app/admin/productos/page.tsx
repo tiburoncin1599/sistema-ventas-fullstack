@@ -16,8 +16,20 @@ interface Producto {
   imagen_url?: string;
   activo: boolean;
   stock: number;
+  cantidad_minima?: number;
   categoria: { id: number; nombre: string };
   categoria_id?: number;
+}
+
+/**
+ * Umbral de alerta por producto. El backend expone `cantidad_minima` en el
+ * inventario; `/productos/admin` no siempre lo incluye, así que sólo en ese
+ * caso (campo ausente) se usa 10 como fallback.
+ */
+function umbralStock(producto: Producto): number {
+  return typeof producto.cantidad_minima === 'number'
+    ? producto.cantidad_minima
+    : 10;
 }
 
 /** Orden alfabético determinista e insensible a mayúsculas/minúsculas (es). */
@@ -237,12 +249,12 @@ export default function AdminProductos() {
                   <span
                     aria-label={`Stock actual: ${p.stock}`}
                     className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                      p.stock <= 10
+                      p.stock <= umbralStock(p)
                         ? 'bg-prolimal-red-100 text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300'
                         : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'
                     }`}
                   >
-                    {p.stock <= 10 ? `⚠️ Stock bajo · quedan ${p.stock}` : `Stock: ${p.stock}`}
+                    {p.stock <= umbralStock(p) ? `⚠️ Stock bajo · quedan ${p.stock}` : `Stock: ${p.stock}`}
                   </span>
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-prolimal-ink-900/5 pt-4 dark:border-prolimal-sand-100/10">

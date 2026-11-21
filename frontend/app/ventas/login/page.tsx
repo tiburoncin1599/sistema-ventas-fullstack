@@ -2,11 +2,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { normalizarRol } from '@/lib/roles';
 import { Store } from 'lucide-react';
-
-function normalizarRol(rol: unknown): string {
-  return typeof rol === 'string' ? rol.trim().toLowerCase() : 'cliente';
-}
 
 export default function VentasLoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });

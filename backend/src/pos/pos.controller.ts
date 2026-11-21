@@ -1,10 +1,19 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { POSService } from './pos.service';
 import { VentaRapidaDto, BuscarProductoDto } from './dto/venta-rapida.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Request } from 'express';
 
 @ApiTags('POS')
 @Controller('pos')
@@ -24,7 +33,12 @@ export class POSController {
 
   @Post('venta-rapida')
   @ApiOperation({ summary: 'Venta rapida POS con cobro inmediato' })
-  ventaRapida(@Body() body: VentaRapidaDto) {
-    return this.posService.ventaRapida(body);
+  ventaRapida(@Body() body: VentaRapidaDto, @Req() req: Request) {
+    const user = req.user as { id: number };
+    // El vendedor nunca se toma del body: siempre es el usuario autenticado.
+    return this.posService.ventaRapida({
+      ...body,
+      procesadoPor: user.id,
+    });
   }
 }

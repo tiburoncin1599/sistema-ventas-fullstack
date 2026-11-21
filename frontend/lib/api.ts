@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { normalizarRol } from './roles';
 
 // En desarrollo y producción el frontend habla con el backend por el mismo
 // origen: Next enruta `/api/*` hacia el proceso backend (ver next.config.ts).
@@ -36,7 +37,22 @@ export async function cerrarSesion() {
   limpiarAuth();
 }
 
-async function refreshToken(): Promise<string | null> {
+/** True cuando ya estamos en una pantalla de login (evita redirects en bucle). */
+function esPantallaAuth(): boolean {
+  if (typeof window === 'undefined') return true;
+  const ruta = window.location.pathname;
+  return ruta.startsWith('/auth') || ruta.startsWith('/ventas/login');
+}
+
+/** Sale hacia el login correspondiente al área donde ocurrió el fallo. */
+function redirigirPorSesion() {
+  if (esPantallaAuth()) return;
+  const ruta = window.location.pathname;
+  window.location.href = ruta.startsWith('/ventas') ? '/ventas/login' : '/auth';
+}
+
+/** Refresca el access token. Exportado también para el cliente SSE. */
+export async function refreshToken(): Promise<string | null> {
   try {
     const refreshTokenLocal = localStorage.getItem('refresh_token');
     const res = await axios.post(
@@ -49,8 +65,12 @@ async function refreshToken(): Promise<string | null> {
     localStorage.setItem('token', newToken);
     document.cookie = `token=${newToken}; path=/; max-age=604800`;
     if (res.data.usuario) {
-      localStorage.setItem('usuario', JSON.stringify(res.data.usuario));
-      document.cookie = `usuario=${encodeURIComponent(JSON.stringify(res.data.usuario))}; path=/; max-age=604800`;
+      const usuario = {
+        ...res.data.usuario,
+        rol: normalizarRol(res.data.usuario?.rol),
+      };
+      localStorage.setItem('usuario', JSON.stringify(usuario));
+      document.cookie = `usuario=${encodeURIComponent(JSON.stringify(usuario))}; path=/; max-age=604800`;
     }
     return newToken;
   } catch {
@@ -71,6 +91,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const url = (originalRequest?.url as string) || '';
+
+    // 403 = sesión/rol inválido para el recurso: NO se intenta refresh.
+    if (typeof window !== 'undefined' && error.response?.status === 403) {
+      limpiarAuth();
+      redirigirPorSesion();
+      return Promise.reject(error);
+    }
 
     if (
       typeof window !== 'undefined' &&
@@ -109,21 +136,43 @@ api.interceptors.response.use(
       pendingRequests = [];
       encoladas.forEach(({ reject }) => reject(error));
       limpiarAuth();
-
-      // Solo redirigir si no estamos ya en una pantalla de login
-      if (!window.location.pathname.startsWith('/auth') && !window.location.pathname.startsWith('/ventas/login')) {
-        window.location.href = '/auth';
-      }
+      redirigirPorSesion();
     }
     return Promise.reject(error);
   },
 );
 
+/** Extrae el `message` real del backend de una respuesta con responseType blob. */
+async function mensajeDelBlob(data: unknown): Promise<string> {
+  const porDefecto = 'Error al descargar';
+  let objeto: unknown = data;
+
+  if (data instanceof Blob) {
+    try {
+      objeto = JSON.parse(await data.text());
+    } catch {
+      return porDefecto;
+    }
+  }
+
+  if (objeto && typeof objeto === 'object' && 'message' in objeto) {
+    const mensaje = (objeto as { message?: string | string[] }).message;
+    if (Array.isArray(mensaje)) return mensaje.join('. ');
+    if (typeof mensaje === 'string' && mensaje.trim()) return mensaje;
+  }
+  return porDefecto;
+}
+
+/**
+ * Descarga un blob usando la instancia `api` para heredar credenciales,
+ * Authorization y el refresh de 401. Mantiene la firma `(url) => Promise<Blob>`.
+ */
 export async function apiFetchBlob(url: string): Promise<Blob> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const res = await fetch(`${API_URL}${url}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error('Error al descargar');
-  return res.blob();
+  try {
+    const res = await api.get<Blob>(url, { responseType: 'blob' });
+    return res.data as Blob;
+  } catch (err: unknown) {
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    throw new Error(await mensajeDelBlob(data));
+  }
 }

@@ -42,12 +42,35 @@ export default function CheckoutPage() {
     setCargando(true);
     setError('');
 
-    // El stock se mide en unidades físicas: 1 paquete puede consumir 12.
-    const sinStock = items.find(i =>
-      typeof i.stock === 'number' && unidadesDe(i) > i.stock!,
-    );
+    // El stock se mide en unidades físicas y se comparte entre las líneas
+    // UNIDAD y PAQUETE del mismo producto, así que se agrupa por producto.
+    const porProducto = new Map<
+      number,
+      { nombre: string; unidades: number; stock?: number }
+    >();
+    for (const i of items) {
+      const grupo = porProducto.get(i.id) ?? {
+        nombre: i.nombre,
+        unidades: 0,
+        stock: i.stock,
+      };
+      grupo.unidades += unidadesDe(i);
+      if (typeof i.stock === 'number') grupo.stock = i.stock;
+      porProducto.set(i.id, grupo);
+    }
+    let sinStock: { nombre: string; unidades: number; stock: number } | null = null;
+    for (const grupo of porProducto.values()) {
+      if (grupo.stock !== undefined && grupo.unidades > grupo.stock) {
+        sinStock = {
+          nombre: grupo.nombre,
+          unidades: grupo.unidades,
+          stock: grupo.stock,
+        };
+        break;
+      }
+    }
     if (sinStock) {
-      setError(`Stock insuficiente de "${sinStock.nombre}". Solo hay ${sinStock.stock} unidades disponibles (se necesitan ${unidadesDe(sinStock)}).`);
+      setError(`Stock insuficiente de "${sinStock.nombre}". Se necesitan ${sinStock.unidades} unidades en total y solo hay ${sinStock.stock} disponibles.`);
       setCargando(false);
       return;
     }
@@ -68,6 +91,8 @@ export default function CheckoutPage() {
       const res = await api.post('/pedidos', {
         usuarioId: usuario.id,
         direccion: '',
+        tipo_pago: 'CONTADO',
+        montoPagado: total(),
         items: items.map(i => ({
           producto_id: i.id,
           cantidad: i.cantidad,
@@ -75,7 +100,7 @@ export default function CheckoutPage() {
           precio: parseCurrency(i.precio),
         })),
       });
-      setPedidoId(res.data.id || res.data.pedido?.id);
+      setPedidoId(res.data.pedidoId ?? res.data.id);
       vaciar();
       setPedidoCreado(true);
     } catch (err: unknown) {

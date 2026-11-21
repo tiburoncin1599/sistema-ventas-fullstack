@@ -1,14 +1,14 @@
-import { IsIn, IsNumber, IsOptional } from 'class-validator';
-import { TIPOS_PRESENTACION } from '../detalle-pedido.entity';
-import { MinSegunPresentacion } from './validators/min-segun-presentacion.validator';
+import { IsInt, IsNumber, Min } from 'class-validator';
 
+/**
+ * El servicio toma la presentación del detalle ya persistido y aplica su
+ * mínimo real (UNIDAD=3, PAQUETE=1). Enviar `tipo_presentacion` aquí sería
+ * engañoso con `forbidNonWhitelisted: true`, y un mínimo fijo de UNIDAD
+ * rechazaría paquetes válidos. El DTO sólo garantiza un entero positivo.
+ */
 export class ActualizarItemDto {
   @IsNumber()
-  @MinSegunPresentacion()
+  @IsInt()
+  @Min(1)
   cantidad!: number;
-
-  /** Opcional: sin el campo se conserva el mínimo histórico (1). */
-  @IsOptional()
-  @IsIn([...TIPOS_PRESENTACION])
-  tipo_presentacion?: string;
 }

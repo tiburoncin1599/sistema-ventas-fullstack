@@ -1,4 +1,4 @@
-import { API_URL } from './api';
+import { API_URL, refreshToken } from './api';
 
 interface SseOptions {
   onData: (data: unknown) => void;
@@ -13,6 +13,8 @@ interface EventoSseNormalizado {
 export function conectarSSE(path: string, { onData, onError }: SseOptions) {
   let cerrado = false;
   let intentos = 0;
+  let refrescos = 0;
+  const maxRefrescos = 1;
   const maxIntentos = 50;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const controller = new AbortController();
@@ -60,6 +62,20 @@ export function conectarSSE(path: string, { onData, onError }: SseOptions) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         signal: controller.signal,
       });
+
+      // 401: se refresca una sola vez y se reintenta sin contar como fallo.
+      if (res.status === 401 && refrescos < maxRefrescos && !cerrado) {
+        refrescos += 1;
+        const nuevoToken = await refreshToken();
+        if (nuevoToken && !cerrado) return conectar();
+      }
+
+      // 401 sin refresh posible / 403: sesión o rol inválido, es terminal.
+      if (res.status === 401 || res.status === 403) {
+        cerrado = true;
+        onError?.();
+        return;
+      }
 
       if (!res.ok || !res.body) throw new Error('SSE no disponible');
 

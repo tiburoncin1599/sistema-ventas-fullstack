@@ -16,7 +16,9 @@ export class RegistrarMovimientoDto {
   tipo!: string;
 
   @IsNumber()
-  @Min(1)
+  // Los ajustes pueden dejar el stock en 0; entradas/salidas se validan
+  // como > 0 en el servicio.
+  @Min(0)
   cantidad!: number;
 
   @IsOptional()

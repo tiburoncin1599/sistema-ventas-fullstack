@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { api } from '@/lib/api';
 import { parseCurrency } from '@/lib/utils';
 import {
   CANTIDAD_MINIMA,
@@ -43,7 +44,7 @@ interface CarritoStore {
   agregar: (producto: ProductoCarrito & { cantidad?: number }) => void;
   quitar: (clave: ClaveItem) => void;
   cambiarCantidad: (clave: ClaveItem, cantidad: number) => void;
-  cambiarPresentacion: (clave: ClaveItem, tipo: TipoPresentacion) => void;
+  cambiarPresentacion: (clave: ClaveItem, tipo: TipoPresentacion) => Promise<void>;
   vaciar: () => void;
   total: () => number;
 }
@@ -134,38 +135,66 @@ export const useCarrito = create<CarritoStore>()(
         });
       },
 
-      cambiarPresentacion: (claveArg, tipo) => {
+      cambiarPresentacion: async (claveArg, tipo) => {
         const clave = claveNormalizada(claveArg);
+        const origenInicial = get().items.find((i) => claveDe(i) === clave);
+        if (!origenInicial || presentacionDe(origenInicial) === tipo) return;
+
+        // Refrescamos precio/stock/factor antes de conmutar. Si falla, se
+        // conservan los valores actuales y el cambio se aplica igual.
+        let frescos: Partial<ProductoCarrito> = {};
+        try {
+          interface DetalleProducto {
+            precio?: unknown;
+            stock?: unknown;
+            factor_paquete?: number | string | null;
+          }
+          const { data } = await api.get<DetalleProducto>(
+            `/productos/${origenInicial.id}`,
+          );
+          if (data && typeof data === 'object') {
+            if (data.precio !== undefined && data.precio !== null) {
+              const precio = parseCurrency(data.precio);
+              if (Number.isFinite(precio)) frescos.precio = precio;
+            }
+            if (data.stock !== undefined && data.stock !== null) {
+              const stock = Number(data.stock);
+              if (Number.isFinite(stock)) frescos.stock = stock;
+            }
+            if ('factor_paquete' in data) {
+              const factor = data.factor_paquete;
+              if (factor === null || factor === undefined) {
+                frescos.factor_paquete = null;
+              } else {
+                const valor = Number(factor);
+                if (Number.isFinite(valor)) frescos.factor_paquete = valor;
+              }
+            }
+          }
+        } catch {
+          // Sin catálogo disponible se mantiene el último valor conocido.
+        }
+
+        // Se vuelve a leer el estado: mientras esperábamos la API otra
+        // acción pudo haber cambiado o quitado la línea de origen.
         const items = get().items;
         const origen = items.find((i) => claveDe(i) === clave);
         if (!origen || presentacionDe(origen) === tipo) return;
 
         const actualizado: ProductoCarrito = {
           ...origen,
+          ...frescos,
           tipo_presentacion: tipo,
         };
-        const destino = claveDe(actualizado);
-        const otro = items.find((i) => claveDe(i) === destino);
-
-        // Conserva las unidades físicas. Si ya existía la otra presentación,
-        // se fusionan en una sola línea para no duplicar la clave compuesta.
-        const factor = esPaquete(tipo) ? factorConversion(actualizado) : 1;
-        const unidades =
-          unidadesDe(origen) + (otro ? unidadesDe(otro) : 0);
-        const cantidad = ajustarCantidad(
-          Math.max(CANTIDAD_MINIMA[tipo], Math.round(unidades / factor)),
-          actualizado,
-        );
+        const cantidad = ajustarCantidad(origen.cantidad, actualizado);
         if (cantidad === null) return;
 
+        // La otra presentación del mismo producto NO se fusiona ni se borra:
+        // cada una conserva su clave `id:unit` / `id:pack`.
         set({
-          items: items
-            .filter((i) => claveDe(i) !== destino)
-            .map((i) =>
-              claveDe(i) === clave
-                ? { ...actualizado, cantidad }
-                : i,
-            ),
+          items: items.map((i) =>
+            claveDe(i) === clave ? { ...actualizado, cantidad } : i,
+          ),
         });
       },
 

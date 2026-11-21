@@ -2,8 +2,45 @@ import { request } from '@playwright/test';
 import { asegurarSesiones } from './support/auth';
 import { BACKEND_URL, FRONTEND_URL } from './support/env';
 
+/**
+ * La suite E2E crea y modifica datos reales. Por defecto sólo se permite
+ * apuntar al stack local; E2E_ALLOW=1 es el único escape explícito.
+ */
+function esLocal(valor: string): boolean {
+  try {
+    const url = new URL(valor);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function verificarEntornoLocal(): void {
+  if (process.env.E2E_ALLOW === '1') return;
+
+  const destinos = [
+    { nombre: 'E2E_FRONTEND_URL', valor: FRONTEND_URL },
+    { nombre: 'E2E_BACKEND_URL', valor: BACKEND_URL },
+  ].filter((destino) => !esLocal(destino.valor));
+
+  if (destinos.length > 0) {
+    throw new Error(
+      [
+        '[E2E] La suite crea datos de prueba: sólo se permite contra localhost o 127.0.0.1.',
+        ...destinos.map((destino) => `  - ${destino.nombre}=${destino.valor}`),
+        'Ajustá las variables de entorno o forzá con E2E_ALLOW=1.',
+      ].join('\n'),
+    );
+  }
+}
+
 /** Verifica que el stack esté arriba y prepara las sesiones por rol. */
 export default async function globalSetup(): Promise<void> {
+  verificarEntornoLocal();
+
   const ctx = await request.newContext();
   try {
     const front = await ctx.get(`${FRONTEND_URL}/`);

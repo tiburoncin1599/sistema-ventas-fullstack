@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UsuariosService } from '../usuarios/usuarios.service';
 import { RefreshToken } from './refresh-token.entity';
+import { ROLES, normalizarRol } from './roles.constant';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
@@ -21,7 +22,10 @@ export class AuthService {
   ) {}
 
   private generarAccessToken(usuario: { id: number; rol: string }): string {
-    return this.jwtService.sign({ id: usuario.id, rol: usuario.rol });
+    return this.jwtService.sign({
+      id: usuario.id,
+      rol: normalizarRol(usuario.rol) ?? ROLES.CLIENTE,
+    });
   }
 
   private async generarRefreshToken(usuarioId: number): Promise<string> {
@@ -46,7 +50,7 @@ export class AuthService {
         id: usuario.id,
         nombre: usuario.nombre,
         email: usuario.email,
-        rol: usuario.rol,
+        rol: normalizarRol(usuario.rol) ?? ROLES.CLIENTE,
       },
     };
   }

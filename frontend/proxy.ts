@@ -1,29 +1,36 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { normalizarRol } from './lib/roles';
 
 const rutasObligatorias = ['/cuenta', '/checkout'];
 const ventasLoginRoute = '/ventas/login';
 
-// Roles permitidos por ruta del panel admin (coincide con las secciones visibles).
+const rolesOperacion = ['admin', 'inventario'];
+const rolesAdminBase = ['admin', 'inventario', 'ventas'];
+
+/**
+ * Roles permitidos por ruta. Coincide con los links visibles en
+ * `admin/layout.tsx`, `admin/page.tsx` y `ventas/layout.tsx`.
+ * Es control de UX: la autorización real la hace el backend con guards.
+ */
 const rutasAdmin: { ruta: string; roles: string[] }[] = [
-  { ruta: '/admin/usuarios', roles: ['admin'] },
+  { ruta: '/admin/productos', roles: rolesOperacion },
+  { ruta: '/admin/inventario', roles: rolesOperacion },
+  { ruta: '/admin/pedidos', roles: rolesOperacion },
+  { ruta: '/admin/ubicaciones', roles: rolesOperacion },
+  { ruta: '/admin/ventas', roles: rolesAdminBase },
+  { ruta: '/admin/deudas', roles: rolesAdminBase },
   { ruta: '/admin/clientes', roles: ['admin'] },
+  { ruta: '/admin/usuarios', roles: ['admin'] },
   { ruta: '/admin/personal', roles: ['admin'] },
-  { ruta: '/admin/productos', roles: ['admin', 'inventario'] },
-  { ruta: '/admin/inventario', roles: ['admin', 'inventario'] },
-  { ruta: '/admin/pedidos', roles: ['admin', 'inventario'] },
-  { ruta: '/admin/ubicaciones', roles: ['admin', 'inventario'] },
-  { ruta: '/admin/ventas', roles: ['admin', 'inventario', 'ventas'] },
-  { ruta: '/admin/deudas', roles: ['admin', 'inventario', 'ventas'] },
   { ruta: '/admin/reportes', roles: ['admin'] },
   { ruta: '/admin/rendimiento', roles: ['admin'] },
 ];
 
-const rolesAdminBase = ['admin', 'inventario', 'ventas'];
-
-function normalizarRol(rol: unknown): string | undefined {
-  return typeof rol === 'string' ? rol.trim().toLowerCase() : undefined;
-}
+const rutasExtra: { ruta: string; roles: string[] }[] = [
+  { ruta: '/inventario', roles: rolesOperacion },
+  { ruta: '/configuracion', roles: ['admin'] },
+];
 
 function leerUsuario(request: NextRequest): { rol?: string } | null {
   const usuarioStr = request.cookies.get('usuario')?.value;
@@ -32,7 +39,7 @@ function leerUsuario(request: NextRequest): { rol?: string } | null {
     const usuario = JSON.parse(decodeURIComponent(usuarioStr)) as {
       rol?: unknown;
     };
-    return { rol: normalizarRol(usuario.rol) };
+    return { rol: normalizarRol(usuario.rol, undefined) };
   } catch {
     return null;
   }
@@ -54,15 +61,30 @@ export function proxy(request: NextRequest) {
     if (!autenticado || !rol) {
       return NextResponse.redirect(new URL('/auth', request.url));
     }
-    const regla =
-      rutasAdmin.find(ruta => pathname.startsWith(ruta.ruta)) ?? null;
-    const rolesPermitidos = regla ? regla.roles : rolesAdminBase;
-    if (!rolesPermitidos.includes(rol)) {
+    if (pathname === '/admin') {
+      return rolesAdminBase.includes(rol)
+        ? NextResponse.next()
+        : NextResponse.redirect(new URL('/', request.url));
+    }
+    // Las subrutas no declaradas quedan restringidas a admin.
+    const regla = rutasAdmin.find(r => pathname.startsWith(r.ruta));
+    if (!regla || !regla.roles.includes(rol)) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+  }
+
+  for (const regla of rutasExtra) {
+    if (!pathname.startsWith(regla.ruta)) continue;
+    if (!autenticado) {
+      return NextResponse.redirect(new URL('/auth', request.url));
+    }
+    if (!rol || !regla.roles.includes(rol)) {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }
 
   if (pathname.startsWith('/ventas')) {
+    // El POS y el portal de ventas son EXCLUSIVOS del rol ventas.
     const esVendedor = autenticado && rol === 'ventas';
 
     if (pathname === ventasLoginRoute) {
@@ -89,5 +111,7 @@ export const config = {
     '/checkout/:path*',
     '/admin/:path*',
     '/ventas/:path*',
+    '/inventario/:path*',
+    '/configuracion/:path*',
   ],
 };

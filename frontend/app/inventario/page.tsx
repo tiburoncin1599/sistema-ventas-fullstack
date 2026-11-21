@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Plus, Minus, AlertCircle, CheckCircle, Truck, Search } from 'lucide-react';
@@ -52,6 +52,12 @@ export default function InventarioPage() {
   };
 
   const cerrarModal = () => setModal(null);
+
+  // El backend ya aplica `cantidad <= cantidad_minima` al construir las alertas.
+  const idsAlerta = useMemo(
+    () => new Set(alertas.map((a) => a.producto_id)),
+    [alertas],
+  );
 
   const guardar = async () => {
     if (!modal?.producto) return;
@@ -131,8 +137,11 @@ export default function InventarioPage() {
                 )}
               </div>
             </div>
-            {item.cantidad <= item.cantidad_minima && item.activo && (
-              <AlertCircle className="h-4 w-4 text-prolimal-red-500 dark:text-prolimal-red-400" />
+            {idsAlerta.has(item.id) && item.activo && (
+              <span className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-prolimal-red-600 dark:text-prolimal-red-300">
+                <AlertCircle className="h-4 w-4" />
+                Stock bajo
+              </span>
             )}
             {!item.activo && (
               <CheckCircle className="h-4 w-4 text-prolimal-green-500 dark:text-prolimal-green-400" />

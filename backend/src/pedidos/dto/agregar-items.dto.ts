@@ -1,8 +1,10 @@
 import {
-  IsNumber,
   IsArray,
-  IsOptional,
   IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  ArrayMinSize,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -15,6 +17,7 @@ class ItemAgregarDto {
   producto_id!: number;
 
   @IsNumber()
+  @IsInt()
   @MinSegunPresentacion()
   cantidad!: number;
 
@@ -29,6 +32,7 @@ class ItemAgregarDto {
 
 export class AgregarItemsDto {
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => ItemAgregarDto)
   items!: ItemAgregarDto[];

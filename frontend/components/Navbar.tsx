@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Menu, Search, ShoppingCart, User, X } from 'lucide-react';
 import { cerrarSesion } from '@/lib/api';
+import { esRol, etiquetaRol, normalizarRol } from '@/lib/roles';
 import { useCarrito } from '@/store/carrito';
 import DarkModeToggle from './DarkModeToggle';
 import CarritoDrawer from './CarritoDrawer';
@@ -21,7 +22,9 @@ function getUsuarioFromStorage(): Usuario | null {
   if (typeof window === 'undefined') return null;
   try {
     const u = localStorage.getItem('usuario');
-    return u ? JSON.parse(u) : null;
+    if (!u) return null;
+    const datos = JSON.parse(u) as Usuario;
+    return { ...datos, rol: normalizarRol(datos.rol) };
   } catch {
     return null;
   }
@@ -92,13 +95,16 @@ export default function Navbar() {
     { href: '/productos', label: 'Productos' },
   ];
 
-  if (usuario?.rol === 'admin') {
+  if (esRol(usuario?.rol, 'admin')) {
     enlaces.push({ href: '/admin', label: 'Panel' });
+    // El POS `/ventas` es exclusivo del rol ventas: el admin usa su panel.
+    enlaces.push({ href: '/admin/ventas', label: 'Ventas' });
+    enlaces.push({ href: '/admin/rendimiento', label: 'Rendimiento' });
+  } else if (esRol(usuario?.rol, 'inventario')) {
+    enlaces.push({ href: '/admin/inventario', label: 'Inventario' });
+  } else if (esRol(usuario?.rol, 'ventas')) {
     enlaces.push({ href: '/ventas', label: 'Ventas' });
-  } else if (usuario?.rol === 'inventario') {
-    enlaces.push({ href: '/admin', label: 'Panel' });
-  } else if (usuario?.rol === 'ventas') {
-    enlaces.push({ href: '/ventas', label: 'Ventas' });
+    enlaces.push({ href: '/ventas/rendimiento', label: 'Rendimiento' });
   }
 
   const esRutaActiva = (href: string) =>
@@ -206,7 +212,7 @@ export default function Navbar() {
                         {usuario.nombre}
                       </span>
                       <span className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                        {usuario.rol}
+                        {etiquetaRol(usuario.rol)}
                       </span>
                     </span>
                   </Link>

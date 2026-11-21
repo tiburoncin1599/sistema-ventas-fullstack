@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cerrarSesion } from '@/lib/api';
+import { esRol, normalizarRol } from '@/lib/roles';
 import DarkModeToggle from '@/components/DarkModeToggle';
 import { LogOut, Store, ChevronLeft, Menu, X } from 'lucide-react';
 
@@ -28,7 +29,12 @@ export default function VentasLayout({
       if (typeof window !== 'undefined') {
         try {
           const u = localStorage.getItem('usuario');
-          setUsuario(u ? JSON.parse(u) : null);
+          if (!u) {
+            setUsuario(null);
+            return;
+          }
+          const datos = JSON.parse(u) as { nombre: string; rol: string };
+          setUsuario({ ...datos, rol: normalizarRol(datos.rol) });
         } catch { setUsuario(null); }
       }
     };
@@ -42,7 +48,7 @@ export default function VentasLayout({
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [seccionActual, setSeccionActual] = useState<string | null>(null);
 
-  const visibleSecciones = ventasSecciones.filter(s => usuario?.rol === s.rol);
+  const visibleSecciones = ventasSecciones.filter(s => esRol(usuario?.rol, s.rol));
 
   return (
     <div className="prolimal-page min-h-screen">

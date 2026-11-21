@@ -12,8 +12,8 @@ interface ItemInventario {
   id: number;
   producto_id: number;
   cantidad: number;
+  cantidad_minima: number;
   producto: { nombre: string; precio: number; categoria?: { nombre: string }; tamano?: string };
-  esBajo: boolean;
 }
 
 interface Deuda {
@@ -49,15 +49,16 @@ interface ModalState {
   observacion: string;
 }
 
-function getStockColor(cantidad: number) {
-  if (cantidad <= 10) return 'text-prolimal-red-600 dark:text-prolimal-red-300';
-  if (cantidad <= 20) return 'text-prolimal-orange-600 dark:text-prolimal-orange-300';
+/** El umbral es el `cantidad_minima` del producto; el nivel medio es su doble. */
+function getStockColor(cantidad: number, minimo: number) {
+  if (cantidad <= minimo) return 'text-prolimal-red-600 dark:text-prolimal-red-300';
+  if (cantidad <= minimo * 2) return 'text-prolimal-orange-600 dark:text-prolimal-orange-300';
   return 'text-prolimal-teal-700 dark:text-prolimal-teal-300';
 }
 
-function getStockLabel(cantidad: number) {
-  if (cantidad <= 10) return 'Stock bajo';
-  if (cantidad <= 20) return 'Stock medio';
+function getStockLabel(cantidad: number, minimo: number) {
+  if (cantidad <= minimo) return 'Stock bajo';
+  if (cantidad <= minimo * 2) return 'Stock medio';
   return 'Stock OK';
 }
 
@@ -99,9 +100,11 @@ export default function AdminInventario() {
     }
   }, []);
 
-  // Notificación automática: productos con <= 10 unidades
+  // Notificación automática: productos en o por debajo de su cantidad mínima.
   useEffect(() => {
-    setAlertasCount(inventario.filter(i => i.cantidad <= 10).length);
+    setAlertasCount(
+      inventario.filter((i) => i.cantidad <= i.cantidad_minima).length,
+    );
   }, [inventario]);
 
   // Contenido del grid de productos - SOLO botón Ajustar
@@ -131,7 +134,7 @@ export default function AdminInventario() {
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {inventario.map(item => {
-          const esBajo = item.cantidad <= 10;
+          const minimo = item.cantidad_minima;
           return (
             <motion.div
               key={item.id}
@@ -143,8 +146,8 @@ export default function AdminInventario() {
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-prolimal-teal-100 text-sm font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200">
                   {item.producto?.nombre?.charAt(0) || '-'}
                 </span>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${esBajo ? 'bg-prolimal-red-100 text-prolimal-red-700 dark:bg-prolimal-red-900/30 dark:text-prolimal-red-300' : 'bg-prolimal-teal-100 text-prolimal-teal-700 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-300'}`}>
-                  {item.cantidad > 0 ? item.cantidad : 'Sin stock'}
+                <span className={`rounded-full bg-prolimal-sand-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] dark:bg-prolimal-ink-800 ${getStockColor(item.cantidad, minimo)}`}>
+                  {getStockLabel(item.cantidad, minimo)}
                 </span>
               </div>
               <p className="truncate text-sm font-extrabold text-prolimal-innk-800 dark:text-prolimal-sand-50">
@@ -297,7 +300,7 @@ export default function AdminInventario() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-red-300/60 bg-prolimal-red-50 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
               <AlertTriangle className="h-3.5 w-3.5" />
-              {alertasCount} producto{alertasCount !== 1 ? ' con stock bajo' : ''} ({alertasCount} unidades o menos)
+              {alertasCount} producto{alertasCount !== 1 ? 's' : ''} con stock en o por debajo de su mínimo
             </span>
             <button
               onClick={notificarStockBajo}

@@ -3,15 +3,21 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, LessThanOrEqual, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Inventario } from './inventario.entity';
+import { InventarioMovimiento } from '../inventario-movimientos/inventario-movimiento.entity';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class InventarioService {
   constructor(
     @InjectRepository(Inventario)
     private inventarioRepo: Repository<Inventario>,
+    @InjectRepository(InventarioMovimiento)
+    private movimientosRepo: Repository<InventarioMovimiento>,
+    @InjectDataSource() private dataSource: DataSource,
+    private readonly auditService: AuditService,
   ) {}
 
   private repo(manager?: EntityManager) {
@@ -60,23 +66,115 @@ export class InventarioService {
     return item;
   }
 
+  /** Alertas según el umbral configurado por producto, no un literal 10. */
   async alertas() {
-    const items = await this.inventarioRepo.find({
-      where: { cantidad: LessThanOrEqual(10) },
-      relations: ['producto'],
-      order: { producto: { nombre: 'ASC', id: 'ASC' } },
-    });
+    const items = await this.inventarioRepo
+      .createQueryBuilder('inventario')
+      .leftJoinAndSelect('inventario.producto', 'producto')
+      .where('inventario.cantidad <= inventario.cantidad_minima')
+      .orderBy('producto.nombre', 'ASC')
+      .addOrderBy('producto.id', 'ASC')
+      .getMany();
     return this.ordenarPorNombre(items);
   }
 
-  async actualizar(productoId: number, cantidad: number) {
-    const item = await this.inventarioRepo.findOne({
-      where: { producto_id: productoId },
-    });
-    if (item) {
-      return this.inventarioRepo.update(item.id, { cantidad });
+  /**
+   * Todo cambio directo de cantidad es un AJUSTE: bloquea la fila, escribe el
+   * Kardex y la auditoría con el mismo EntityManager. Si falla cualquier paso,
+   * la transacción completa se revierte.
+   */
+  async actualizar(
+    productoId: number,
+    cantidad: number,
+    opciones?: {
+      manager?: EntityManager;
+      motivo?: string;
+      usuario_id?: number;
+      usuario_rol?: string;
+    },
+  ): Promise<InventarioMovimiento> {
+    if (opciones?.manager) {
+      return this.aplicarAjuste(opciones.manager, productoId, cantidad, opciones);
     }
-    return this.inventarioRepo.save(this.inventarioRepo.create({ producto_id: productoId, cantidad }));
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const movimiento = await this.aplicarAjuste(
+        queryRunner.manager,
+        productoId,
+        cantidad,
+        opciones ?? {},
+      );
+      await queryRunner.commitTransaction();
+      return movimiento;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  private async aplicarAjuste(
+    manager: EntityManager,
+    productoId: number,
+    cantidad: number,
+    opciones: {
+      motivo?: string;
+      usuario_id?: number;
+      usuario_rol?: string;
+    },
+  ): Promise<InventarioMovimiento> {
+    if (!Number.isInteger(cantidad) || cantidad < 0) {
+      throw new BadRequestException('La cantidad debe ser un entero >= 0');
+    }
+
+    const repo = manager.getRepository(Inventario);
+    let item = await repo
+      .createQueryBuilder('inventario')
+      .setLock('pessimistic_write')
+      .where('inventario.producto_id = :productoId', { productoId })
+      .getOne();
+
+    if (!item) {
+      item = await repo.save(
+        repo.create({ producto_id: productoId, cantidad: 0 }),
+      );
+    }
+
+    const cantidadAnterior = Number(item.cantidad);
+    await repo.update(item.id, { cantidad });
+
+    const movimiento = await manager.getRepository(InventarioMovimiento).save(
+      manager.create(InventarioMovimiento, {
+        producto_id: productoId,
+        tipo: 'AJUSTE',
+        // Diferencia con signo: el Kardex también guarda anterior/nueva.
+        cantidad: cantidad - cantidadAnterior,
+        cantidad_anterior: cantidadAnterior,
+        cantidad_nueva: cantidad,
+        motivo: opciones.motivo ?? 'Ajuste manual de inventario',
+        referencia_tipo: 'manual',
+        usuario_id: opciones.usuario_id ?? null,
+      }),
+    );
+
+    await this.auditService.registrarEnTransaccion(
+      {
+        accion: 'ajuste_inventario',
+        entidad: 'inventario',
+        entidad_id: productoId,
+        valor_anterior: { cantidad: cantidadAnterior },
+        valor_nuevo: { cantidad },
+        usuario_id: opciones.usuario_id,
+        usuario_rol: opciones.usuario_rol ?? 'inventario',
+      },
+      manager,
+    );
+
+    return movimiento;
   }
 
   async descontar(productoId: number, cantidad: number, manager?: EntityManager) {
@@ -146,35 +244,54 @@ export class InventarioService {
     return { cantidadAnterior, cantidadNueva };
   }
 
-  async devolver(productoId: number, cantidad: number, manager?: EntityManager) {
+  async devolver(
+    productoId: number,
+    cantidad: number,
+    manager?: EntityManager,
+  ): Promise<{ cantidadAnterior: number; cantidadNueva: number }> {
     const repo = this.repo(manager);
-    const result = await repo
-      .createQueryBuilder()
-      .update(Inventario)
-      .set({ cantidad: () => `cantidad + :cantidad` })
-      .where('producto_id = :productoId', { productoId })
-      .setParameters({ cantidad })
-      .execute();
-    if (result.affected === 0) {
+    const qb = repo
+      .createQueryBuilder('inventario')
+      .where('inventario.producto_id = :productoId', { productoId });
+    if (manager) qb.setLock('pessimistic_write');
+    const item = await qb.getOne();
+    if (!item) {
       throw new NotFoundException(
         'Inventario no encontrado para devolver stock',
       );
     }
-    return repo.findOne({ where: { producto_id: productoId } });
+
+    const cantidadAnterior = Number(item.cantidad);
+    const cantidadNueva = cantidadAnterior + cantidad;
+    await repo
+      .createQueryBuilder()
+      .update(Inventario)
+      .set({ cantidad: () => `cantidad + :cantidad` })
+      .where('producto_id = :productoId', { productoId })
+      .setParameters({ productoId, cantidad })
+      .execute();
+
+    return { cantidadAnterior, cantidadNueva };
   }
 
-  async incrementar(productoId: number, cantidad: number, manager?: EntityManager): Promise<number> {
+  async incrementar(
+    productoId: number,
+    cantidad: number,
+    manager?: EntityManager,
+  ): Promise<number> {
     const repo = this.repo(manager);
     const result = await repo
       .createQueryBuilder()
       .update(Inventario)
       .set({ cantidad: () => `cantidad + :cantidad` })
       .where('producto_id = :productoId', { productoId })
-      .setParameters({ cantidad })
+      .setParameters({ productoId, cantidad })
       .returning('cantidad')
       .execute();
     if (result.raw?.length) return Number(result.raw[0].cantidad);
-    await repo.save(repo.create({ producto_id: productoId, cantidad }));
-    return cantidad;
+    const creado = await repo.save(
+      repo.create({ producto_id: productoId, cantidad }),
+    );
+    return Number(creado.cantidad);
   }
 }

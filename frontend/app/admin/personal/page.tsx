@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { esRol, normalizarRol } from '@/lib/roles';
 import { formatCurrency } from '@/lib/utils';
 import GraficoBarras from '@/components/charts/GraficoBarras';
 import { aFechaISO, rangoSemana, rangoMes, listaDias } from '@/components/charts/chart-utils';
@@ -32,20 +33,25 @@ export default function RendimientoPersonalPage() {
   useEffect(() => {
     try {
       const u = JSON.parse(localStorage.getItem('usuario') || 'null');
-      setUsuario(u); // eslint-disable-line react-hooks/set-state-in-effect
-      if (u?.rol === 'ventas') {
-        setSeleccionado(String(u.id));
+      if (u) {
+        const datos = { ...u, rol: normalizarRol(u.rol) };
+        setUsuario(datos); // eslint-disable-line react-hooks/set-state-in-effect
+        if (esRol(datos.rol, 'ventas')) {
+          setSeleccionado(String(datos.id));
+        }
+      } else {
+        setUsuario(null); // eslint-disable-line react-hooks/set-state-in-effect
       }
     } catch {}
     api.get('/usuarios')
       .then((res) => {
-        const personal = ((res.data || []) as Vendedor[]).filter((u) => u.rol === 'ventas');
+        const personal = ((res.data || []) as Vendedor[]).filter((u) => esRol(u.rol, 'ventas'));
         setVendedores(personal);
       })
       .catch(() => {});
   }, []);
 
-  const esVendedor = usuario?.rol === 'ventas';
+  const esVendedor = esRol(usuario?.rol, 'ventas');
 
   const { desde, hasta, dias } = useMemo(() => {
     const r = periodo === 'semana' ? rangoSemana() : rangoMes();

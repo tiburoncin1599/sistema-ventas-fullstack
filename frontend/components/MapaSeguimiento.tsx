@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api } from '@/lib/api';
+import { esRol, normalizarRol } from '@/lib/roles';
 import { conectarSSE } from '@/lib/sse';
 
 const UMBRAL_INACTIVO_MS = 5 * 60 * 1000;
@@ -44,7 +45,9 @@ function obtenerUsuario(): { nombre: string; rol: string } | null {
   if (typeof window === 'undefined') return null;
   try {
     const u = localStorage.getItem('usuario');
-    return u ? JSON.parse(u) : null;
+    if (!u) return null;
+    const datos = JSON.parse(u) as { nombre: string; rol: string };
+    return { ...datos, rol: normalizarRol(datos.rol) };
   } catch {
     return null;
   }
@@ -223,7 +226,7 @@ export default function MapaSeguimiento() {
   }, [vendedores]);
 
   useEffect(() => {
-    if (!usuario || !['admin', 'inventario'].includes(usuario.rol)) {
+    if (!usuario || !esRol(usuario.rol, 'admin', 'inventario')) {
       return;
     }
 
@@ -270,7 +273,7 @@ export default function MapaSeguimiento() {
     return <p className="text-center py-20 text-prolimal-muted/80 dark:text-prolimal-muted/60">Cargando panel...</p>;
   }
 
-  if (!['admin', 'inventario'].includes(usuario.rol)) {
+  if (!esRol(usuario.rol, 'admin', 'inventario')) {
     return (
       <main className="max-w-6xl mx-auto px-8 py-20 text-center">
         <h1 className="text-3xl font-bold mb-4 dark:text-prolimal-light">Acceso restringido</h1>

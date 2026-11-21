@@ -539,7 +539,7 @@ describe('6. Estados de pedidos', () => {
 
     const pedidoRes = await authReq('post', '/pedidos', clienteToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: pId, cantidad: 1, precio: 10 }],
+      items: [{ producto_id: pId, cantidad: 1, precio: 10, tipo_presentacion: 'PAQUETE' }],
     });
     pedidoId = pedidoRes.body.id;
   }, 30_000);
@@ -621,7 +621,7 @@ describe('6b. Pedidos — edición controlada por estado', () => {
     const crearPedido = async () => {
       const res = await authReq('post', '/pedidos', clienteToken).send({
         usuarioId: clienteId,
-        items: [{ producto_id: pId, cantidad: 1, precio: 10 }],
+        items: [{ producto_id: pId, cantidad: 1, precio: 10, tipo_presentacion: 'PAQUETE' }],
       });
       expect(res.status).toBe(201);
       return res.body.id;
@@ -640,10 +640,13 @@ describe('6b. Pedidos — edición controlada por estado', () => {
   }, 30_000);
 
   it('pendiente → modificar cantidad de item (200, editable antes de confirmar)', async () => {
+    // La presentación y su mínimo los toma el detalle persistido (PAQUETE).
+    // El DTO no acepta `tipo_presentacion` y el token debe ser de staff:
+    // los clientes no editan ítems de pedidos ajenos.
     const res = await authReq(
       'put',
       `/pedidos/${pendienteId}/items/${itemId}`,
-      clienteToken,
+      adminToken,
     ).send({ cantidad: 2 });
     expect(res.status).toBe(200);
     expect(res.body.detalles[0].cantidad).toBe(2);
@@ -679,7 +682,7 @@ describe('6b. Pedidos — edición controlada por estado', () => {
       'post',
       `/pedidos/${pendienteId}/items`,
       adminToken,
-    ).send({ items: [{ producto_id: pendienteId, cantidad: 1, precio: 10 }] });
+    ).send({ items: [{ producto_id: pendienteId, cantidad: 1, precio: 10, tipo_presentacion: 'PAQUETE' }] });
     expect(res.status).toBe(400);
   });
 
@@ -717,7 +720,7 @@ describe('6c. Ventas por personal', () => {
     for (let i = 0; i < 2; i++) {
       const res = await authReq('post', '/pedidos', adminToken).send({
         usuarioId: clienteId,
-        items: [{ producto_id: pId, cantidad: 1, precio: 15 }],
+        items: [{ producto_id: pId, cantidad: 1, precio: 15, tipo_presentacion: 'PAQUETE' }],
       });
       expect(res.status).toBe(201);
     }
@@ -1210,7 +1213,7 @@ describe('11. Stock visible y limitación del cliente', () => {
   it('POST /pedidos cliente con stock=0 → 400', async () => {
     const res = await authReq('post', '/pedidos', clienteToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: prodSinStockId, cantidad: 1, precio: 30 }],
+      items: [{ producto_id: prodSinStockId, cantidad: 1, precio: 30, tipo_presentacion: 'PAQUETE' }],
     });
     expect(res.status).toBe(400);
   });
@@ -1240,7 +1243,7 @@ describe('12. Pedidos externos y asignación de vendedor', () => {
     // cliente crea pedido (queda sin vendedor asignado)
     const res = await authReq('post', '/pedidos', clienteToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: pId, cantidad: 1, precio: 20 }],
+      items: [{ producto_id: pId, cantidad: 1, precio: 20, tipo_presentacion: 'PAQUETE' }],
     });
     expect(res.status).toBe(201);
     pedidoClienteId = res.body.id;
@@ -1411,7 +1414,7 @@ describe('14. Ventas por vendedor, gráficas y acceso por URL', () => {
     // procesado_por = ventas2 (el usuario debe existir en la tabla usuarios)
     const pedidoV2 = await authReq('post', '/pedidos', adminToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: prodVId, cantidad: 2, precio: 40 }],
+      items: [{ producto_id: prodVId, cantidad: 2, precio: 40, tipo_presentacion: 'PAQUETE' }],
       procesadoPor: ventas2Id,
     });
     expect(pedidoV2.status).toBe(201);
@@ -1504,7 +1507,7 @@ describe('15. Tipo de pago CONTADO/CRÉDITO en el registro de ventas', () => {
   it('POST /pedidos (ventas) tipoPago=contado → queda registrado como pagado (entregado)', async () => {
     const res = await authReq('post', '/pedidos', ventasToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: prodPagoId, cantidad: 2, precio: 30 }],
+      items: [{ producto_id: prodPagoId, cantidad: 2, precio: 30, tipo_presentacion: 'PAQUETE' }],
       tipoPago: 'contado',
     });
     expect(res.status).toBe(201);
@@ -1515,7 +1518,7 @@ describe('15. Tipo de pago CONTADO/CRÉDITO en el registro de ventas', () => {
   it('POST /pedidos (ventas) tipoPago=credito → registra saldo pendiente en deudas', async () => {
     const res = await authReq('post', '/pedidos', ventasToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: prodPagoId, cantidad: 2, precio: 30 }],
+      items: [{ producto_id: prodPagoId, cantidad: 2, precio: 30, tipo_presentacion: 'PAQUETE' }],
       tipoPago: 'credito',
     });
     expect(res.status).toBe(201);
@@ -1537,7 +1540,7 @@ describe('15. Tipo de pago CONTADO/CRÉDITO en el registro de ventas', () => {
   it('POST /pedidos (ventas) sin tipoPago → estado pendiente (regresión)', async () => {
     const res = await authReq('post', '/pedidos', ventasToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: prodPagoId, cantidad: 1, precio: 30 }],
+      items: [{ producto_id: prodPagoId, cantidad: 1, precio: 30, tipo_presentacion: 'PAQUETE' }],
     });
     expect(res.status).toBe(201);
     expect(res.body.estado).toBe('pendiente');
@@ -1546,7 +1549,7 @@ describe('15. Tipo de pago CONTADO/CRÉDITO en el registro de ventas', () => {
   it('POST /pedidos (cliente) con tipoPago=contado → se ignora, queda pendiente', async () => {
     const res = await authReq('post', '/pedidos', clienteToken).send({
       usuarioId: clienteId,
-      items: [{ producto_id: prodPagoId, cantidad: 1, precio: 30 }],
+      items: [{ producto_id: prodPagoId, cantidad: 1, precio: 30, tipo_presentacion: 'PAQUETE' }],
       tipoPago: 'contado',
     });
     expect(res.status).toBe(201);

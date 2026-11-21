@@ -52,7 +52,7 @@ export class NotificacionesController {
     );
   }
 
-  /** Genera y registra la alerta de productos con stock <= 10. */
+  /** Genera y registra la alerta de productos por debajo de su mínimo configurado. */
   @Post('whatsapp/alerta-stock')
   @Roles('admin', 'inventario')
   async enviarAlertaStock(

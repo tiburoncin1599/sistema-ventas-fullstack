@@ -13,7 +13,7 @@ export class DashboardController {
 
   @Get()
   obtenerMetricas(@Req() req: Request) {
-    const user = req.user as { rol: string };
-    return this.dashboardService.obtenerMetricas(user.rol);
+    const user = req.user as { id: number; rol: string };
+    return this.dashboardService.obtenerMetricas(user.rol, user.id);
   }
 }

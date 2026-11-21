@@ -32,6 +32,7 @@ export interface HistorialPaginado {
 interface AlertaStock {
   nombre: string;
   cantidad: number;
+  cantidad_minima: number;
   faltante: number;
 }
 
@@ -57,20 +58,20 @@ export class WhatsappService {
     return `${simbolo} ${Number(valor || 0).toFixed(2)}`;
   }
 
-  /** Viñetas con los productos en alerta (cantidad <= 10). */
+  /** Viñetas con los productos por debajo de su mínimo configurado. */
   async generarMensajeStockBajo(): Promise<string> {
     const productos = (await this.notificacionesService.stockBajo()) as AlertaStock[];
 
     const viñetas = productos.length
       ? productos.map(
           (p) =>
-            `• ${p.nombre}: ${p.cantidad} uds. (faltan ${Math.max(Number(p.faltante), 0)})`,
+            `• ${p.nombre}: ${p.cantidad} uds. (mínimo ${Number(p.cantidad_minima)}, faltan ${Math.max(Number(p.faltante), 0)})`,
         )
       : ['• Sin productos en alerta en este momento.'];
 
     return [
       '⚠️ *ALERTA DE STOCK BAJO — PROLIMAC SRL*',
-      `Productos con 10 unidades o menos: ${productos.length}`,
+      `Productos por debajo de su mínimo configurado: ${productos.length}`,
       '',
       ...viñetas,
       '',

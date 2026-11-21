@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api, apiFetchBlob } from '@/lib/api';
+import { esRol, normalizarRol } from '@/lib/roles';
 import { formatCurrency } from '@/lib/utils';
 import GraficoLineasVentas, {
   type PuntoLinea,
@@ -13,6 +14,7 @@ import ToastNotificacion, {
   type ToastDatos,
 } from '@/components/ui/ToastNotificacion';
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -103,7 +105,7 @@ function rolActual(): string {
   try {
     const raw = localStorage.getItem('usuario');
     if (!raw) return '';
-    return (JSON.parse(raw) as { rol?: string }).rol ?? '';
+    return normalizarRol((JSON.parse(raw) as { rol?: unknown }).rol);
   } catch {
     return '';
   }
@@ -130,6 +132,7 @@ export default function AdminReportes() {
   });
 
   const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pagina, setPagina] = useState(1);
   const [copiado, setCopiado] = useState(false);
 
@@ -150,21 +153,38 @@ export default function AdminReportes() {
     setRol(rolActual());
   }, []);
 
-  useEffect(() => {
-    setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
-    setPagina(1);
+  const esAdmin = esRol(rol, 'admin');
 
+  /**
+   * Filtros compartidos por consultas y exportación. Se envían las claves
+   * canónicas y, además, los alias legacy `desde`/`hasta` porque el backend
+   * de exportación todavía puede leer cualquiera de las dos nomenclaturas.
+   */
+  const filtros = useMemo<Record<string, string | number>>(() => {
     const params: Record<string, string | number> = {};
-    if (fechaInicio) params.fechaInicio = fechaInicio;
-    if (fechaFin) params.fechaFin = fechaFin;
+    if (fechaInicio) {
+      params.fechaInicio = fechaInicio;
+      params.desde = fechaInicio;
+    }
+    if (fechaFin) {
+      params.fechaFin = fechaFin;
+      params.hasta = fechaFin;
+    }
     if (productoId) params.productoId = Number(productoId);
     // Un vendedor no puede enviar vendedorId: el backend fuerza el suyo.
-    if (vendedorId && rol === 'admin') params.vendedorId = Number(vendedorId);
+    if (vendedorId && esAdmin) params.vendedorId = Number(vendedorId);
+    return params;
+  }, [fechaInicio, fechaFin, productoId, vendedorId, esAdmin]);
+
+  useEffect(() => {
+    setCargando(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setError(null); // eslint-disable-line react-hooks/set-state-in-effect
+    setPagina(1);
 
     Promise.all([
-      api.get('/reportes/ventas-por-fecha', { params }),
-      api.get('/reportes/ganancias', { params }),
-      api.get('/reportes/top-productos', { params }),
+      api.get('/reportes/ventas-por-fecha', { params: filtros }),
+      api.get('/reportes/ganancias', { params: filtros }),
+      api.get('/reportes/top-productos', { params: filtros }),
     ])
       .then(([rv, rg, rt]) => {
         setVentas(comoArreglo<VentaDia>(rv.data));
@@ -175,12 +195,18 @@ export default function AdminReportes() {
           masRentables: comoArreglo<ProductoRanking>(respuestaTop?.masRentables),
         });
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setVentas([]);
         setGanancias(null);
+        setTop({ masVendidos: [], masRentables: [] });
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'No se pudieron cargar los reportes. Verificá la conexión con el servidor.',
+        );
       })
       .finally(() => setCargando(false));
-  }, [fechaInicio, fechaFin, productoId, vendedorId, rol]);
+  }, [filtros]);
 
   useEffect(() => {
     api
@@ -188,13 +214,13 @@ export default function AdminReportes() {
       .then((r) => setProductos(comoArreglo<Opcion>(r.data)))
       .catch(() => setProductos([]));
 
-    if (rol === 'admin') {
+    if (esAdmin) {
       api
         .get('/usuarios/vendedores')
         .then((r) => setVendedores(comoArreglo<Opcion>(r.data)))
         .catch(() => setVendedores([]));
     }
-  }, [rol]);
+  }, [esAdmin]);
 
   const serieLineas = useMemo<PuntoLinea[]>(
     () =>
@@ -269,10 +295,12 @@ export default function AdminReportes() {
   };
 
   const exportar = (tipo: string, nombre: string, conPDF = false) => {
-    const extra = `${fechaInicio ? `&desde=${fechaInicio}` : ''}${fechaFin ? `&hasta=${fechaFin}` : ''}`;
-    const url = conPDF
-      ? `/reportes/exportar/pdf?tipo=${tipo}${extra}`
-      : `/reportes/exportar/csv?tipo=${tipo}${extra}`;
+    const params = new URLSearchParams({ tipo });
+    Object.entries(filtros).forEach(([clave, valor]) => {
+      params.set(clave, String(valor));
+    });
+    const url = `/reportes/exportar/${conPDF ? 'pdf' : 'csv'}?${params.toString()}`;
+    setError(null);
     apiFetchBlob(url)
       .then((blob) => {
         const enlace = document.createElement('a');
@@ -283,7 +311,13 @@ export default function AdminReportes() {
         document.body.removeChild(enlace);
         URL.revokeObjectURL(enlace.href);
       })
-      .catch(() => alert('No se pudo descargar el archivo'));
+      .catch((err: unknown) => {
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'No se pudo descargar el archivo.',
+        );
+      });
   };
 
   const cargarHistorial = useCallback((paginaHistorial: number) => {
@@ -355,7 +389,7 @@ export default function AdminReportes() {
       detalle: `${totales.unidades} unidades vendidas`,
     },
     {
-      etiqueta: 'Utilidad neta estimada',
+      etiqueta: 'Utilidad bruta estimada',
       valor: formatCurrency(ganancias?.utilidad_bruta || 0),
       detalle: `Margen ${Number(ganancias?.margen_porcentual || 0).toFixed(2)}%`,
     },
@@ -367,7 +401,7 @@ export default function AdminReportes() {
     {
       etiqueta: 'Ticket promedio',
       valor: formatCurrency(ticketPromedio),
-      detalle: 'Por pedido concretado',
+      detalle: 'Por pedido concretado (no cancelado)',
     },
   ];
 
@@ -449,7 +483,7 @@ export default function AdminReportes() {
               ))}
             </select>
           </label>
-          {rol === 'admin' && (
+          {esAdmin && (
             <label className="block">
               <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                 Vendedor
@@ -482,9 +516,28 @@ export default function AdminReportes() {
         </div>
         <p className="mt-3 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
           Período activo: {rangoTexto}
-          {rol === 'ventas' && ' · Solo tus propias ventas'}
+          {esRol(rol, 'ventas') && ' · Solo tus propias ventas'}
         </p>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 rounded-2xl border border-prolimal-red-300/60 bg-prolimal-red-50 px-5 py-4 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-prolimal-red-600 dark:text-prolimal-red-300" />
+            <div>
+              <p className="text-sm font-extrabold text-prolimal-red-800 dark:text-prolimal-red-100">
+                No se pudo completar la operación
+              </p>
+              <p className="mt-1 text-sm font-medium text-prolimal-red-700/80 dark:text-prolimal-red-200/80">
+                {error}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {cargando ? (
         <div className="prolimal-surface px-6 py-20 text-center text-sm font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">

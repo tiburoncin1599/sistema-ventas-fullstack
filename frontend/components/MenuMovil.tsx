@@ -6,6 +6,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowRight,
+  BarChart3,
+  Boxes,
   Home,
   LayoutDashboard,
   LogOut,
@@ -17,6 +19,7 @@ import {
   User,
   X,
 } from 'lucide-react';
+import { etiquetaRol, normalizarRol } from '@/lib/roles';
 import { useDrawerAccesible } from '@/lib/useDrawerAccesible';
 
 interface EnlaceMenu {
@@ -43,7 +46,9 @@ function iconoEnlace(href: string) {
   if (href === '/') return Home;
   if (href === '/productos') return Package;
   if (href === '/admin') return LayoutDashboard;
-  if (href === '/ventas') return Store;
+  if (href === '/admin/inventario') return Boxes;
+  if (href === '/admin/ventas' || href === '/ventas') return Store;
+  if (href === '/admin/rendimiento' || href === '/ventas/rendimiento') return BarChart3;
   return ArrowRight;
 }
 
@@ -58,6 +63,7 @@ export default function MenuMovil({
 }: MenuMovilProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const rolNormalizado = normalizarRol(usuario?.rol);
   const panelRef = useRef<HTMLElement | null>(null);
   const [busqueda, setBusqueda] = useState('');
 
@@ -204,7 +210,7 @@ export default function MenuMovil({
                         {usuario.nombre}
                       </span>
                       <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                        {usuario.rol}
+                        {etiquetaRol(rolNormalizado)}
                       </span>
                     </span>
                     <ArrowRight className="h-4 w-4 shrink-0 text-prolimal-ink-400" />

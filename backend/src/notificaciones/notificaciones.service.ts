@@ -24,7 +24,7 @@ export class NotificacionesService {
     };
   }
 
-  /** Productos con existencia <= 10, reutilizado por el mensaje de WhatsApp. */
+  /** Productos por debajo de su mínimo configurado (Kardex/WhatsApp). */
   async stockBajo() {
     return this.dataSource.query(`
       SELECT
@@ -32,12 +32,12 @@ export class NotificacionesService {
         p.id AS producto_id,
         p.nombre,
         i.cantidad,
-        10 AS cantidad_minima,
-        (10 - i.cantidad) AS faltante,
+        i.cantidad_minima,
+        GREATEST(i.cantidad_minima - i.cantidad, 0) AS faltante,
         'stock_bajo' AS tipo
       FROM inventario i
       JOIN productos p ON p.id = i.producto_id
-      WHERE i.cantidad <= 10 AND p.activo = true
+      WHERE i.cantidad <= i.cantidad_minima AND p.activo = true
       ORDER BY i.cantidad ASC
       LIMIT 10
     `);
@@ -72,7 +72,7 @@ export class NotificacionesService {
         'deuda_pendiente' AS tipo
       FROM deudas d
       LEFT JOIN usuarios u ON u.id = d.usuario_id
-      WHERE d.estado = 'pendiente'
+      WHERE d.estado IN ('pendiente', 'parcial')
       ORDER BY d.fecha_creacion ASC
       LIMIT 10
     `);

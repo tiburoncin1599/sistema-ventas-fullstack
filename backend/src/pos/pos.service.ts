@@ -1,7 +1,23 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, Like } from 'typeorm';
-import { PedidosService } from '../pedidos/pedidos.service';
+import { DataSource } from 'typeorm';
+import { PedidosService, normalizarTipoPago } from '../pedidos/pedidos.service';
+import { factorConversion } from '../pedidos/conversion-paquetes';
+import type { TipoPresentacion } from '../pedidos/detalle-pedido.entity';
+import type { TipoPago } from '../pedidos/pedido.entity';
+
+interface ItemVenta {
+  producto_id: number;
+  cantidad: number;
+  tipo_presentacion: TipoPresentacion;
+}
+
+interface ProductoPos {
+  id: number;
+  nombre: string;
+  precio: string | number;
+  factor_paquete?: number | null;
+}
 
 @Injectable()
 export class POSService {
@@ -15,7 +31,8 @@ export class POSService {
 
     return this.dataSource.query(
       `
-      SELECT p.id, p.nombre, p.precio, p.codigo, i.cantidad AS stock
+      SELECT p.id, p.nombre, p.precio, p.codigo, p.factor_paquete,
+             i.cantidad AS stock
       FROM productos p
       LEFT JOIN inventario i ON i.producto_id = p.id
       WHERE p.activo = true
@@ -30,7 +47,8 @@ export class POSService {
   async obtenerProductoPorCodigo(codigo: string) {
     const productos = await this.dataSource.query(
       `
-      SELECT p.id, p.nombre, p.precio, p.codigo, i.cantidad AS stock
+      SELECT p.id, p.nombre, p.precio, p.codigo, p.factor_paquete,
+             i.cantidad AS stock
       FROM productos p
       LEFT JOIN inventario i ON i.producto_id = p.id
       WHERE p.activo = true AND p.codigo = $1
@@ -46,44 +64,72 @@ export class POSService {
     return productos[0];
   }
 
+  /** `metodoPago` es descriptivo; `tipoPago` define contabilidad y deuda. */
+  private resolverTipoPago(metodoPago: string, tipoPago?: string): TipoPago {
+    const canonico = normalizarTipoPago(tipoPago ?? metodoPago);
+    if (canonico) return canonico;
+    const texto = (tipoPago ?? metodoPago ?? '').toLowerCase();
+    return texto.includes('credit') || texto.includes('crédito')
+      ? 'CREDITO'
+      : 'CONTADO';
+  }
+
   async ventaRapida(params: {
     usuarioId: number;
-    items: Array<{ producto_id: number; cantidad: number }>;
+    items: ItemVenta[];
     metodoPago: string;
+    tipoPago?: string;
     montoRecibido?: number;
     procesadoPor?: number;
   }) {
-    // Fusionar items duplicados del mismo producto
-    const cantidades = new Map<number, number>();
+    // Se fusionan solo líneas idénticas: unidades y paquetes del mismo
+    // producto son líneas distintas porque consumen stock diferente.
+    const porClave = new Map<string, ItemVenta>();
     for (const item of params.items) {
-      cantidades.set(
-        item.producto_id,
-        (cantidades.get(item.producto_id) || 0) + item.cantidad,
-      );
+      const clave = `${item.producto_id}:${item.tipo_presentacion}`;
+      const existente = porClave.get(clave);
+      if (existente) {
+        existente.cantidad += item.cantidad;
+      } else {
+        porClave.set(clave, { ...item });
+      }
     }
-    const itemsUnicos = [...cantidades.entries()].map(([producto_id, cantidad]) => ({
-      producto_id,
-      cantidad,
-    }));
+    const itemsPos = [...porClave.values()];
 
-    const productos: any[] = await this.dataSource.query(
-      `SELECT id, nombre, precio FROM productos WHERE id = ANY($1) AND activo = true`,
-      [itemsUnicos.map((i) => i.producto_id)],
+    const idsUnicos = [...new Set(itemsPos.map((i) => i.producto_id))];
+    const productos: ProductoPos[] = await this.dataSource.query(
+      `SELECT id, nombre, precio, factor_paquete
+       FROM productos
+       WHERE id = ANY($1) AND activo = true`,
+      [idsUnicos],
     );
-
-    if (productos.length !== itemsUnicos.length) {
+    if (productos.length !== idsUnicos.length) {
       throw new BadRequestException('Uno o más productos no encontrados');
     }
+    const productosPorId = new Map(productos.map((p) => [p.id, p]));
 
-    const precioMap = new Map(productos.map((p) => [p.id, Number(p.precio)]));
+    const itemsConUnidades = itemsPos.map((item) => {
+      const producto = productosPorId.get(item.producto_id)!;
+      const factor =
+        item.tipo_presentacion === 'PAQUETE' ? factorConversion(producto) : 1;
+      return {
+        ...item,
+        precio: Number(producto.precio),
+        unidades: item.cantidad * factor,
+      };
+    });
 
-    const totalEstimado = itemsUnicos.reduce(
-      (sum, i) => sum + (precioMap.get(i.producto_id) || 0) * i.cantidad,
+    const totalEstimado = itemsConUnidades.reduce(
+      (sum, item) => sum + item.precio * item.unidades,
       0,
+    );
+    const tipoPago = this.resolverTipoPago(
+      params.metodoPago,
+      params.tipoPago,
     );
 
     if (
-      params.metodoPago === 'efectivo' &&
+      tipoPago === 'CONTADO' &&
       params.montoRecibido !== undefined &&
       params.montoRecibido < totalEstimado
     ) {
@@ -92,25 +138,27 @@ export class POSService {
       );
     }
 
-    const itemsPedido = itemsUnicos.map((item) => ({
-      producto_id: item.producto_id,
-      cantidad: item.cantidad,
-      precio: precioMap.get(item.producto_id) || 0,
-    }));
-
+    // `crear()` persiste el estado y la deuda de forma coherente: contado
+    // pagado → entregado; crédito/parcial → pedido pendiente con su deuda.
     const pedido = await this.pedidosService.crear(
       params.usuarioId,
       undefined,
-      itemsPedido,
+      itemsConUnidades.map((item) => ({
+        producto_id: item.producto_id,
+        cantidad: item.cantidad,
+        tipo_presentacion: item.tipo_presentacion,
+        precio: item.precio,
+      })),
       `Venta POS - ${params.metodoPago}`,
       params.procesadoPor,
+      tipoPago,
+      tipoPago === 'CREDITO'
+        ? (params.montoRecibido ?? 0)
+        : params.montoRecibido,
     );
 
-    await this.pedidosService.actualizarEstado(pedido.id, 'confirmado');
-    await this.pedidosService.actualizarEstado(pedido.id, 'entregado');
-
     const cambio =
-      params.metodoPago === 'efectivo' && params.montoRecibido
+      tipoPago === 'CONTADO' && params.montoRecibido !== undefined
         ? params.montoRecibido - Number(pedido.total)
         : 0;
 

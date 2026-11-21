@@ -11,9 +11,9 @@ import {
   Res,
   Req,
   ForbiddenException,
+  BadRequestException,
   HttpException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { PedidosService } from './pedidos.service';
 import { CrearPedidoDto } from './dto/crear-pedido.dto';
 import { ActualizarEstadoDto } from './dto/actualizar-estado.dto';
@@ -23,7 +23,7 @@ import { AsignarVendedorDto } from './dto/asignar-vendedor.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { ROLES } from '../auth/roles.constant';
+import { ROLES, normalizarRol } from '../auth/roles.constant';
 import { type AuditorPedido } from './pedidos.service';
 import { Response, Request } from 'express';
 import * as QRCode from 'qrcode';
@@ -37,7 +37,6 @@ export class PedidosController {
     private readonly pedidosService: PedidosService,
     private readonly configuracionService: ConfiguracionService,
     private readonly facturaService: FacturaService,
-    private readonly jwtService: JwtService,
     private readonly comprobantesService: ComprobantesService,
   ) {}
 
@@ -52,15 +51,32 @@ export class PedidosController {
     };
   }
 
+  /** Los handlers con `@Res()` deben traducir HttpException a su status real. */
+  private responderErrorPdf(res: Response, err: unknown, mensaje: string): void {
+    if (res.headersSent) return;
+    const http = err as HttpException;
+    if (typeof http.getStatus === 'function') {
+      const status = http.getStatus();
+      const body = typeof http.getResponse === 'function'
+        ? http.getResponse()
+        : { statusCode: status, message: http.message };
+      res.status(status).json(body);
+      return;
+    }
+    console.error(mensaje, (err as Error).message);
+    res.status(500).json({ statusCode: 500, message: mensaje });
+  }
+
   /** Cliente: solo sus pedidos. Vendedor: solo los pedidos que le fueron asignados. */
   private async verificarAcceso(pedidoId: number, user: { id: number; rol: string }) {
-    if (user.rol === 'ventas') {
+    const rol = normalizarRol(user.rol);
+    if (rol === ROLES.VENTAS) {
       const pedido = await this.pedidosService.findOne(pedidoId);
       if (pedido.procesado_por !== user.id) {
         throw new ForbiddenException('No tienes acceso a este pedido');
       }
     }
-    if (user.rol === 'cliente') {
+    if (rol === ROLES.CLIENTE) {
       const pedido = await this.pedidosService.findOne(pedidoId);
       if (pedido.usuario_id !== user.id) {
         throw new ForbiddenException('No tienes acceso a este pedido');
@@ -82,15 +98,14 @@ export class PedidosController {
     const p = Math.max(1, Number(page) || 1);
     const l = Math.min(100, Math.max(1, Number(limit) || 50));
     const user = req.user as { id: number; rol: string };
+    const esVendedor = normalizarRol(user.rol) === ROLES.VENTAS;
     // Un vendedor solo trabaja con sus pedidos asignados; no puede listar otros.
-    const procesadorId =
-      user.rol === 'ventas'
-        ? user.id
-        : vendedor
-          ? Number(vendedor)
-          : undefined;
-    const sinProcesador =
-      user.rol !== 'ventas' && sinVendedor === 'true';
+    const procesadorId = esVendedor
+      ? user.id
+      : vendedor
+        ? Number(vendedor)
+        : undefined;
+    const sinProcesador = !esVendedor && sinVendedor === 'true';
     return this.pedidosService.findAllFiltrado({
       estado,
       procesadorId,
@@ -101,17 +116,23 @@ export class PedidosController {
   }
 
   @Get('usuario/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async findByUsuario(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as { id: number; rol: string };
-    if (user.rol === 'cliente' && user.id !== +id) {
+    const usuarioId = +id;
+    const rol = normalizarRol(user.rol);
+    const personalConAcceso = rol === ROLES.ADMIN || rol === ROLES.INVENTARIO;
+    // Vendedor y cliente solo pueden consultar su propio identificador.
+    if (!personalConAcceso && user.id !== usuarioId) {
       throw new ForbiddenException('No tienes acceso a estos pedidos');
     }
-    return this.pedidosService.findByUsuario(+id);
+    return this.pedidosService.findByUsuario(usuarioId);
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async findOne(@Param('id') id: string, @Req() req: Request) {
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     const pedido = await this.pedidosService.findOne(+id);
@@ -120,41 +141,25 @@ export class PedidosController {
   }
 
   @Get(':id/factura')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async factura(@Param('id') id: string, @Req() req: Request) {
     await this.verificarAcceso(+id, req.user as { id: number; rol: string });
     return this.pedidosService.findFactura(+id);
   }
 
   @Get(':id/factura/pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async facturaPDF(
     @Param('id') id: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
     try {
-      const authHeader = req.headers.authorization;
-      const token = authHeader?.startsWith('Bearer ')
-        ? authHeader.slice(7)
-        : '';
-      if (!token) {
-        return res.status(401).json({
-          statusCode: 401,
-          message: 'Token de autenticación requerido',
-        });
-      }
-      let payload: { id: number; rol: string };
-      try {
-        payload = this.jwtService.verify<{ id: number; rol: string }>(token);
-        (req as unknown as { user: unknown }).user = payload;
-      } catch {
-        return res.status(401).json({
-          statusCode: 401,
-          message: 'Token inválido o expirado',
-        });
-      }
+      // La propiedad se valida antes de leer el pedido o su factura.
+      await this.verificarAcceso(+id, req.user as { id: number; rol: string });
       const data = await this.pedidosService.findFactura(+id);
-      await this.verificarAcceso(+id, payload);
       const configuracion = await this.configuracionService.obtener();
       const pdfBuffer = await this.facturaService.generarFacturaPDF({
         ...data,
@@ -165,45 +170,26 @@ export class PedidosController {
       res.setHeader('Content-Length', pdfBuffer.length.toString());
       res.end(pdfBuffer);
     } catch (err) {
-      console.error('Error generando factura PDF:', (err as Error).message);
-      if (!res.headersSent) {
-        res.status(500).json({
-          statusCode: 500,
-          message: 'Error al generar la factura PDF',
-          error: (err as Error).message,
-        });
-      }
+      this.responderErrorPdf(res, err, 'Error al generar la factura PDF');
     }
   }
 
   @Get(':id/factura/qr')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async facturaQR(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : '';
-    if (!token) {
-      return res.status(401).json({
-        statusCode: 401,
-        message: 'Token de autenticación requerido',
-      });
-    }
-    let payload: { id: number; rol: string };
     try {
-      payload = this.jwtService.verify<{ id: number; rol: string }>(token);
-    } catch {
-      return res.status(401).json({
-        statusCode: 401,
-        message: 'Token inválido o expirado',
-      });
+      await this.verificarAcceso(+id, req.user as { id: number; rol: string });
+      const baseUrl =
+        process.env.API_URL ||
+        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api`;
+      const pdfUrl = `${baseUrl}/pedidos/${id}/factura/pdf`;
+      const qr = await QRCode.toDataURL(pdfUrl);
+      res.setHeader('Content-Type', 'application/json');
+      res.json({ qr, pdf_url: pdfUrl, pedido_id: +id });
+    } catch (err) {
+      this.responderErrorPdf(res, err, 'Error al generar el QR de la factura');
     }
-    await this.verificarAcceso(+id, payload);
-    const baseUrl =
-      process.env.API_URL ||
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api`;
-    const pdfUrl = `${baseUrl}/pedidos/${id}/factura/pdf`;
-    const qr = await QRCode.toDataURL(pdfUrl);
-    return { qr, pdf_url: pdfUrl, pedido_id: id };
   }
 
   /**
@@ -241,15 +227,18 @@ export class PedidosController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async crear(@Body() body: CrearPedidoDto, @Req() req: Request) {
     const user = req.user as { id: number; rol: string };
-    const usuarioId = user.rol === 'cliente' ? user.id : body.usuarioId || user.id;
-    const procesadoPor = user.rol === 'cliente' ? undefined : body.procesadoPor || user.id;
+    const rol = normalizarRol(user.rol);
+    // El cliente nunca puede spoofear usuarioId/procesadoPor/tipoPago/montoPagado.
+    const usuarioId = rol === ROLES.CLIENTE ? user.id : body.usuarioId || user.id;
+    const procesadoPor = rol === ROLES.CLIENTE ? undefined : body.procesadoPor || user.id;
     // Se acepta la forma canónica `tipo_pago` y la legacy `tipoPago`.
     const tipoPago =
-      user.rol === 'cliente' ? undefined : (body.tipo_pago ?? body.tipoPago);
-    const montoPagado = user.rol === 'cliente' ? undefined : body.montoPagado;
+      rol === ROLES.CLIENTE ? undefined : (body.tipo_pago ?? body.tipoPago);
+    const montoPagado = rol === ROLES.CLIENTE ? undefined : body.montoPagado;
 
     const pedido = await this.pedidosService.crear(
       usuarioId,
@@ -268,6 +257,16 @@ export class PedidosController {
     };
   }
 
+  /** Parsea fechas de query y las rechaza explícitamente cuando no son válidas. */
+  private fechaQuery(valor: string | undefined, nombre: string): Date | undefined {
+    if (valor === undefined || valor === '') return undefined;
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) {
+      throw new BadRequestException(`${nombre} debe ser una fecha válida`);
+    }
+    return fecha;
+  }
+
   @Get('ventas/personal')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
@@ -278,13 +277,20 @@ export class PedidosController {
     @Query('hasta') hasta?: string,
   ) {
     const user = req.user as { id: number; rol: string };
+    const rol = normalizarRol(user.rol);
     // Un vendedor solo consulta su propio rendimiento, nunca el de otro.
-    const uid =
-      user.rol === 'ventas' ? String(user.id) : usuarioId;
+    const uid = rol === ROLES.VENTAS ? user.id : usuarioId;
+    let uidNumerico: number | undefined;
+    if (uid !== undefined && uid !== '') {
+      uidNumerico = typeof uid === 'number' ? uid : Number(uid);
+      if (!Number.isInteger(uidNumerico) || uidNumerico < 1) {
+        throw new BadRequestException('usuarioId debe ser un entero positivo');
+      }
+    }
     return this.pedidosService.ventasPersonal(
-      desde ? new Date(desde) : undefined,
-      hasta ? new Date(hasta) : undefined,
-      uid ? +uid : undefined,
+      this.fechaQuery(desde, 'desde'),
+      this.fechaQuery(hasta, 'hasta'),
+      uidNumerico,
     );
   }
 
@@ -330,7 +336,8 @@ export class PedidosController {
   }
 
   @Post(':id/items')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async agregarItems(
     @Param('id') id: string,
     @Body() body: AgregarItemsDto,
@@ -346,7 +353,8 @@ export class PedidosController {
   }
 
   @Delete(':id/items/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async eliminarItem(
     @Param('id') id: string,
     @Param('itemId') itemId: string,
@@ -361,7 +369,8 @@ export class PedidosController {
   }
 
   @Put(':id/items/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS)
   async actualizarItemCantidad(
     @Param('id') id: string,
     @Param('itemId') itemId: string,
