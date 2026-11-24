@@ -1,33 +1,145 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, MapPin, Phone, ShieldCheck, Sparkles, User } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 import { normalizarRol } from '@/lib/roles';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  email,
+  longitudMaxima,
+  longitudMinima,
+  mapearErroresBackend,
+  mensajeGeneral,
+  primero,
+  requerido,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
+
+type FormularioAuth = {
+  nombre: string;
+  email: string;
+  password: string;
+  telefono: string;
+  ubicacion: string;
+};
+
+const aliasErroresAuth: Partial<Record<string, keyof FormularioAuth | '_general'>> = {
+  'correo electrónico': 'email',
+  correo: 'email',
+  email: 'email',
+  contraseña: 'password',
+  password: 'password',
+  nombre: 'nombre',
+  'teléfono': 'telefono',
+  telefono: 'telefono',
+  'ubicación': 'ubicacion',
+  ubicacion: 'ubicacion',
+};
+
+const CORREO_DUPLICADO = /ya está registrado|already (registered|exists)/i;
 
 function AuthContent() {
   const [modo, setModo] = useState<'login' | 'registro'>('login');
-  const [form, setForm] = useState({ nombre: '', email: '', password: '' });
-  const [error, setError] = useState('');
+  const [form, setForm] = useState<FormularioAuth>({
+    nombre: '',
+    email: '',
+    password: '',
+    telefono: '',
+    ubicacion: '',
+  });
   const [cargando, setCargando] = useState(false);
   const [verPassword, setVerPassword] = useState(false);
   const params = useSearchParams();
 
+  const validar = useCallback(
+    (valores: FormularioAuth): ErroresFormulario<FormularioAuth> => {
+      const errores: ErroresFormulario<FormularioAuth> = {};
+
+      const mensajeEmail = primero(
+        requerido(valores.email, 'Ingresá tu correo electrónico'),
+        email(valores.email),
+      );
+      if (mensajeEmail) errores.email = mensajeEmail;
+
+      const mensajePassword = modo === 'registro'
+        ? primero(
+            requerido(valores.password, 'La contraseña es obligatoria'),
+            longitudMinima(valores.password, 6, 'La contraseña debe tener al menos 6 caracteres'),
+          )
+        : requerido(valores.password, 'Ingresá tu contraseña');
+      if (mensajePassword) errores.password = mensajePassword;
+
+      // En login el DTO no incluye estos campos: no deben generar errores ni bloquear el POST.
+      if (modo === 'registro') {
+        const mensajeNombre = requerido(valores.nombre, 'Ingresá tu nombre completo');
+        if (mensajeNombre) errores.nombre = mensajeNombre;
+
+        const mensajeTelefono = primero(
+          requerido(valores.telefono, 'Ingresá tu número de teléfono'),
+          valores.telefono.trim().replace(/\D/g, '').length < 7
+            ? 'Ingresá un teléfono válido (al menos 7 dígitos)'
+            : undefined,
+          longitudMaxima(valores.telefono, 255, 'El teléfono es demasiado largo'),
+        );
+        if (mensajeTelefono) errores.telefono = mensajeTelefono;
+
+        const mensajeUbicacion = primero(
+          requerido(valores.ubicacion, 'Ingresá tu ubicación para la entrega'),
+          longitudMinima(valores.ubicacion, 3, 'Ingresá una ubicación más precisa'),
+          longitudMaxima(valores.ubicacion, 255, 'La ubicación es demasiado larga'),
+        );
+        if (mensajeUbicacion) errores.ubicacion = mensajeUbicacion;
+      }
+
+      return errores;
+    },
+    [modo],
+  );
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    marcarTocado,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+    reiniciar,
+  } = useValidacionFormulario<FormularioAuth>(validar);
+
   useEffect(() => {
     const err = params.get('error');
-    if (err) setError(decodeURIComponent(err)); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [params]);
+    if (err) setErrorGeneral(decodeURIComponent(err)); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [params, setErrorGeneral]);
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const cambiarModo = (nuevoModo: 'login' | 'registro') => {
+    if (nuevoModo === modo) return;
+    setModo(nuevoModo);
+    reiniciar();
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    // Validación explícita: sin esto el POST se dispararía con campos vacíos.
+    if (!validarTodo(form)) return;
+
     setCargando(true);
-    setError('');
     try {
       const data = modo === 'login'
-        ? { email: form.email, password: form.password }
-        : form;
+        ? { email: form.email.trim(), password: form.password }
+        : {
+            nombre: form.nombre.trim(),
+            email: form.email.trim(),
+            password: form.password,
+            telefono: form.telefono.trim(),
+            ubicacion: form.ubicacion.trim(),
+          };
       const url = modo === 'login' ? '/auth/login' : '/auth/registro';
       const res = await api.post(url, data);
       const usuario = {
@@ -50,12 +162,33 @@ function AuthContent() {
               : '/';
       window.location.assign(destino);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Ocurrió un error';
-      setError(msg);
+      const mensajeBackend = mensajeGeneral(err, '');
+      const campos = ['nombre', 'email', 'password', 'telefono', 'ubicacion'] as const;
+      const mapeados = mapearErroresBackend<FormularioAuth>(err, [...campos], aliasErroresAuth);
+      aplicarErroresBackend(err, [...campos], aliasErroresAuth);
+
+      if (CORREO_DUPLICADO.test(mensajeBackend)) {
+        setErrorGeneral('Este correo electrónico ya está registrado. Ingresá con él o usá otro correo.');
+      } else if (!Object.keys(mapeados).some((campo) => campo !== '_general')) {
+        setErrorGeneral(
+          mensajeGeneral(
+            err,
+            modo === 'registro'
+              ? 'No se pudo completar el registro. Revisá tus datos.'
+              : 'No se pudo iniciar sesión. Revisá tus datos.',
+          ),
+        );
+      }
     } finally {
       setCargando(false);
     }
   };
+
+  const errorNombre = modo === 'registro' && (enviado || tocados.nombre) ? errores.nombre : undefined;
+  const errorTelefono = modo === 'registro' && (enviado || tocados.telefono) ? errores.telefono : undefined;
+  const errorUbicacion = modo === 'registro' && (enviado || tocados.ubicacion) ? errores.ubicacion : undefined;
+  const errorEmail = enviado || tocados.email ? errores.email : undefined;
+  const errorPassword = enviado || tocados.password ? errores.password : undefined;
 
   return (
     <main className="prolimal-page min-h-[calc(100vh-5.5rem)] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
@@ -129,7 +262,7 @@ function AuthContent() {
             <div className="mt-7 grid grid-cols-2 rounded-full border border-prolimal-ink-900/10 bg-prolimal-sand-50 p-1 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800">
               <button
                 type="button"
-                onClick={() => setModo('login')}
+                onClick={() => cambiarModo('login')}
                 className={`rounded-full py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
                   modo === 'login'
                     ? 'bg-prolimal-ink-900 text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
@@ -140,7 +273,7 @@ function AuthContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setModo('registro')}
+                onClick={() => cambiarModo('registro')}
                 className={`rounded-full py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
                   modo === 'registro'
                     ? 'bg-prolimal-ink-900 text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
@@ -151,73 +284,173 @@ function AuthContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+            <AvisoErrorFormulario mensaje={errorGeneral} />
+
+            <form noValidate onSubmit={handleSubmit} className="mt-7 space-y-4">
               {modo === 'registro' && (
-                <label className="block">
+                <div>
+                  <label className="block" htmlFor="auth-nombre">
+                    <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                      Nombre completo
+                    </span>
+                    <span className="relative block">
+                      <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
+                      <input
+                        id="auth-nombre"
+                        type="text"
+                        name="nombre"
+                        autoComplete="name"
+                        placeholder="Tu nombre"
+                        value={form.nombre}
+                        onChange={e => {
+                          const nuevo = { ...form, nombre: e.target.value };
+                          setForm(nuevo);
+                          validarCampo('nombre', nuevo);
+                        }}
+                        onBlur={() => marcarTocado('nombre')}
+                        className={claseCampo(Boolean(errorNombre), 'prolimal-input pl-11')}
+                        aria-invalid={Boolean(errorNombre)}
+                        aria-describedby={errorNombre ? 'auth-nombre-error' : undefined}
+                        required
+                      />
+                    </span>
+                  </label>
+                  <CampoError mensaje={errorNombre} id="auth-nombre-error" />
+                </div>
+              )}
+
+              {modo === 'registro' && (
+                <div>
+                  <label className="block" htmlFor="auth-telefono">
+                    <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                      Número de teléfono
+                    </span>
+                    <span className="relative block">
+                      <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
+                      <input
+                        id="auth-telefono"
+                        type="tel"
+                        name="telefono"
+                        autoComplete="tel"
+                        placeholder="Ej. 77012345"
+                        value={form.telefono}
+                        onChange={e => {
+                          const nuevo = { ...form, telefono: e.target.value };
+                          setForm(nuevo);
+                          validarCampo('telefono', nuevo);
+                        }}
+                        onBlur={() => marcarTocado('telefono')}
+                        className={claseCampo(Boolean(errorTelefono), 'prolimal-input pl-11')}
+                        aria-invalid={Boolean(errorTelefono)}
+                        aria-describedby={errorTelefono ? 'auth-telefono-error' : undefined}
+                        required
+                      />
+                    </span>
+                  </label>
+                  <CampoError mensaje={errorTelefono} id="auth-telefono-error" />
+                </div>
+              )}
+
+              {modo === 'registro' && (
+                <div>
+                  <label className="block" htmlFor="auth-ubicacion">
+                    <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                      Ubicación para la entrega
+                    </span>
+                    <span className="relative block">
+                      <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
+                      <input
+                        id="auth-ubicacion"
+                        type="text"
+                        name="ubicacion"
+                        autoComplete="street-address"
+                        placeholder="Barrio, calle y número"
+                        value={form.ubicacion}
+                        onChange={e => {
+                          const nuevo = { ...form, ubicacion: e.target.value };
+                          setForm(nuevo);
+                          validarCampo('ubicacion', nuevo);
+                        }}
+                        onBlur={() => marcarTocado('ubicacion')}
+                        className={claseCampo(Boolean(errorUbicacion), 'prolimal-input pl-11')}
+                        aria-invalid={Boolean(errorUbicacion)}
+                        aria-describedby={errorUbicacion ? 'auth-ubicacion-error' : undefined}
+                        required
+                      />
+                    </span>
+                  </label>
+                  <CampoError mensaje={errorUbicacion} id="auth-ubicacion-error" />
+                </div>
+              )}
+
+              <div>
+                <label className="block" htmlFor="auth-email">
                   <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                    Nombre completo
+                    Correo electrónico
                   </span>
                   <span className="relative block">
-                    <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
                     <input
-                      type="text"
-                      autoComplete="name"
-                      placeholder="Tu nombre"
-                      value={form.nombre}
-                      onChange={e => setForm({ ...form, nombre: e.target.value })}
-                      className="prolimal-input pl-11"
+                      id="auth-email"
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      placeholder="vos@correo.com"
+                      value={form.email}
+                      onChange={e => {
+                        const nuevo = { ...form, email: e.target.value };
+                        setForm(nuevo);
+                        validarCampo('email', nuevo);
+                      }}
+                      onBlur={() => marcarTocado('email')}
+                      className={claseCampo(Boolean(errorEmail), 'prolimal-input pl-11')}
+                      aria-invalid={Boolean(errorEmail)}
+                      aria-describedby={errorEmail ? 'auth-email-error' : undefined}
+                      required
                     />
                   </span>
                 </label>
-              )}
+                <CampoError mensaje={errorEmail} id="auth-email-error" />
+              </div>
 
-              <label className="block">
-                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                  Correo electrónico
-                </span>
-                <span className="relative block">
-                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
-                  <input
-                    type="email"
-                    autoComplete="email"
-                    placeholder="vos@correo.com"
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                    className="prolimal-input pl-11"
-                  />
-                </span>
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                  Contraseña
-                </span>
-                <span className="relative block">
-                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
-                  <input
-                    type={verPassword ? 'text' : 'password'}
-                    autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
-                    placeholder="Tu contraseña"
-                    value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                    className="prolimal-input pl-11 pr-12"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setVerPassword(!verPassword)}
-                    aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:hover:bg-prolimal-ink-700 dark:hover:text-prolimal-sand-100"
-                  >
-                    {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </span>
-              </label>
-
-              {error && (
-                <p className="rounded-2xl border border-prolimal-red-200 bg-prolimal-red-50 px-4 py-3 text-sm font-medium text-prolimal-red-700 dark:border-prolimal-red-800 dark:bg-prolimal-red-900/25 dark:text-prolimal-red-300">
-                  {error}
-                </p>
-              )}
+              <div>
+                <label className="block" htmlFor="auth-password">
+                  <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Contraseña
+                  </span>
+                  <span className="relative block">
+                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
+                    <input
+                      id="auth-password"
+                      type={verPassword ? 'text' : 'password'}
+                      name="password"
+                      autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
+                      placeholder="Tu contraseña"
+                      value={form.password}
+                      onChange={e => {
+                        const nuevo = { ...form, password: e.target.value };
+                        setForm(nuevo);
+                        validarCampo('password', nuevo);
+                      }}
+                      onBlur={() => marcarTocado('password')}
+                      className={claseCampo(Boolean(errorPassword), 'prolimal-input pl-11 pr-12')}
+                      aria-invalid={Boolean(errorPassword)}
+                      aria-describedby={errorPassword ? 'auth-password-error' : undefined}
+                      minLength={modo === 'registro' ? 6 : undefined}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVerPassword(!verPassword)}
+                      aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:hover:bg-prolimal-ink-700 dark:hover:text-prolimal-sand-100"
+                    >
+                      {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </span>
+                </label>
+                <CampoError mensaje={errorPassword} id="auth-password-error" />
+              </div>
 
               <button
                 type="submit"

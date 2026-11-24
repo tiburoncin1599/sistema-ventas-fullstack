@@ -1,6 +1,16 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  requerido,
+  email,
+  longitudMinima,
+  mensajeGeneral,
+  primero,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
 import { Plus, Search, X } from 'lucide-react';
 
 interface Usuario {
@@ -12,8 +22,30 @@ interface Usuario {
   creado_en: string;
 }
 
+type UsuarioForm = {
+  nombre: string;
+  email: string;
+  password: string;
+  rol: string;
+};
+
+const FORM_VACIO: UsuarioForm = { nombre: '', email: '', password: '', rol: 'inventario' };
+
 const ADMIN_EMAIL = 'aaas@gmail.com';
 const ROLES_SIN_ADMIN = ['ventas', 'inventario', 'cliente'];
+// Los mismos roles que acepta ActualizarUsuarioDto/CrearUsuarioDto en el backend.
+const ROLES_VALIDOS = ['admin', 'ventas', 'inventario', 'cliente'];
+const CORREO_DUPLICADO = /ya está registrado|already (registered|exists)/i;
+
+/** Deja sólo las claves con mensaje: `validarTodo` cuenta las claves, no los valores. */
+function erroresNoVacios<T extends object>(
+  pares: Array<[keyof T | '_general', string | undefined]>,
+): ErroresFormulario<T> {
+  return pares.reduce<ErroresFormulario<T>>((acc, [campo, mensaje]) => {
+    if (mensaje) acc[campo] = mensaje;
+    return acc;
+  }, {});
+}
 
 const rolColor = (rol: string) => {
   const colores: Record<string, string> = {
@@ -40,10 +72,67 @@ export default function AdminUsuariosPage() {
   const [cargando, setCargando] = useState(true);
   const [modalUsuario, setModalUsuario] = useState<Usuario | null>(null);
   const [creando, setCreando] = useState(false);
-  const [form, setForm] = useState({ nombre: '', email: '', password: '', rol: 'inventario' });
+  const [form, setForm] = useState<UsuarioForm>(FORM_VACIO);
+  // `error` es para fallos de carga/estado; los del formulario van por `errorGeneral`.
   const [error, setError] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [filtroRol, setFiltroRol] = useState('');
+
+  const validarUsuario = useCallback(
+    (valores: UsuarioForm): ErroresFormulario<UsuarioForm> => {
+      const pares: Array<[keyof UsuarioForm | '_general', string | undefined]> = [
+        ['nombre', requerido(valores.nombre, 'El nombre es obligatorio')],
+        ['rol', ROLES_VALIDOS.includes(valores.rol) ? undefined : 'Rol inválido'],
+      ];
+      if (creando) {
+        pares.push(
+          [
+            'email',
+            primero(
+              requerido(valores.email, 'El email es obligatorio'),
+              email(valores.email, 'Ingresá un correo electrónico válido'),
+            ),
+          ],
+          [
+            'password',
+            primero(
+              requerido(valores.password, 'La contraseña es obligatoria'),
+              longitudMinima(valores.password, 6, 'La contraseña debe tener al menos 6 caracteres'),
+            ),
+          ],
+        );
+      } else {
+        // En edición, vacío significa "no cambiar la contraseña".
+        pares.push([
+          'password',
+          longitudMinima(valores.password, 6, 'La contraseña debe tener al menos 6 caracteres'),
+        ]);
+      }
+      return erroresNoVacios<UsuarioForm>(pares);
+    },
+    [creando],
+  );
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+    reiniciar,
+  } = useValidacionFormulario<UsuarioForm>(validarUsuario);
+
+  const mensajeError = (campo: keyof UsuarioForm) =>
+    enviado || tocados[campo] ? errores[campo] : undefined;
+
+  const actualizarCampo = (campo: keyof UsuarioForm, valor: string) => {
+    const nuevo: UsuarioForm = { ...form, [campo]: valor };
+    setForm(nuevo);
+    validarCampo(campo, nuevo);
+  };
 
   const cargar = async () => {
     try {
@@ -56,23 +145,47 @@ export default function AdminUsuariosPage() {
   useEffect(() => { cargar(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
 
+  const cerrarModal = () => {
+    setCreando(false);
+    setModalUsuario(null);
+    setError('');
+    reiniciar();
+  };
+
   const abrirNuevo = () => {
     setCreando(true);
     setModalUsuario(null);
-    setForm({ nombre: '', email: '', password: '', rol: 'inventario' });
+    setForm({ ...FORM_VACIO });
     setError('');
+    reiniciar();
   };
 
   const crearUsuario = async () => {
+    if (!validarTodo(form)) return;
     setError('');
     try {
       await api.post('/usuarios', form);
-      setCreando(false);
-      setForm({ nombre: '', email: '', password: '', rol: 'inventario' });
+      cerrarModal();
       cargar();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al crear usuario';
-      setError(msg);
+      aplicarErroresBackend(
+        err,
+        ['nombre', 'email', 'password', 'rol', '_general'],
+        {
+          nombre: 'nombre',
+          email: 'email',
+          correo: 'email',
+          password: 'password',
+          contraseña: 'password',
+          rol: 'rol',
+        },
+        'No se pudo crear el usuario. Revisá los campos marcados.',
+      );
+      if (CORREO_DUPLICADO.test(mensajeGeneral(err, ''))) {
+        setErrorGeneral(
+          'Este correo electrónico ya está registrado. No se creó el usuario; usá otro correo.',
+        );
+      }
     }
   };
 
@@ -81,23 +194,34 @@ export default function AdminUsuariosPage() {
     setModalUsuario(u);
     setForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol });
     setError('');
+    reiniciar();
   };
 
   const actualizarUsuario = async () => {
     if (!modalUsuario) return;
+    if (!validarTodo(form)) return;
     setError('');
     try {
       const data: Record<string, unknown> = {};
       if (form.nombre) data.nombre = form.nombre;
       if (form.password) data.password = form.password;
       data.rol = form.rol;
+      // ActualizarUsuarioDto no acepta `email`: sólo se muestra en el encabezado.
       await api.put(`/usuarios/${modalUsuario.id}`, data);
-      setModalUsuario(null);
-      setForm({ nombre: '', email: '', password: '', rol: 'inventario' });
+      cerrarModal();
       cargar();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al actualizar usuario';
-      setError(msg);
+      aplicarErroresBackend(
+        err,
+        ['nombre', 'password', 'rol', '_general'],
+        {
+          nombre: 'nombre',
+          password: 'password',
+          contraseña: 'password',
+          rol: 'rol',
+        },
+        'No se pudo actualizar el usuario. Revisá los campos marcados.',
+      );
     }
   };
 
@@ -112,7 +236,7 @@ export default function AdminUsuariosPage() {
     if (!confirm('¿Eliminar este usuario definitivamente?')) return;
     try {
       await api.delete(`/usuarios/${id}`);
-      setModalUsuario(null);
+      cerrarModal();
       cargar();
     } catch { setError('Error al eliminar usuario'); }
   };
@@ -136,6 +260,11 @@ export default function AdminUsuariosPage() {
       u.email.toLowerCase().includes(qUsuarios) ||
       u.rol.toLowerCase().includes(qUsuarios)),
   );
+
+  const errorNombre = mensajeError('nombre');
+  const errorEmail = mensajeError('email');
+  const errorPassword = mensajeError('password');
+  const errorRol = mensajeError('rol');
 
   return (
     <div className="pb-10">
@@ -164,6 +293,8 @@ export default function AdminUsuariosPage() {
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
             <input
               type="text"
+              name="busqueda-usuarios"
+              autoComplete="off"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Nombre, email o rol"
@@ -239,7 +370,7 @@ export default function AdminUsuariosPage() {
       )}
 
       {creando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setCreando(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={cerrarModal}>
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
             onClick={e => e.stopPropagation()}
@@ -249,27 +380,48 @@ export default function AdminUsuariosPage() {
                 <p className="prolimal-eyebrow">Nuevo registro</p>
                 <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Nuevo usuario</h2>
               </div>
-              <button onClick={() => setCreando(false)} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
+              <button onClick={cerrarModal} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
                 <X className="h-4 w-4" />
               </button>
             </div>
+            <AvisoErrorFormulario mensaje={errorGeneral} />
             <div className="space-y-3">
-              <input type="text" placeholder="Nombre" value={form.nombre}
-                onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="prolimal-input" required />
-              <input type="email" placeholder="Email" value={form.email}
-                onChange={e => setForm({ ...form, email: e.target.value })}
-                className="prolimal-input" required />
-              <input type="password" placeholder="Contraseña" value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                className="prolimal-input" required />
-              <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}
-                className="prolimal-input">
-                {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              <div>
+                <input id="nombre-usuario-nuevo" type="text" name="nombre" autoComplete="off" placeholder="Nombre" value={form.nombre}
+                  onChange={e => actualizarCampo('nombre', e.target.value)}
+                  className={claseCampo(Boolean(errorNombre), 'prolimal-input')}
+                  aria-invalid={Boolean(errorNombre)}
+                  aria-describedby={errorNombre ? 'error-nombre-usuario-nuevo' : undefined} />
+                <CampoError id="error-nombre-usuario-nuevo" mensaje={errorNombre} />
+              </div>
+              <div>
+                <input id="email-usuario-nuevo" type="email" name="email" autoComplete="username" placeholder="Email" value={form.email}
+                  onChange={e => actualizarCampo('email', e.target.value)}
+                  className={claseCampo(Boolean(errorEmail), 'prolimal-input')}
+                  aria-invalid={Boolean(errorEmail)}
+                  aria-describedby={errorEmail ? 'error-email-usuario-nuevo' : undefined} />
+                <CampoError id="error-email-usuario-nuevo" mensaje={errorEmail} />
+              </div>
+              <div>
+                <input id="password-usuario-nuevo" type="password" name="password" autoComplete="new-password" placeholder="Contraseña" value={form.password}
+                  onChange={e => actualizarCampo('password', e.target.value)}
+                  className={claseCampo(Boolean(errorPassword), 'prolimal-input')}
+                  aria-invalid={Boolean(errorPassword)}
+                  aria-describedby={errorPassword ? 'error-password-usuario-nuevo' : undefined} />
+                <CampoError id="error-password-usuario-nuevo" mensaje={errorPassword} />
+              </div>
+              <div>
+                <select id="rol-usuario-nuevo" value={form.rol} onChange={e => actualizarCampo('rol', e.target.value)}
+                  className={claseCampo(Boolean(errorRol), 'prolimal-input')}
+                  aria-invalid={Boolean(errorRol)}
+                  aria-describedby={errorRol ? 'error-rol-usuario-nuevo' : undefined}>
+                  {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <CampoError id="error-rol-usuario-nuevo" mensaje={errorRol} />
+              </div>
             </div>
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
-              <button onClick={() => setCreando(false)} className="prolimal-btn-secondary sm:w-auto">
+              <button onClick={cerrarModal} className="prolimal-btn-secondary sm:w-auto">
                 Cancelar
               </button>
               <button onClick={crearUsuario} className="prolimal-btn-primary flex-1">
@@ -281,7 +433,7 @@ export default function AdminUsuariosPage() {
       )}
 
       {modalUsuario && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setModalUsuario(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={cerrarModal}>
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
             onClick={e => e.stopPropagation()}
@@ -296,31 +448,48 @@ export default function AdminUsuariosPage() {
                   <p className="truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{modalUsuario.email}</p>
                 </div>
               </div>
-              <button onClick={() => setModalUsuario(null)} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
+              <button onClick={cerrarModal} aria-label="Cerrar" className="prolimal-icon-btn h-9 w-9">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
+            <AvisoErrorFormulario mensaje={errorGeneral} />
+
             <div className="space-y-3">
-              <input type="text" placeholder="Nombre" value={form.nombre}
-                onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="prolimal-input" />
-              <input type="password" placeholder="Nueva contraseña (dejar vacío para no cambiar)" value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                className="prolimal-input" />
+              <div>
+                <input id="nombre-usuario-editar" type="text" name="nombre" autoComplete="off" placeholder="Nombre" value={form.nombre}
+                  onChange={e => actualizarCampo('nombre', e.target.value)}
+                  className={claseCampo(Boolean(errorNombre), 'prolimal-input')}
+                  aria-invalid={Boolean(errorNombre)}
+                  aria-describedby={errorNombre ? 'error-nombre-usuario-editar' : undefined} />
+                <CampoError id="error-nombre-usuario-editar" mensaje={errorNombre} />
+              </div>
+              <div>
+                <input id="password-usuario-editar" type="password" name="nueva-password" autoComplete="new-password" placeholder="Nueva contraseña (dejar vacío para no cambiar)" value={form.password}
+                  onChange={e => actualizarCampo('password', e.target.value)}
+                  className={claseCampo(Boolean(errorPassword), 'prolimal-input')}
+                  aria-invalid={Boolean(errorPassword)}
+                  aria-describedby={errorPassword ? 'error-password-usuario-editar' : undefined} />
+                <CampoError id="error-password-usuario-editar" mensaje={errorPassword} />
+              </div>
               {modalUsuario.email === ADMIN_EMAIL ? (
                 <input value="admin" disabled
                   className="prolimal-input cursor-not-allowed opacity-70" />
               ) : (
-                <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}
-                  className="prolimal-input">
-                  {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <div>
+                  <select id="rol-usuario-editar" value={form.rol} onChange={e => actualizarCampo('rol', e.target.value)}
+                    className={claseCampo(Boolean(errorRol), 'prolimal-input')}
+                    aria-invalid={Boolean(errorRol)}
+                    aria-describedby={errorRol ? 'error-rol-usuario-editar' : undefined}>
+                    {ROLES_SIN_ADMIN.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <CampoError id="error-rol-usuario-editar" mensaje={errorRol} />
+                </div>
               )}
             </div>
             <div className="mt-6 flex flex-col gap-3">
               <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                <button onClick={() => setModalUsuario(null)} className="prolimal-btn-secondary sm:w-auto">
+                <button onClick={cerrarModal} className="prolimal-btn-secondary sm:w-auto">
                   Cancelar
                 </button>
                 <button onClick={actualizarUsuario} className="prolimal-btn-primary flex-1">
@@ -329,7 +498,7 @@ export default function AdminUsuariosPage() {
               </div>
               {modalUsuario.email !== ADMIN_EMAIL && (
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <button onClick={() => { toggleActivo(modalUsuario); setModalUsuario(null); }}
+                  <button onClick={() => { toggleActivo(modalUsuario); cerrarModal(); }}
                     className={`flex-1 ${modalUsuario.activo ? 'prolimal-btn-ghost-danger' : 'prolimal-btn-secondary'}`}>
                     {modalUsuario.activo ? 'Desactivar' : 'Activar'}
                   </button>

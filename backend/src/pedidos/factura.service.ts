@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { existsSync } from 'fs';
-import { instalarMarcaAgua } from '../common/pdf-watermark';
+import { instalarMarcaAgua, rutaLogoLocal } from '../common/pdf-watermark';
 import { desglosarMontos } from '../common/impuesto';
 
 @Injectable()
@@ -20,7 +20,7 @@ export class FacturaService {
         const cfg = data.configuracion || {};
         const moneda = 'Bs';
         const impuestoPct = Number(cfg.impuesto_porcentaje) || 0;
-        const empresa = cfg.nombre_empresa || 'SISTEMA DE VENTAS';
+        const empresa = cfg.nombre_empresa || 'PROLIMAC SRL';
         const nit = cfg.nit || '';
 
         const bold = (text: string, opts: any = {}) =>
@@ -31,20 +31,26 @@ export class FacturaService {
         const green = '#005a24';
         const gray = '#666';
 
-        // Marca de agua en todas las páginas, detrás del contenido.
-        instalarMarcaAgua(doc, { textoRespaldo: empresa });
+        // Marca de agua en todas las páginas, detrás del contenido. El texto
+        // de respaldo es siempre la marca PROLIMAC, aunque la configuración
+        // tenga otro nombre comercial.
+        instalarMarcaAgua(doc, { textoRespaldo: 'PROLIMAC SRL' });
 
-        // Logo
-        if (cfg.logo_url && existsSync(cfg.logo_url)) {
+        // Logo: primero el configurado (si es un archivo válido) y después
+        // el resolver local/Docker, igual que la marca de agua.
+        const logoRuta =
+          (cfg.logo_url && existsSync(cfg.logo_url) ? cfg.logo_url : null) ??
+          rutaLogoLocal();
+        if (logoRuta) {
           try {
-            doc.image(cfg.logo_url, 40, 40, { width: 60, height: 60 });
+            doc.image(logoRuta, 40, 40, { width: 60, height: 60 });
           } catch {}
         }
 
         // Header - empresa info
-        const headerX = cfg.logo_url && existsSync(cfg.logo_url) ? 115 : 40;
+        const headerX = logoRuta ? 115 : 40;
         doc.fontSize(18).font('Helvetica-Bold').fillColor(green);
-        if (cfg.logo_url && existsSync(cfg.logo_url)) {
+        if (logoRuta) {
           doc.text(empresa, headerX, 45);
         } else {
           doc.text(empresa, headerX, 45, { align: 'center' });
@@ -85,16 +91,19 @@ export class FacturaService {
         doc.fillColor(green).fontSize(12).font('Helvetica-Bold');
         doc.text('DATOS DEL CLIENTE');
         doc.moveDown(0.5);
-        const cli = data.pedido.usuario;
+        const cli = data.pedido.usuario as
+          | { nombre?: string | null; carnet?: string | null; email?: string | null; telefono?: string | null; ubicacion?: string | null }
+          | null
+          | undefined;
         doc.fillColor('#333');
-        if (cli) {
-          normal(`Nombre: ${cli.nombre || ''}`);
-          if (cli.carnet) normal(`Carnet / CI: ${cli.carnet}`);
-          if (cli.email) normal(`Email: ${cli.email}`);
-          if (cli.ubicacion) normal(`Ubicación: ${cli.ubicacion}`);
-          if (data.pedido.direccion_entrega)
-            normal(`Dirección de entrega: ${data.pedido.direccion_entrega}`);
-        }
+        normal(`Nombre: ${cli?.nombre || `Cliente #${data.pedido.usuario_id}`}`);
+        if (cli?.carnet) normal(`Carnet / CI: ${cli.carnet}`);
+        if (cli?.telefono) normal(`Teléfono: ${cli.telefono}`);
+        if (cli?.email) normal(`Email: ${cli.email}`);
+        if (cli?.ubicacion) normal(`Ubicación: ${cli.ubicacion}`);
+        if (data.pedido.direccion_entrega)
+          normal(`Dirección de entrega: ${data.pedido.direccion_entrega}`);
+        if (data.pedido.notas) normal(`Notas: ${data.pedido.notas}`);
         doc.moveDown(0.5);
 
         // Personal que lo atendió

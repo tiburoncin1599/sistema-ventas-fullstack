@@ -2,6 +2,18 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  email,
+  longitudMaxima,
+  longitudMinima,
+  mensajeGeneral,
+  numero,
+  primero,
+  requerido,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
 import { MapPin, Phone, Plus, Search, X } from 'lucide-react';
 
 const MapaCliente = dynamic(() => import('@/components/MapaCliente'), {
@@ -43,6 +55,126 @@ interface PuntoGps {
   precision: number | null;
 }
 
+interface FormVisita {
+  nombre: string;
+  email: string;
+  telefono: string;
+  ubicacion: string;
+  latitud: number | null;
+  longitud: number | null;
+  diasVisita: string[];
+}
+
+const FORM_INICIAL: FormVisita = {
+  nombre: '',
+  email: '',
+  telefono: '',
+  ubicacion: '',
+  latitud: null,
+  longitud: null,
+  diasVisita: [],
+};
+
+const CAMPOS_VISITA: Array<keyof FormVisita | '_general'> = [
+  'nombre',
+  'email',
+  'telefono',
+  'ubicacion',
+  'latitud',
+  'longitud',
+  'diasVisita',
+  '_general',
+];
+const ALIAS_VISITA = {
+  nombrecliente: 'nombre',
+  'nombre cliente': 'nombre',
+  nombre: 'nombre',
+  'correo electrónico': 'email',
+  correo: 'email',
+  email: 'email',
+  telefono: 'telefono',
+  'teléfono': 'telefono',
+  ubicacion: 'ubicacion',
+  'ubicación': 'ubicacion',
+  latitud: 'latitud',
+  longitud: 'longitud',
+  diasvisita: 'diasVisita',
+  'días de visita': 'diasVisita',
+  dias: 'diasVisita',
+} as const;
+
+const CORREO_DUPLICADO = /ya está registrado|already (registered|exists)/i;
+
+/** Espejo de `CrearClienteVisitaDto` + nombre requerido del `CrearClienteDto`. */
+function validarVisita(form: FormVisita): ErroresFormulario<FormVisita> {
+  const errores: ErroresFormulario<FormVisita> = {};
+
+  const nombre = primero(
+    requerido(form.nombre, 'Ingresá el nombre del cliente'),
+    longitudMinima(form.nombre, 2, 'El nombre debe tener al menos 2 caracteres'),
+    longitudMaxima(form.nombre, 150, 'El nombre no puede superar los 150 caracteres'),
+  );
+  if (nombre) errores.nombre = nombre;
+
+  const correo = primero(
+    requerido(form.email, 'El correo electrónico es obligatorio'),
+    email(form.email, 'Ingresá un correo electrónico válido'),
+    longitudMaxima(form.email, 150, 'El correo es demasiado largo'),
+  );
+  if (correo) errores.email = correo;
+
+  const telefono = primero(
+    requerido(form.telefono, 'El teléfono es obligatorio'),
+    form.telefono.trim().replace(/\D/g, '').length < 7
+      ? 'Ingresá un teléfono válido (al menos 7 dígitos)'
+      : undefined,
+    longitudMaxima(form.telefono, 255, 'El teléfono es demasiado largo'),
+  );
+  if (telefono) errores.telefono = telefono;
+
+  const ubicacion = primero(
+    requerido(form.ubicacion, 'La ubicación es obligatoria'),
+    longitudMinima(form.ubicacion, 3, 'Ingresá una ubicación más precisa'),
+    longitudMaxima(form.ubicacion, 255, 'La ubicación es demasiado larga'),
+  );
+  if (ubicacion) errores.ubicacion = ubicacion;
+
+  const latitud = primero(
+    requerido(form.latitud ?? '', 'Seleccioná la ubicación en el mapa'),
+    numero(form.latitud ?? '', 'Ingresá una latitud válida'),
+    form.latitud !== null && Number(form.latitud) < -90
+      ? 'La latitud debe estar entre -90 y 90'
+      : undefined,
+    form.latitud !== null && Number(form.latitud) > 90
+      ? 'La latitud debe estar entre -90 y 90'
+      : undefined,
+  );
+  if (latitud) errores.latitud = latitud;
+
+  const longitud = primero(
+    requerido(form.longitud ?? '', 'Seleccioná la ubicación en el mapa'),
+    numero(form.longitud ?? '', 'Ingresá una longitud válida'),
+    form.longitud !== null && Number(form.longitud) < -180
+      ? 'La longitud debe estar entre -180 y 180'
+      : undefined,
+    form.longitud !== null && Number(form.longitud) > 180
+      ? 'La longitud debe estar entre -180 y 180'
+      : undefined,
+  );
+  if (longitud) errores.longitud = longitud;
+
+  const diasVisita = primero(
+    form.diasVisita.length < 1 ? 'Seleccioná al menos un día de visita' : undefined,
+    form.diasVisita.length > 7 ? 'Seleccioná como máximo 7 días de visita' : undefined,
+    form.diasVisita.some((dia) => !DIAS.some((opcion) => opcion.valor === dia))
+      ? 'Seleccioná días de visita válidos'
+      : undefined,
+  );
+  if (diasVisita) errores.diasVisita = diasVisita;
+
+  return errores;
+}
+
 export default function VentasClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -51,11 +183,27 @@ export default function VentasClientesPage() {
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [clienteExistente, setClienteExistente] = useState<Cliente | null>(null);
-  const [form, setForm] = useState({ nombre: '', telefono: '', ubicacion: '' });
-  const [diasVisita, setDiasVisita] = useState<string[]>([]);
+  const [form, setForm] = useState<FormVisita>(FORM_INICIAL);
   const [pedidoId, setPedidoId] = useState('');
   const [gps, setGps] = useState<PuntoGps | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    marcarTocado,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+    reiniciar,
+  } = useValidacionFormulario<FormVisita>(validarVisita);
+
+  const errorDe = (campo: keyof FormVisita) =>
+    enviado || tocados[campo] ? errores[campo] : undefined;
+  const errorGps = errorDe('latitud') || errorDe('longitud');
 
   const cargar = async () => {
     try {
@@ -78,69 +226,102 @@ export default function VentasClientesPage() {
   }, []);
 
   const abrirNuevo = () => {
+    reiniciar();
     setClienteExistente(null);
-    setForm({ nombre: '', telefono: '', ubicacion: '' });
-    resetearGps();
-    setDiasVisita([]);
+    setForm(FORM_INICIAL);
+    setGps(null);
     setPedidoId('');
     setModalAbierto(true);
   };
 
   const abrirAsignarGps = (c: Cliente) => {
+    reiniciar();
     setClienteExistente(c);
     setForm({
+      ...FORM_INICIAL,
       nombre: c.nombre,
+      email: c.email || '',
       telefono: c.telefono || '',
       ubicacion: c.ubicacion || '',
     });
-    resetearGps();
-    setDiasVisita([]);
+    setGps(null);
     setPedidoId('');
     setModalAbierto(true);
   };
 
-  const resetearGps = () => {
-    setGps(null);
+  const cerrarModal = () => {
+    reiniciar();
+    setModalAbierto(false);
   };
 
   const toggleDia = (dia: string) => {
-    setDiasVisita(prev =>
-      prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia],
-    );
+    const nuevo = {
+      ...form,
+      diasVisita: form.diasVisita.includes(dia)
+        ? form.diasVisita.filter(d => d !== dia)
+        : [...form.diasVisita, dia],
+    };
+    setForm(nuevo);
+    validarCampo('diasVisita', nuevo);
+  };
+
+  const cambiarGps = (punto: PuntoGps | null) => {
+    setGps(punto);
+    const nuevo = {
+      ...form,
+      latitud: punto?.latitud ?? null,
+      longitud: punto?.longitud ?? null,
+    };
+    setForm(nuevo);
+    validarCampo('latitud', nuevo);
+    validarCampo('longitud', nuevo);
   };
 
   const guardar = async () => {
-    if (!form.nombre.trim()) return alert('Ingresá el nombre del cliente.');
-    if (diasVisita.length === 0) return alert('Seleccioná al menos un día de visita.');
-    if (!gps) return alert('Ubicá al cliente en el mapa o usá tu ubicación actual antes de guardar.');
+    const formActual = {
+      ...form,
+      latitud: gps?.latitud ?? form.latitud,
+      longitud: gps?.longitud ?? form.longitud,
+    };
+    if (!validarTodo(formActual)) return;
 
     setGuardando(true);
     try {
       let clienteId = clienteExistente?.id;
+      const datosCliente = {
+        nombre: form.nombre.trim(),
+        email: form.email.trim().toLowerCase(),
+        telefono: form.telefono.trim(),
+        ubicacion: form.ubicacion.trim(),
+      };
       if (!clienteId) {
-        const res = await api.post('/clientes', form);
+        const res = await api.post('/clientes', datosCliente);
         clienteId = res.data?.id;
       } else {
-        await api.put(`/clientes/${clienteId}`, form);
+        await api.put(`/clientes/${clienteId}`, datosCliente);
       }
 
       await api.post('/ubicaciones/clientes-visitas', {
         nombreCliente: form.nombre.trim(),
-        latitud: gps.latitud,
-        longitud: gps.longitud,
-        accuracy: gps.precision ?? undefined,
+        latitud: Number(formActual.latitud),
+        longitud: Number(formActual.longitud),
+        accuracy: gps?.precision ?? undefined,
         clienteId: clienteId ?? undefined,
         pedidoId: pedidoId ? Number(pedidoId) : undefined,
-        diasVisita,
+        diasVisita: form.diasVisita,
       });
 
-      setModalAbierto(false);
+      cerrarModal();
       await cargar();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message || 'Error al guardar.';
-      alert(msg);
+      aplicarErroresBackend(err, CAMPOS_VISITA, ALIAS_VISITA);
+      if (CORREO_DUPLICADO.test(mensajeGeneral(err, ''))) {
+        setErrorGeneral(
+          'Este correo electrónico ya está registrado. No se guardó el cliente; usá otro correo.',
+        );
+      } else {
+        setErrorGeneral(mensajeGeneral(err, 'No se pudo guardar el cliente y su visita. Revisá los datos e intentá nuevamente.'));
+      }
     } finally {
       setGuardando(false);
     }
@@ -241,7 +422,7 @@ export default function VentasClientesPage() {
       {modalAbierto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 p-4 backdrop-blur-sm"
-          onClick={() => setModalAbierto(false)}
+          onClick={cerrarModal}
         >
           <div
             className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
@@ -259,7 +440,7 @@ export default function VentasClientesPage() {
                 </p>
               </div>
               <button
-                onClick={() => setModalAbierto(false)}
+                onClick={cerrarModal}
                 className="prolimal-icon-btn shrink-0"
                 aria-label="Cerrar"
               >
@@ -267,37 +448,110 @@ export default function VentasClientesPage() {
               </button>
             </div>
 
-            <div className="mt-6 space-y-4">
-              {!clienteExistente && (
-                <>
-                  <input
-                    placeholder="Nombre del cliente *"
-                    value={form.nombre}
-                    onChange={e => setForm({ ...form, nombre: e.target.value })}
-                    className="prolimal-input"
-                  />
-                  <input
-                    placeholder="Teléfono"
-                    value={form.telefono}
-                    onChange={e => setForm({ ...form, telefono: e.target.value })}
-                    className="prolimal-input"
-                  />
-                  <input
-                    placeholder="Dirección de referencia"
-                    value={form.ubicacion}
-                    onChange={e => setForm({ ...form, ubicacion: e.target.value })}
-                    className="prolimal-input"
-                  />
-                </>
-              )}
+            <div className="mt-4">
+              <AvisoErrorFormulario mensaje={errorGeneral} />
+            </div>
 
+            <div className="mt-4 space-y-4">
               <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                <label htmlFor="cliente-nombre" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Nombre del cliente *
+                </label>
+                <input
+                  id="cliente-nombre"
+                  placeholder="Nombre del cliente *"
+                  value={form.nombre}
+                  onChange={e => {
+                    const nuevo = { ...form, nombre: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('nombre', nuevo);
+                  }}
+                  onBlur={() => marcarTocado('nombre')}
+                  aria-invalid={Boolean(errorDe('nombre'))}
+                  aria-describedby={errorDe('nombre') ? 'cliente-nombre-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('nombre')), 'prolimal-input')}
+                />
+                <CampoError id="cliente-nombre-error" mensaje={errorDe('nombre')} />
+              </div>
+              <div>
+                <label htmlFor="cliente-email" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Correo electrónico *
+                </label>
+                <input
+                  id="cliente-email"
+                  type="email"
+                  placeholder="Correo electrónico *"
+                  value={form.email}
+                  onChange={e => {
+                    const nuevo = { ...form, email: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('email', nuevo);
+                  }}
+                  onBlur={() => marcarTocado('email')}
+                  aria-invalid={Boolean(errorDe('email'))}
+                  aria-describedby={errorDe('email') ? 'cliente-email-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('email')), 'prolimal-input')}
+                />
+                <CampoError id="cliente-email-error" mensaje={errorDe('email')} />
+              </div>
+              <div>
+                <label htmlFor="cliente-telefono" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Teléfono *
+                </label>
+                <input
+                  id="cliente-telefono"
+                  type="tel"
+                  placeholder="Teléfono *"
+                  value={form.telefono}
+                  onChange={e => {
+                    const nuevo = { ...form, telefono: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('telefono', nuevo);
+                  }}
+                  onBlur={() => marcarTocado('telefono')}
+                  aria-invalid={Boolean(errorDe('telefono'))}
+                  aria-describedby={errorDe('telefono') ? 'cliente-telefono-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('telefono')), 'prolimal-input')}
+                />
+                <CampoError id="cliente-telefono-error" mensaje={errorDe('telefono')} />
+              </div>
+              <div>
+                <label htmlFor="cliente-ubicacion" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Dirección de referencia *
+                </label>
+                <input
+                  id="cliente-ubicacion"
+                  placeholder="Dirección de referencia *"
+                  value={form.ubicacion}
+                  onChange={e => {
+                    const nuevo = { ...form, ubicacion: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('ubicacion', nuevo);
+                  }}
+                  onBlur={() => marcarTocado('ubicacion')}
+                  aria-invalid={Boolean(errorDe('ubicacion'))}
+                  aria-describedby={errorDe('ubicacion') ? 'cliente-ubicacion-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('ubicacion')), 'prolimal-input')}
+                />
+                <CampoError id="cliente-ubicacion-error" mensaje={errorDe('ubicacion')} />
+              </div>
+
+              <div
+                role="group"
+                aria-label="Días de visita"
+                aria-invalid={Boolean(errorDe('diasVisita'))}
+                aria-describedby={errorDe('diasVisita') ? 'cliente-dias-error' : undefined}
+              >
+                <p className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                  errorDe('diasVisita')
+                    ? 'text-prolimal-red-700 dark:text-prolimal-red-300'
+                    : 'text-prolimal-ink-400 dark:text-prolimal-ink-300'
+                }`}>
                   Días de visita *
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {DIAS.map(d => {
-                    const activo = diasVisita.includes(d.valor);
+                    const activo = form.diasVisita.includes(d.valor);
                     return (
                       <button
                         key={d.valor}
@@ -306,7 +560,9 @@ export default function VentasClientesPage() {
                         className={`rounded-full border px-4 py-2 text-xs font-bold transition-colors ${
                           activo
                             ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-white dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
-                            : 'border-prolimal-ink-900/15 bg-transparent text-prolimal-ink-500 hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800'
+                            : errorDe('diasVisita')
+                              ? 'border-prolimal-red-500 bg-prolimal-red-50/60 text-prolimal-red-700 dark:border-prolimal-red-400/70 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300'
+                              : 'border-prolimal-ink-900/15 bg-transparent text-prolimal-ink-500 hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800'
                         }`}
                       >
                         {d.etiqueta}
@@ -314,16 +570,26 @@ export default function VentasClientesPage() {
                     );
                   })}
                 </div>
+                <CampoError id="cliente-dias-error" mensaje={errorDe('diasVisita')} />
               </div>
 
-              <MapaCliente gps={gps} onChange={setGps} />
+              <div
+                role="group"
+                aria-label="Ubicación del cliente"
+                aria-invalid={Boolean(errorGps)}
+                aria-describedby={errorGps ? 'cliente-gps-error' : undefined}
+              >
+                <MapaCliente gps={gps} onChange={cambiarGps} invalido={false} />
+                <CampoError id="cliente-gps-error" mensaje={errorGps} />
+              </div>
 
               {pedidos.length > 0 && (
                 <div>
-                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  <label htmlFor="cliente-pedido" className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                     Pedido asociado (opcional)
                   </label>
                   <select
+                    id="cliente-pedido"
                     value={pedidoId}
                     onChange={e => setPedidoId(e.target.value)}
                     className="prolimal-input"
@@ -349,7 +615,7 @@ export default function VentasClientesPage() {
                 {guardando ? 'Guardando...' : 'Guardar'}
               </button>
               <button
-                onClick={() => setModalAbierto(false)}
+                onClick={cerrarModal}
                 className="prolimal-btn-secondary flex-1"
               >
                 Cancelar

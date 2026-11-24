@@ -5,10 +5,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
+  ArrowLeftRight,
   BarChart3,
+  BellRing,
   Boxes,
   ChevronLeft,
   ClipboardList,
+  List,
   MapPin,
   Menu,
   Package,
@@ -76,7 +79,10 @@ export default function AdminLayout({
   const seccionesAdmin: SeccionMenu[] = [
     { href: '/admin/productos', titulo: 'Productos', desc: 'Gestión de productos', roles: ['admin', 'inventario'], Icono: Package, esPanel: true },
     { href: '/admin/inventario', titulo: 'Inventario', desc: 'Control de existencias', roles: ['admin', 'inventario'], Icono: Boxes, esPanel: true },
+    { href: '/admin/kardex', titulo: 'Kardex', desc: 'Entradas, salidas y saldos', roles: ['admin', 'inventario'], Icono: ArrowLeftRight, esPanel: true },
+    { href: '/admin/notificaciones', titulo: 'Notificaciones', desc: 'Avisos e historial de envíos', roles: ['admin', 'inventario', 'ventas'], Icono: BellRing, esPanel: true },
     { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Gestión de pedidos', roles: ['admin', 'inventario'], Icono: ClipboardList, esPanel: true },
+    { href: '/admin/listado-pedidos', titulo: 'Listado de pedidos', desc: 'Fecha, monto y estado', roles: ['admin', 'inventario'], Icono: List, esPanel: true },
     { href: '/admin/ubicaciones', titulo: 'Ubicaciones', desc: 'Seguimiento de vendedores', roles: ['admin', 'inventario'], Icono: MapPin, esPanel: true },
     { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registro de clientes', roles: ['admin'], Icono: Users, esPanel: true },
     { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestión de usuarios', roles: ['admin'], Icono: Settings, esPanel: true },

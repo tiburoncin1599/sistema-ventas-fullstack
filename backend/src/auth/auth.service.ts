@@ -55,16 +55,37 @@ export class AuthService {
     };
   }
 
-  async registro(nombre: string, email: string, password: string) {
-    const existe = await this.usuariosService.findByEmail(email);
-    if (existe) throw new BadRequestException('El email ya está registrado');
+  async registro(
+    nombre: string,
+    email: string,
+    password: string,
+    telefono: string,
+    ubicacion: string,
+  ) {
+    const correo = email.trim().toLowerCase();
+    const existe = await this.usuariosService.findByEmail(correo);
+    if (existe) {
+      throw new BadRequestException('El correo electrónico ya está registrado');
+    }
 
     const hash = await bcrypt.hash(password, 10);
-    const usuario = await this.usuariosService.crear({
-      nombre,
-      email,
-      password_hash: hash,
-    });
+    let usuario;
+    try {
+      usuario = await this.usuariosService.crear({
+        nombre: nombre.trim(),
+        email: correo,
+        password_hash: hash,
+        telefono: telefono.trim(),
+        ubicacion: ubicacion.trim(),
+      });
+    } catch (err) {
+      // Protección ante una carrera entre dos registros concurrentes: el
+      // índice único de `usuarios.email` también debe negar el segundo.
+      if ((err as { code?: string })?.code === '23505') {
+        throw new BadRequestException('El correo electrónico ya está registrado');
+      }
+      throw err;
+    }
 
     const accessToken = this.generarAccessToken(usuario);
     const refreshToken = await this.generarRefreshToken(usuario.id);
@@ -83,7 +104,7 @@ export class AuthService {
     } else {
       usuario = await this.usuariosService.crear({
         nombre,
-        email,
+        email: email.trim().toLowerCase(),
         google_id: googleId,
         password_hash: '',
       });

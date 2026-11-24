@@ -2,58 +2,114 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowUpRight, CheckCircle2, Package, Search, SlidersHorizontal, X } from 'lucide-react';
 import ImagenProducto from '@/components/ImagenProducto';
 import { api, API_URL } from '@/lib/api';
+import {
+  Categoria,
+  ProductoCatalogo,
+  SIN_CATEGORIA,
+  TODAS_CATEGORIAS,
+  categoriasParaFiltro,
+} from '@/lib/productos';
 import { formatCurrency } from '@/lib/utils';
 import { useCarrito } from '@/store/carrito';
 
-interface Producto {
-  id: number;
-  nombre: string;
-  precio: number;
-  imagen_url: string;
-  stock: number;
-  disponible: boolean;
-  categoria?: { nombre: string };
+interface FiltrosIniciales {
+  busqueda: string;
+  categoria: string;
 }
 
-function ProductosContent({ busquedaInicial }: { busquedaInicial: string }) {
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [busqueda, setBusqueda] = useState(busquedaInicial);
+function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
+  const router = useRouter();
+  const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [haySinCategoria, setHaySinCategoria] = useState(false);
+  const [busqueda, setBusqueda] = useState(inicial.busqueda);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState<{ id: number; texto: string } | null>(null);
-  const [categoriaFiltro, setCategoriaFiltro] = useState<string>('all');
+  const [categoriaFiltro, setCategoriaFiltro] = useState(inicial.categoria);
   const { agregar } = useCarrito();
 
   useEffect(() => {
-    api.get('/productos')
-      .then(res => setProductos(res.data))
-      .catch(err => console.error(err))
-      .finally(() => setCargando(false));
+    let activo = true;
+    Promise.allSettled([
+      api.get<Categoria[]>('/categorias', { params: { limit: 100 } }),
+      // El chip "Sin categoría" solo existe si hay productos huérfanos reales.
+      api.get<ProductoCatalogo[]>('/productos', {
+        params: { limit: 1, sinCategoria: 'true' },
+      }),
+    ]).then(([respuestaCategorias, respuestaSinCategoria]) => {
+      if (!activo) return;
+      setCategorias(
+        respuestaCategorias.status === 'fulfilled'
+          ? categoriasParaFiltro(respuestaCategorias.value.data ?? [])
+          : [],
+      );
+      setHaySinCategoria(
+        respuestaSinCategoria.status === 'fulfilled' &&
+          (respuestaSinCategoria.value.data?.length ?? 0) > 0,
+      );
+    });
+    return () => { activo = false; };
   }, []);
 
-  const categoriasUnicas = ['all', ...Array.from(new Set(productos.map(p => p.categoria?.nombre).filter(Boolean) as string[]))];
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    const params: Record<string, string | number> = { limit: 100 };
+    const id = Number(categoriaFiltro);
+    if (Number.isInteger(id) && id > 0) params.categoriaId = id;
+    if (categoriaFiltro === SIN_CATEGORIA) params.sinCategoria = 'true';
 
-  const filtrados = productos.filter(p => {
-    const coincideBusqueda = p.nombre.toLowerCase().includes(busqueda.toLowerCase());
-    const coincideCategoria = categoriaFiltro === 'all' || p.categoria?.nombre === categoriaFiltro;
-    return coincideBusqueda && coincideCategoria;
-  });
+    api.get<ProductoCatalogo[]>('/productos', { params })
+      .then(res => { if (activo) setProductos(res.data || []); })
+      .catch(err => console.error(err))
+      .finally(() => { if (activo) setCargando(false); });
+    return () => { activo = false; };
+  }, [categoriaFiltro]);
 
-  const stockDe = (producto: Producto) =>
+  const seleccionarCategoria = (valor: string) => {
+    setCategoriaFiltro(valor);
+    const params = new URLSearchParams();
+    if (busqueda.trim()) params.set('q', busqueda.trim());
+    if (valor !== TODAS_CATEGORIAS) params.set('categoria', valor);
+    const query = params.toString();
+    router.replace(`/productos${query ? `?${query}` : ''}`, { scroll: false });
+  };
+
+  const termino = busqueda.trim().toLocaleLowerCase('es');
+  const filtrados = productos.filter(p =>
+    p.nombre.toLocaleLowerCase('es').includes(termino),
+  );
+
+  const chips: { valor: string; etiqueta: string }[] = [
+    { valor: TODAS_CATEGORIAS, etiqueta: 'Todo' },
+    ...categorias.map(c => ({ valor: String(c.id), etiqueta: c.nombre })),
+    ...(haySinCategoria
+      ? [{ valor: SIN_CATEGORIA, etiqueta: 'Sin categoría' }]
+      : []),
+  ];
+
+  const stockDe = (producto: ProductoCatalogo) =>
     typeof producto.stock === 'number' ? producto.stock : 0;
 
-  const agregarRapido = (producto: Producto, cantidad: number, texto: string) => {
-    agregar({ ...producto, cantidad, tipo_presentacion: 'UNIDAD' });
+  const agregarRapido = (producto: ProductoCatalogo, cantidad: number, texto: string) => {
+    agregar({
+      ...producto,
+      imagen_url: producto.imagen_url ?? undefined,
+      cantidad,
+      tipo_presentacion: 'UNIDAD',
+    });
     setMensaje({ id: producto.id, texto });
     setTimeout(() => setMensaje(null), 1500);
   };
 
   const limpiarFiltros = () => {
     setBusqueda('');
-    setCategoriaFiltro('all');
+    setCategoriaFiltro(TODAS_CATEGORIAS);
+    router.replace('/productos', { scroll: false });
   };
 
   return (
@@ -78,15 +134,16 @@ function ProductosContent({ busquedaInicial }: { busquedaInicial: string }) {
       </section>
 
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-        <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-4 shadow-[0_24px_70px_-50px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
+        <div className="prolimal-surface p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
+            <div className="relative w-full lg:max-w-sm">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
               <input
                 type="text"
                 placeholder="Buscar un producto..."
                 value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
+                aria-label="Buscar un producto"
                 className="prolimal-search-input py-3 pl-11"
               />
               {busqueda && (
@@ -101,28 +158,38 @@ function ProductosContent({ busquedaInicial }: { busquedaInicial: string }) {
               )}
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:max-w-[60%] lg:flex-wrap lg:overflow-visible lg:pb-0">
-              <span className="flex shrink-0 items-center gap-1.5 pr-1 text-[10px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Filtrar
               </span>
-              {categoriasUnicas.map(cat => {
-                const activo = categoriaFiltro === cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategoriaFiltro(cat)}
-                    className={`shrink-0 rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                      activo
-                        ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-prolimal-sand-50 dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
-                        : 'border-prolimal-ink-900/10 bg-transparent text-prolimal-ink-500 hover:border-prolimal-teal-500/50 hover:text-prolimal-teal-700 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:text-prolimal-teal-300'
-                    }`}
-                  >
-                    {cat === 'all' ? 'Todo' : cat}
-                  </button>
-                );
-              })}
+              <div
+                role="group"
+                aria-label="Filtrar productos por categoría"
+                className="scrollbar-hide -mx-1 flex min-w-0 flex-1 snap-x scroll-smooth items-center gap-2 overflow-x-auto px-1 pb-1 sm:pb-0"
+              >
+                {chips.map(cat => {
+                  const activo = categoriaFiltro === cat.valor;
+                  const esTodo = cat.valor === TODAS_CATEGORIAS;
+                  return (
+                    <button
+                      key={cat.valor}
+                      type="button"
+                      onClick={() => seleccionarCategoria(cat.valor)}
+                      aria-pressed={activo}
+                      className={`snap-start shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                        activo
+                          ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-white shadow-sm dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
+                          : esTodo
+                            ? 'border-prolimal-teal-600/40 bg-prolimal-teal-50 text-prolimal-teal-800 hover:border-prolimal-teal-500 dark:border-prolimal-teal-400/30 dark:bg-prolimal-teal-900/20 dark:text-prolimal-teal-200'
+                            : 'border-prolimal-ink-900/10 bg-white/70 text-prolimal-ink-600 hover:border-prolimal-teal-500/50 hover:text-prolimal-teal-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/50 dark:text-prolimal-ink-200 dark:hover:text-prolimal-teal-300'
+                      }`}
+                    >
+                      {cat.etiqueta}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -131,7 +198,7 @@ function ProductosContent({ busquedaInicial }: { busquedaInicial: string }) {
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
             {cargando ? 'Cargando catálogo' : `${filtrados.length} ${filtrados.length === 1 ? 'producto' : 'productos'}`}
           </p>
-          {(busqueda || categoriaFiltro !== 'all') && (
+          {(busqueda || categoriaFiltro !== TODAS_CATEGORIAS) && (
             <button
               type="button"
               onClick={limpiarFiltros}
@@ -275,9 +342,17 @@ function ProductosContent({ busquedaInicial }: { busquedaInicial: string }) {
 
 function ProductosConFiltro() {
   const searchParams = useSearchParams();
-  const busquedaInicial = searchParams.get('q') ?? '';
+  const inicial: FiltrosIniciales = {
+    busqueda: searchParams.get('q') ?? '',
+    categoria: searchParams.get('categoria') ?? TODAS_CATEGORIAS,
+  };
 
-  return <ProductosContent key={busquedaInicial} busquedaInicial={busquedaInicial} />;
+  return (
+    <ProductosContent
+      key={`${inicial.busqueda}|${inicial.categoria}`}
+      inicial={inicial}
+    />
+  );
 }
 
 export default function ProductosPage() {

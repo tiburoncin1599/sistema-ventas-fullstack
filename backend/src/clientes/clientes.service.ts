@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Usuario } from '../usuarios/usuario.entity';
 import * as bcrypt from 'bcryptjs';
 import { omitPassword } from '../common/utils';
@@ -33,46 +33,61 @@ export class ClientesService {
 
   async crear(data: {
     nombre: string;
-    email?: string;
-    telefono?: string;
+    email: string;
+    telefono: string;
     carnet?: string;
-    ubicacion?: string;
+    ubicacion: string;
   }) {
-    const email = data.email || `cliente_${Date.now()}@tienda.com`;
-    const existe = await this.usuariosRepo.findOne({ where: { email } });
-    if (existe) throw new BadRequestException('El email ya está registrado');
+    const email = data.email.trim().toLowerCase();
+    const existe = await this.usuariosRepo.findOne({
+      where: { email: ILike(email) },
+    });
+    if (existe) {
+      throw new BadRequestException('El correo electrónico ya está registrado');
+    }
 
     const { randomBytes } = await import('crypto');
     const passDefault = randomBytes(6).toString('hex');
     const hash = await bcrypt.hash(passDefault, 10);
     const usuario = this.usuariosRepo.create({
-      nombre: data.nombre,
+      nombre: data.nombre.trim(),
       email,
-      telefono: data.telefono || '',
-      carnet: data.carnet || '',
-      ubicacion: data.ubicacion || '',
+      telefono: data.telefono.trim(),
+      carnet: (data.carnet || '').trim(),
+      ubicacion: data.ubicacion.trim(),
       password_hash: hash,
       rol: 'cliente',
     });
-    const saved = await this.usuariosRepo.save(usuario);
-    return omitPassword(saved);
+    try {
+      const saved = await this.usuariosRepo.save(usuario);
+      return omitPassword(saved);
+    } catch (err) {
+      // El índice único de `usuarios.email` también debe negar carreras entre
+      // dos altas simultáneas o correos que sólo difieren en mayúsculas.
+      if ((err as { code?: string })?.code === '23505') {
+        throw new BadRequestException('El correo electrónico ya está registrado');
+      }
+      throw err;
+    }
   }
 
   async actualizar(id: number, data: Partial<Usuario>) {
     await this.findOne(id);
     if (data.email) {
+      const correo = data.email.trim().toLowerCase();
       const existe = await this.usuariosRepo.findOne({
-        where: { email: data.email },
+        where: { email: ILike(correo) },
       });
       if (existe && existe.id !== id) {
-        throw new BadRequestException('El email ya está registrado');
+        throw new BadRequestException('El correo electrónico ya está registrado');
       }
+      data.email = correo;
     }
     try {
       await this.usuariosRepo.update(id, data);
     } catch (err) {
       if ((err as { code?: string })?.code === '23505') {
-        throw new BadRequestException('El email ya está registrado');
+        throw new BadRequestException('El correo electrónico ya está registrado');
       }
       throw err;
     }

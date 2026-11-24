@@ -194,11 +194,13 @@ export class PedidosController {
 
   /**
    * Comprobante comercial interno en PDF (inline, nunca como factura fiscal).
-   * Acceso: admin, vendedor asignado o cliente dueño del pedido.
+   * Acceso: admin, inventario, vendedor asignado o cliente dueño del pedido.
+   * INVENTARIO consulta pedidos desde su panel, así que necesita el mismo
+   * comprobante que la factura PDF.
    */
   @Get(':id/comprobante-pdf')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(ROLES.ADMIN, ROLES.VENTAS, ROLES.CLIENTE)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
   async comprobantePdf(
     @Param('id') id: string,
     @Req() req: Request,

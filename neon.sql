@@ -774,11 +774,6 @@ COPY public.auditoria (id, accion, entidad, entidad_id, valor_anterior, valor_nu
 
 COPY public.categorias (id, nombre, descripcion, imagen_url) FROM stdin;
 2	Limpieza	\N	\N
-3	Categ Actualizada 1788535717400	Categoría de prueba	\N
-4	Categ Actualizada 1788535903532	Categoría de prueba	\N
-5	Categ Actualizada 1788536720733	Categoría de prueba	\N
-6	Categ Actualizada 1788539557854	Categoría de prueba	\N
-7	Categ Actualizada 1788539621944	Categoría de prueba	\N
 \.
 
 

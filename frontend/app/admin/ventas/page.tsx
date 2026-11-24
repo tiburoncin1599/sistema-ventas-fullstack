@@ -6,12 +6,27 @@ import GraficoBarras from '@/components/charts/GraficoBarras';
 import { ClipboardList, TrendingUp, Users } from 'lucide-react';
 import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
+interface PedidoVenta {
+  id: number;
+  total: number;
+  estado: string;
+  fecha: string;
+  cliente?: string | null;
+  cliente_carnet?: string | null;
+  cliente_telefono?: string | null;
+  cliente_ubicacion?: string | null;
+  direccion_entrega?: string | null;
+  notas?: string | null;
+  tipo_pago?: string | null;
+}
+
 interface VentaPersonal {
   usuario_id: number;
   usuario_nombre: string;
   total_pedidos: number;
   total_vendido: number;
-  pedidos: { id: number; total: number; estado: string; fecha: string }[];
+  promedio_ticket?: number;
+  pedidos: PedidoVenta[];
 }
 
 export default function AdminVentas() {
@@ -199,7 +214,14 @@ export default function AdminVentas() {
                   <td className="px-6 py-4 text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{v.usuario_nombre}</td>
                   <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-600 dark:text-prolimal-sand-100">{v.total_pedidos}</td>
                   <td className="px-6 py-4 text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(v.total_vendido)}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-600 dark:text-prolimal-sand-100">{formatCurrency(v.total_pedidos > 0 ? v.total_vendido / v.total_pedidos : 0)}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-prolimal-ink-600 dark:text-prolimal-sand-100">
+                    {formatCurrency(
+                      v.promedio_ticket ??
+                        (v.total_pedidos > 0
+                          ? v.total_vendido / v.total_pedidos
+                          : 0),
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <button onClick={() => setSel(sel?.usuario_id === v.usuario_id ? null : v)} className="text-xs font-bold text-prolimal-teal-700 underline-offset-4 hover:underline dark:text-prolimal-teal-300">
                       {sel?.usuario_id === v.usuario_id ? 'Ocultar' : 'Ver pedidos'}
@@ -217,10 +239,34 @@ export default function AdminVentas() {
           <h2 className="mb-4 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Pedidos de {sel.usuario_nombre}</h2>
           <div className="space-y-1">
             {sel.pedidos.map(p => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-prolimal-ink-900/5 py-3 last:border-0 dark:border-prolimal-sand-100/10">
-                <div>
-                  <p className="text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">Pedido #{p.id}</p>
-                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{new Date(p.fecha).toLocaleDateString()}</p>
+              <div key={p.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-prolimal-ink-900/5 py-3 last:border-0 dark:border-prolimal-sand-100/10">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
+                    Pedido #{p.id}
+                  </p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    {new Date(p.fecha).toLocaleDateString()}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-prolimal-ink-700 dark:text-prolimal-sand-100">
+                    {p.cliente || 'Sin asignar'}
+                  </p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    CI: {p.cliente_carnet || '—'} · Tel: {p.cliente_telefono || '—'}
+                  </p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Ubicación: {p.cliente_ubicacion || '—'}
+                  </p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Entrega: {p.direccion_entrega || p.cliente_ubicacion || 'Sin dirección'}
+                  </p>
+                  <p className="text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Pago: {p.tipo_pago || 'CONTADO'}
+                  </p>
+                  {p.notas && (
+                    <p className="break-words text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                      Notas: {p.notas}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${

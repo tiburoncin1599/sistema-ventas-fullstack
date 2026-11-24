@@ -71,20 +71,32 @@ export class UsuariosController {
   @Roles('admin')
   async crear(@Body() body: CrearUsuarioDto, @Req() req: AuthRequest) {
     const user = req.user as { id: number; rol: string };
-    const existe = await this.usuariosService.findByEmail(body.email);
-    if (existe) throw new BadRequestException('El email ya está registrado');
-    if (body.rol === 'admin' && !this.adminEmails.includes(body.email)) {
+    const correo = body.email.trim().toLowerCase();
+    const existe = await this.usuariosService.findByEmail(correo);
+    if (existe) {
+      throw new BadRequestException('El correo electrónico ya está registrado');
+    }
+    const correosAdmin = this.adminEmails.map((email) => email.trim().toLowerCase());
+    if (body.rol === 'admin' && !correosAdmin.includes(correo)) {
       throw new BadRequestException(
         'Email no autorizado para el rol de administrador',
       );
     }
     const hash = await bcrypt.hash(body.password, 10);
-    const usuario = await this.usuariosService.crear({
-      nombre: body.nombre,
-      email: body.email,
-      password_hash: hash,
-      rol: body.rol || 'cliente',
-    });
+    let usuario;
+    try {
+      usuario = await this.usuariosService.crear({
+        nombre: body.nombre,
+        email: correo,
+        password_hash: hash,
+        rol: body.rol || 'cliente',
+      });
+    } catch (err) {
+      if ((err as { code?: string })?.code === '23505') {
+        throw new BadRequestException('El correo electrónico ya está registrado');
+      }
+      throw err;
+    }
     const result = omitPassword(usuario);
     await this.auditService.registrar({
       accion: 'crear',
@@ -92,7 +104,7 @@ export class UsuariosController {
       entidad_id: usuario.id,
       valor_nuevo: {
         nombre: body.nombre,
-        email: body.email,
+        email: correo,
         rol: usuario.rol,
       },
       usuario_id: user.id,

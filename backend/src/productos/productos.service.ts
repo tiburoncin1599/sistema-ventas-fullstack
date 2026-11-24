@@ -11,6 +11,7 @@ import {
   Not,
   QueryDeepPartialEntity,
   Repository,
+  SelectQueryBuilder,
 } from 'typeorm';
 import { Producto } from './producto.entity';
 import { Inventario } from '../inventario/inventario.entity';
@@ -18,8 +19,18 @@ import { InventarioMovimiento } from '../inventario-movimientos/inventario-movim
 
 export type ProductoConStock = Producto & { stock: number; disponible: boolean };
 
+/** Filtro opcional por categoría; `sinCategoria` incluye los productos null. */
+export interface FiltrosCategoria {
+  categoriaId?: number;
+  sinCategoria?: boolean;
+}
+
+export type DatosCreacionProducto = Partial<Producto> & {
+  categoria_id?: number | null;
+};
+
 export type DatosActualizacionProducto = Partial<Producto> & {
-  categoria_id?: number;
+  categoria_id?: number | null;
   stock?: number;
   cantidad?: number;
 };
@@ -68,6 +79,20 @@ export class ProductosService {
     );
   }
 
+  /** LEFT JOIN para no perder productos sin categoría al filtrar. */
+  private aplicarFiltroCategoria(
+    qb: SelectQueryBuilder<Producto>,
+    filtros?: FiltrosCategoria,
+  ): SelectQueryBuilder<Producto> {
+    if (filtros?.sinCategoria) return qb.andWhere('categoria.id IS NULL');
+    if (filtros?.categoriaId) {
+      return qb.andWhere('categoria.id = :categoriaId', {
+        categoriaId: filtros.categoriaId,
+      });
+    }
+    return qb;
+  }
+
   /** Añade al producto únicamente el stock necesario para el catálogo. */
   private async conStock(lista: Producto[]): Promise<ProductoConStock[]> {
     if (lista.length === 0) return [];
@@ -84,13 +109,22 @@ export class ProductosService {
     });
   }
 
-  async findAll(page = 1, limit = 50) {
+  async findAll(page = 1, limit = 50, filtros?: FiltrosCategoria) {
     // Catálogo paginado: el ORDER BY va en SQL para que la paginación no
-    // dependa del orden físico/MVCC de PostgreSQL.
-    const lista = await this.productosRepo
-      .createQueryBuilder('producto')
-      .where('producto.activo = :activo', { activo: true })
-      .orderBy('LOWER(producto.nombre)', 'ASC')
+    // dependa del orden físico/MVCC de PostgreSQL. `eager` NO aplica a
+    // QueryBuilder, así que la categoría se une explícitamente (LEFT).
+    const qb = this.aplicarFiltroCategoria(
+      this.productosRepo
+        .createQueryBuilder('producto')
+        .leftJoinAndSelect('producto.categoria', 'categoria')
+        .where('producto.activo = :activo', { activo: true }),
+      filtros,
+    );
+    const lista = await qb
+      // TypeORM no resuelve alias dentro de funciones en `orderBy`:
+      // `LOWER(producto.nombre)` se interpreta como el alias `LOWER(producto`.
+      .addSelect('LOWER(producto.nombre)', 'nombre_lower')
+      .orderBy('nombre_lower', 'ASC')
       .addOrderBy('producto.id', 'ASC')
       .skip((page - 1) * limit)
       .take(limit)
@@ -98,12 +132,19 @@ export class ProductosService {
     return this.conStock(this.ordenarPorNombre(lista));
   }
 
-  async findAllInclusoInactivos() {
-    // Listado admin (sin paginación): orden explícito en find() + normalización
-    // en memoria para garantizar insensibilidad a mayúsculas/minúsculas.
-    const lista = await this.productosRepo.find({
-      order: { nombre: 'ASC', id: 'ASC' },
-    });
+  async findAllInclusoInactivos(filtros?: FiltrosCategoria) {
+    // Listado admin (sin paginación): mismo criterio de orden que el catálogo.
+    const qb = this.aplicarFiltroCategoria(
+      this.productosRepo
+        .createQueryBuilder('producto')
+        .leftJoinAndSelect('producto.categoria', 'categoria'),
+      filtros,
+    );
+    const lista = await qb
+      .addSelect('LOWER(producto.nombre)', 'nombre_lower')
+      .orderBy('nombre_lower', 'ASC')
+      .addOrderBy('producto.id', 'ASC')
+      .getMany();
     return this.conStock(this.ordenarPorNombre(lista));
   }
 
@@ -128,10 +169,41 @@ export class ProductosService {
     }
   }
 
-  async crear(data: Partial<Producto>) {
-    if (data.codigo) await this.codigoDisponible(data.codigo);
-    const producto = this.productosRepo.create(data);
-    return this.productosRepo.save(producto);
+  /**
+   * La columna `categoria_id` no es una propiedad mapeada de `Producto`: se
+   * traduce a la relación `categoria` antes de persistir. `null` desasocia la
+   * categoría y `undefined` no toca el valor (compatibilidad con clientes
+   * antiguos que no envían el campo).
+   */
+  private async asignarCategoria(
+    manager: DataSource['manager'],
+    id: number,
+    categoriaId: number | null | undefined,
+  ) {
+    if (categoriaId === undefined) return;
+    if (categoriaId === null) {
+      await manager.query(
+        'UPDATE productos SET categoria_id = NULL WHERE id = $1',
+        [id],
+      );
+      return;
+    }
+    await manager.update(
+      Producto,
+      id,
+      { categoria: { id: categoriaId } } as unknown as QueryDeepPartialEntity<Producto>,
+    );
+  }
+
+  async crear(data: DatosCreacionProducto): Promise<Producto> {
+    const { categoria_id, ...resto } = data;
+    if (resto.codigo) await this.codigoDisponible(resto.codigo);
+    return this.dataSource.transaction(async (manager) => {
+      const producto = manager.create(Producto, resto);
+      const guardado = await manager.save(producto);
+      await this.asignarCategoria(manager, guardado.id, categoria_id);
+      return guardado;
+    });
   }
 
   /**
@@ -148,7 +220,7 @@ export class ProductosService {
     const anterior = await this.findOne(id);
     if (data.codigo) await this.codigoDisponible(data.codigo, id);
 
-    const { stock, cantidad, ...camposProducto } = data;
+    const { stock, cantidad, categoria_id, ...camposProducto } = data;
     if (stock !== undefined && cantidad !== undefined && stock !== cantidad) {
       throw new BadRequestException(
         'Los campos stock y cantidad deben coincidir cuando se envían juntos',
@@ -170,6 +242,8 @@ export class ProductosService {
       if (Object.keys(campos).length > 0) {
         await manager.update(Producto, id, campos);
       }
+      // Dentro de la misma transacción que el ajuste de stock y el Kardex.
+      await this.asignarCategoria(manager, id, categoria_id);
 
       let stockNuevo = stockAnterior;
       let movimientoRegistrado = false;

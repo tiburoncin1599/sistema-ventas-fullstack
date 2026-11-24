@@ -92,6 +92,45 @@ export class ReportesService {
     };
   }
 
+  /**
+   * Condiciones SQL sobre la tabla `pedidos` (sin joins de detalle), para que
+   * SUM(total) no se duplique por línea. El filtro de producto se resuelve con
+   * EXISTS para conservar el mismo alcance que `baseVentas`.
+   */
+  private condicionesPedidos(f: FiltrosEfectivos): {
+    sql: string;
+    params: unknown[];
+  } {
+    const condiciones: string[] = [];
+    const params: unknown[] = [];
+    if (f.fechaInicio) {
+      condiciones.push(`pe.creado_en >= $${params.length + 1}::date`);
+      params.push(f.fechaInicio);
+    }
+    if (f.fechaFin) {
+      condiciones.push(
+        `pe.creado_en < ($${params.length + 1}::date + INTERVAL '1 day')`,
+      );
+      params.push(f.fechaFin);
+    }
+    if (f.vendedorId) {
+      condiciones.push(`pe.procesado_por = $${params.length + 1}::int`);
+      params.push(f.vendedorId);
+    }
+    if (f.productoId) {
+      condiciones.push(
+        `EXISTS (SELECT 1 FROM detalle_pedido dp_filtro
+                 WHERE dp_filtro.pedido_id = pe.id
+                   AND dp_filtro.producto_id = $${params.length + 1}::int)`,
+      );
+      params.push(f.productoId);
+    }
+    return {
+      sql: condiciones.length ? condiciones.join(' AND ') : 'TRUE',
+      params,
+    };
+  }
+
   /** Aplica rango de fechas, producto y vendedor sobre un QueryBuilder de pedidos. */
   private aplicarFiltros(
     qb: SelectQueryBuilder<ObjectLiteral>,
@@ -154,30 +193,15 @@ export class ReportesService {
   private async resumenPedidosPorFecha(
     f: FiltrosEfectivos,
     agrupacion: AgrupacionVentas,
-  ): Promise<Map<string, { ticket: number; cancelados: number }>> {
+  ): Promise<
+    Map<string, { totalVendido: number; ticket: number; cancelados: number }>
+  > {
     const expr = this.expresionFecha('pe', agrupacion);
-    const condicionesBase: string[] = [];
-    const params: unknown[] = [];
-    if (f.fechaInicio) {
-      condicionesBase.push(`pe.creado_en >= $${params.length + 1}::date`);
-      params.push(f.fechaInicio);
-    }
-    if (f.fechaFin) {
-      condicionesBase.push(
-        `pe.creado_en < ($${params.length + 1}::date + INTERVAL '1 day')`,
-      );
-      params.push(f.fechaFin);
-    }
-    if (f.vendedorId) {
-      condicionesBase.push(`pe.procesado_por = $${params.length + 1}::int`);
-      params.push(f.vendedorId);
-    }
-    const base = condicionesBase.length
-      ? condicionesBase.join(' AND ')
-      : 'TRUE';
+    const { sql: base, params } = this.condicionesPedidos(f);
 
     const filas = await this.dataSource.query(
       `SELECT ${expr} AS fecha,
+              COALESCE(SUM(pe.total), 0) AS total_vendido,
               COALESCE(AVG(pe.total), 0) AS ticket,
               0 AS cancelados
        FROM pedidos pe
@@ -185,6 +209,7 @@ export class ReportesService {
        GROUP BY ${expr}
        UNION ALL
        SELECT ${expr} AS fecha,
+              0 AS total_vendido,
               0 AS ticket,
               COUNT(*)::int AS cancelados
        FROM pedidos pe
@@ -193,11 +218,19 @@ export class ReportesService {
       params,
     );
 
-    const resumen = new Map<string, { ticket: number; cancelados: number }>();
+    const resumen = new Map<
+      string,
+      { totalVendido: number; ticket: number; cancelados: number }
+    >();
     for (const fila of filas as Record<string, unknown>[]) {
       const fecha = String(fila.fecha);
-      const actual = resumen.get(fecha) ?? { ticket: 0, cancelados: 0 };
+      const actual = resumen.get(fecha) ?? {
+        totalVendido: 0,
+        ticket: 0,
+        cancelados: 0,
+      };
       resumen.set(fecha, {
+        totalVendido: actual.totalVendido + num(fila.total_vendido),
         ticket: actual.ticket + num(fila.ticket),
         cancelados: actual.cancelados + num(fila.cancelados),
       });
@@ -217,10 +250,6 @@ export class ReportesService {
       .select(agrupacionSql, 'fecha')
       .addSelect('COUNT(DISTINCT pe.id)', 'total_pedidos')
       .addSelect(`COALESCE(SUM(${UNIDADES_DETALLE}), 0)`, 'unidades_vendidas')
-      .addSelect(
-        `COALESCE(SUM(${UNIDADES_DETALLE} * dp.precio_unitario), 0)`,
-        'total_vendido',
-      )
       .groupBy(agrupacionSql)
       .orderBy('fecha', 'ASC')
       .getRawMany<Record<string, unknown>>();
@@ -229,15 +258,17 @@ export class ReportesService {
 
     return filas.map((fila) => {
       const fecha = String(fila.fecha);
-      const ticket = num(resumen.get(fecha)?.ticket);
+      const datosPedido = resumen.get(fecha);
+      const ticket = num(datosPedido?.ticket);
       return {
         fecha,
         total_pedidos: num(fila.total_pedidos),
         unidades_vendidas: num(fila.unidades_vendidas),
-        total_vendido: num(fila.total_vendido),
+        // `pedidos.total` es autoritativo y se agrega sin joins de detalle.
+        total_vendido: num(datosPedido?.totalVendido),
         ticket_promedio: ticket,
         promedio_ticket: ticket,
-        cancelados: num(resumen.get(fecha)?.cancelados),
+        cancelados: num(datosPedido?.cancelados),
       };
     });
   }
@@ -247,56 +278,37 @@ export class ReportesService {
     filtros: FiltroReportesDto | FiltrosEfectivos,
   ): Promise<ResumenGanancias> {
     const f = this.resolver(filtros);
+    // El costo sí depende del detalle; los ingresos y el ticket se toman de
+    // `pedidos.total` en una consulta separada para no duplicar por línea.
     const fila = await this.baseVentas(f)
       .select(
-        `COALESCE(SUM(${UNIDADES_DETALLE} * dp.precio_unitario), 0)`,
-        'ingresos',
-      )
-      .addSelect(
         `COALESCE(SUM(${UNIDADES_DETALLE} * COALESCE(p.precio_costo, 0)), 0)`,
         'costo',
       )
-      .addSelect(
-        `COALESCE(SUM(${UNIDADES_DETALLE} * (dp.precio_unitario - COALESCE(p.precio_costo, 0))), 0)`,
-        'utilidad_bruta',
-      )
-      .addSelect('COUNT(DISTINCT pe.id)', 'total_pedidos')
       .getRawOne<Record<string, unknown>>();
 
-    const condiciones = ["estado <> 'cancelado'"];
-    const params: unknown[] = [];
-    if (f.fechaInicio) {
-      condiciones.push(`creado_en >= $${params.length + 1}::date`);
-      params.push(f.fechaInicio);
-    }
-    if (f.fechaFin) {
-      condiciones.push(
-        `creado_en < ($${params.length + 1}::date + INTERVAL '1 day')`,
-      );
-      params.push(f.fechaFin);
-    }
-    if (f.vendedorId) {
-      condiciones.push(`procesado_por = $${params.length + 1}::int`);
-      params.push(f.vendedorId);
-    }
-    const ticketFila = await this.dataSource.query(
-      `SELECT COALESCE(AVG(total), 0) AS ticket_promedio
-       FROM pedidos
-       WHERE ${condiciones.join(' AND ')}`,
+    const { sql: condiciones, params } = this.condicionesPedidos(f);
+    const pedidoFila = await this.dataSource.query(
+      `SELECT COALESCE(SUM(total), 0) AS ingresos,
+              COALESCE(AVG(total), 0) AS ticket_promedio,
+              COUNT(*)::int AS total_pedidos
+       FROM pedidos pe
+       WHERE ${condiciones} AND pe.estado <> 'cancelado'`,
       params,
     );
-    const ticket = num(ticketFila?.[0]?.ticket_promedio);
 
-    const ingresos = num(fila?.ingresos);
-    const utilidadBruta = num(fila?.utilidad_bruta);
+    const ingresos = num(pedidoFila?.[0]?.ingresos);
+    const ticket = num(pedidoFila?.[0]?.ticket_promedio);
+    const costo = num(fila?.costo);
+    const utilidadBruta = redondear(ingresos - costo);
     return {
       ingresos,
-      costo: num(fila?.costo),
+      costo,
       utilidad_bruta: utilidadBruta,
       ganancia: utilidadBruta,
       margen_porcentual:
         ingresos > 0 ? redondear((utilidadBruta / ingresos) * 100) : 0,
-      total_pedidos: num(fila?.total_pedidos),
+      total_pedidos: num(pedidoFila?.[0]?.total_pedidos),
       ticket_promedio: ticket,
       promedio_ticket: ticket,
     };

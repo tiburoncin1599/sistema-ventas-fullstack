@@ -17,7 +17,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { join } from 'path';
-import { ProductosService } from './productos.service';
+import {
+  FiltrosCategoria,
+  ProductosService,
+} from './productos.service';
 import { CrearProductoDto } from './dto/crear-producto.dto';
 import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -36,6 +39,20 @@ const EXTENSIONES: Record<string, string> = {
   'image/gif': '.gif',
 };
 
+/** Parámetros opcionales de filtro por categoría, validados en el borde. */
+function filtrosCategoria(
+  categoriaId?: string,
+  sinCategoria?: string,
+): FiltrosCategoria | undefined {
+  if (sinCategoria === 'true') return { sinCategoria: true };
+  if (!categoriaId) return undefined;
+  const id = Number(categoriaId);
+  if (!Number.isInteger(id) || id < 1) {
+    throw new BadRequestException('categoriaId debe ser un entero positivo');
+  }
+  return { categoriaId: id };
+}
+
 @Controller('productos')
 export class ProductosController {
   constructor(
@@ -44,18 +61,29 @@ export class ProductosController {
   ) {}
 
   @Get()
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('categoriaId') categoriaId?: string,
+    @Query('sinCategoria') sinCategoria?: string,
+  ) {
     return this.productosService.findAll(
       Math.max(1, Number(page) || 1),
       Math.min(100, Math.max(1, Number(limit) || 50)),
+      filtrosCategoria(categoriaId, sinCategoria),
     );
   }
 
   @Get('admin')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'inventario')
-  findAllAdmin() {
-    return this.productosService.findAllInclusoInactivos();
+  findAllAdmin(
+    @Query('categoriaId') categoriaId?: string,
+    @Query('sinCategoria') sinCategoria?: string,
+  ) {
+    return this.productosService.findAllInclusoInactivos(
+      filtrosCategoria(categoriaId, sinCategoria),
+    );
   }
 
   @Get(':id')
@@ -83,6 +111,7 @@ export class ProductosController {
         codigo: body.codigo,
         precio: body.precio,
         activo: true,
+        categoria_id: body.categoria_id ?? null,
       },
       usuario_id: user.id,
       usuario_rol: user.rol,
@@ -125,12 +154,14 @@ export class ProductosController {
         precio: resultado.anterior.precio,
         activo: resultado.anterior.activo,
         stock: resultado.stockAnterior,
+        categoria_id: resultado.anterior.categoria?.id ?? null,
       },
       valor_nuevo: {
         nombre: resultado.actualizado.nombre,
         precio: resultado.actualizado.precio,
         activo: resultado.actualizado.activo,
         stock: resultado.stockNuevo,
+        categoria_id: resultado.actualizado.categoria?.id ?? null,
       },
       usuario_id: user.id,
       usuario_rol: user.rol,

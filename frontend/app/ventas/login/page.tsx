@@ -1,19 +1,70 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { normalizarRol } from '@/lib/roles';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  email,
+  mapearErroresBackend,
+  mensajeGeneral,
+  primero,
+  requerido,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
 import { Store } from 'lucide-react';
 
+type FormularioVentas = { email: string; password: string };
+
+const aliasErroresVentas: Partial<Record<string, keyof FormularioVentas | '_general'>> = {
+  'correo electrónico': 'email',
+  correo: 'email',
+  email: 'email',
+  contraseña: 'password',
+  password: 'password',
+};
+
 export default function VentasLoginPage() {
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [form, setForm] = useState<FormularioVentas>({ email: '', password: '' });
   const [cargando, setCargando] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const validar = useCallback(
+    (valores: FormularioVentas): ErroresFormulario<FormularioVentas> => {
+      const errores: ErroresFormulario<FormularioVentas> = {};
+
+      const mensajeEmail = primero(
+        requerido(valores.email, 'Ingresá tu correo electrónico'),
+        email(valores.email),
+      );
+      if (mensajeEmail) errores.email = mensajeEmail;
+
+      const mensajePassword = requerido(valores.password, 'Ingresá tu contraseña');
+      if (mensajePassword) errores.password = mensajePassword;
+
+      return errores;
+    },
+    [],
+  );
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    marcarTocado,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+  } = useValidacionFormulario<FormularioVentas>(validar);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // LoginDto: sin validación explícita no se puede llegar al api.post.
+    if (!validarTodo(form)) return;
+
     setCargando(true);
-    setError('');
     try {
       const res = await api.post('/auth/login', {
         email: form.email,
@@ -42,14 +93,24 @@ export default function VentasLoginPage() {
               : '/';
       window.location.assign(destino);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message || 'Credenciales incorrectas';
-      setError(msg);
+      const mapeados = mapearErroresBackend<FormularioVentas>(
+        err,
+        ['email', 'password'],
+        aliasErroresVentas,
+      );
+      aplicarErroresBackend(err, ['email', 'password'], aliasErroresVentas);
+      // Si viene un error de campo, el banner conserva el texto genérico del
+      // hook para no repetir el mismo mensaje debajo del input y arriba.
+      if (!Object.keys(mapeados).some((campo) => campo !== '_general')) {
+        setErrorGeneral(mensajeGeneral(err, 'Credenciales incorrectas'));
+      }
     } finally {
       setCargando(false);
     }
   };
+
+  const errorEmail = enviado || tocados.email ? errores.email : undefined;
+  const errorPassword = enviado || tocados.password ? errores.password : undefined;
 
   return (
     <main className="prolimal-page flex min-h-screen items-center justify-center px-4 py-16">
@@ -68,41 +129,59 @@ export default function VentasLoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                Email corporativo
-              </span>
-              <input
-                type="email"
-                autoComplete="email"
-                placeholder="vendedor@prolimac.com"
-                value={form.email}
-                onChange={e => setForm({ ...form, email: e.target.value })}
-                required
-                className="prolimal-input"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                Contraseña
-              </span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                placeholder="Tu contraseña"
-                value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                required
-                className="prolimal-input"
-              />
-            </label>
+          <AvisoErrorFormulario mensaje={errorGeneral} />
 
-            {error && (
-              <p className="rounded-2xl bg-prolimal-coral-100 px-4 py-3 text-sm font-semibold text-prolimal-coral-700 dark:bg-prolimal-coral-900/25 dark:text-prolimal-coral-300">
-                {error}
-              </p>
-            )}
+          <form noValidate onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block" htmlFor="ventas-email">
+                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Email corporativo
+                </span>
+                <input
+                  id="ventas-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="vendedor@prolimac.com"
+                  value={form.email}
+                  onChange={e => {
+                    const nuevo = { ...form, email: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('email', nuevo);
+                  }}
+                  onBlur={() => marcarTocado('email')}
+                  required
+                  className={claseCampo(Boolean(errorEmail), 'prolimal-input')}
+                  aria-invalid={Boolean(errorEmail)}
+                  aria-describedby={errorEmail ? 'ventas-email-error' : undefined}
+                />
+              </label>
+              <CampoError mensaje={errorEmail} id="ventas-email-error" />
+            </div>
+            <div>
+              <label className="block" htmlFor="ventas-password">
+                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Contraseña
+                </span>
+                <input
+                  id="ventas-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Tu contraseña"
+                  value={form.password}
+                  onChange={e => {
+                    const nuevo = { ...form, password: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('password', nuevo);
+                  }}
+                  onBlur={() => marcarTocado('password')}
+                  required
+                  className={claseCampo(Boolean(errorPassword), 'prolimal-input')}
+                  aria-invalid={Boolean(errorPassword)}
+                  aria-describedby={errorPassword ? 'ventas-password-error' : undefined}
+                />
+              </label>
+              <CampoError mensaje={errorPassword} id="ventas-password-error" />
+            </div>
 
             <button type="submit" disabled={cargando} className="prolimal-btn-primary w-full">
               {cargando ? 'Verificando...' : 'Ingresar'}

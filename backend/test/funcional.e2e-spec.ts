@@ -52,6 +52,7 @@ let invId: number;
 let clienteId: number;
 let ventas2Id: number;
 let ventas2Token: string;
+let categoriaId: number | undefined;
 
 // ─── HELPER: REQUEST AUTENTICADO ──────────────────────────────────────
 function authReq(
@@ -96,6 +97,8 @@ beforeAll(async () => {
       nombre: 'Admin E2E',
       email: ADMIN_EMAIL,
       password: ADMIN_PASS,
+      telefono: '71234567',
+      ubicacion: 'Cochabamba',
     });
   adminId = adminReg.body.usuario.id;
 
@@ -160,12 +163,24 @@ beforeAll(async () => {
       nombre: 'Cliente E2E',
       email: CLIENTE_EMAIL,
       password: CLIENTE_PASS,
+      telefono: '71234567',
+      ubicacion: 'Cochabamba',
     });
   clienteToken = clienteRes.body.token;
   clienteId = clienteRes.body.usuario.id;
 }, 90_000);
 
 afterAll(async () => {
+  // La suite crea una categoría `Categ ... ${TS}`; si no se borra queda como
+  // ruido en el filtro del catálogo. Solo se elimina si ya no tiene productos.
+  if (categoriaId) {
+    await app.get(DataSource).query(
+      `DELETE FROM categorias c
+        WHERE c.id = $1
+          AND NOT EXISTS (SELECT 1 FROM productos p WHERE p.categoria_id = c.id)`,
+      [categoriaId],
+    );
+  }
   await app.close();
 });
 
@@ -207,6 +222,8 @@ describe('1. Autenticación', () => {
         nombre: 'Nuevo Registro',
         email,
         password: 'Test123456',
+        telefono: '71234567',
+        ubicacion: 'Cochabamba',
       });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
@@ -221,9 +238,11 @@ describe('1. Autenticación', () => {
         nombre: 'Dup',
         email: ADMIN_EMAIL,
         password: 'Test123456',
+        telefono: '71234567',
+        ubicacion: 'Cochabamba',
       });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/email.*registrado/i);
+    expect(res.body.message).toMatch(/correo electrónico.*registrado/i);
   });
 });
 
@@ -311,8 +330,6 @@ describe('2. Productos', () => {
 // 3. CATEGORÍAS
 // ═══════════════════════════════════════════════════════════════════════
 describe('3. Categorías', () => {
-  let categoriaId: number;
-
   it('POST /categorias → crear categoría (admin)', async () => {
     const res = await authReq('post', '/categorias', adminToken).send({
       nombre: `Categ Test ${TS}`,
@@ -382,7 +399,9 @@ describe('4. Clientes', () => {
   it('POST /clientes → crear cliente (ventas)', async () => {
     const res = await authReq('post', '/clientes', ventasToken).send({
       nombre: `Cliente E2E Test ${TS}`,
+      email: `cliente.e2e.${TS}@test.com`,
       telefono: '71234567',
+      ubicacion: 'Cochabamba',
     });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();

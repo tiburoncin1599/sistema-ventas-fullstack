@@ -177,6 +177,37 @@ export class InventarioMovimientosService {
     });
   }
 
+  /** Delta con signo del movimiento; compartido por el Kardex individual y el global. */
+  private deltaMovimiento(movimiento: InventarioMovimiento) {
+    const tipo = String(movimiento.tipo).toLowerCase();
+    if (tipo === 'entrada' || tipo === 'devolucion') {
+      return Number(movimiento.cantidad);
+    }
+    if (tipo === 'salida' || tipo === 'venta') {
+      return -Number(movimiento.cantidad);
+    }
+    if (tipo === 'ajuste') {
+      const anterior = movimiento.cantidad_anterior;
+      const nueva = movimiento.cantidad_nueva;
+      return anterior !== null && anterior !== undefined &&
+        nueva !== null && nueva !== undefined
+        ? Number(nueva) - Number(anterior)
+        : Number(movimiento.cantidad);
+    }
+    return 0;
+  }
+
+  /** `cantidad_nueva` es la fuente de conciliación cuando el movimiento la guardó. */
+  private saldoMovimiento(
+    movimiento: InventarioMovimiento,
+    saldoAnterior: number,
+  ) {
+    return movimiento.cantidad_nueva !== null &&
+      movimiento.cantidad_nueva !== undefined
+      ? Number(movimiento.cantidad_nueva)
+      : saldoAnterior + this.deltaMovimiento(movimiento);
+  }
+
   async kardex(producto_id: number) {
     const movimientos = await this.movimientosRepo.find({
       where: { producto_id },
@@ -186,29 +217,53 @@ export class InventarioMovimientosService {
 
     let saldo = 0;
     return movimientos.map((m) => {
-      const tipo = String(m.tipo).toLowerCase();
-      const delta =
-        tipo === 'entrada' || tipo === 'devolucion'
-          ? Number(m.cantidad)
-          : tipo === 'salida' || tipo === 'venta'
-            ? -Number(m.cantidad)
-            : tipo === 'ajuste'
-              ? m.cantidad_anterior !== null && m.cantidad_nueva !== null
-                ? Number(m.cantidad_nueva) - Number(m.cantidad_anterior)
-                : Number(m.cantidad)
-              : 0;
-
-      // Cuando el movimiento guardó el saldo resultante, esa es la fuente de
-      // conciliación; si no, se reconstruye desde el delta.
-      saldo =
-        m.cantidad_nueva !== null && m.cantidad_nueva !== undefined
-          ? Number(m.cantidad_nueva)
-          : saldo + delta;
-
+      saldo = this.saldoMovimiento(m, saldo);
       return {
         ...m,
         saldo_actual: saldo,
       };
     });
+  }
+
+  /**
+   * Kardex global: saldo acumulado por producto calculado en orden cronológico
+   * y devuelto del movimiento más reciente al más antiguo para la tabla.
+   */
+  async kardexGeneral() {
+    const movimientos = await this.movimientosRepo.find({
+      relations: ['producto', 'usuario'],
+      order: { creado_en: 'ASC', id: 'ASC' },
+    });
+
+    const saldos = new Map<number, number>();
+    const filas = movimientos.map((m) => {
+      const saldo = this.saldoMovimiento(m, saldos.get(m.producto_id) ?? 0);
+      saldos.set(m.producto_id, saldo);
+
+      return {
+        id: m.id,
+        producto_id: m.producto_id,
+        producto: m.producto
+          ? {
+              id: m.producto.id,
+              nombre: m.producto.nombre,
+              codigo: m.producto.codigo ?? null,
+            }
+          : null,
+        tipo: m.tipo,
+        cantidad: Number(m.cantidad),
+        delta: this.deltaMovimiento(m),
+        cantidad_anterior: m.cantidad_anterior,
+        cantidad_nueva: m.cantidad_nueva,
+        motivo: m.motivo,
+        referencia_id: m.referencia_id,
+        referencia_tipo: m.referencia_tipo,
+        usuario: m.usuario ? { id: m.usuario.id, nombre: m.usuario.nombre } : null,
+        creado_en: m.creado_en,
+        saldo_actual: saldo,
+      };
+    });
+
+    return filas.reverse();
   }
 }

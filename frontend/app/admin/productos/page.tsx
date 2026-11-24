@@ -1,24 +1,67 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { api, API_URL } from '@/lib/api';
+import {
+  Categoria,
+  ProductoCatalogo,
+  SIN_CATEGORIA,
+  idCategoriaProducto,
+} from '@/lib/productos';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  requerido,
+  longitudMaxima,
+  numero,
+  numeroMinimo,
+  enteroMinimo,
+  primero,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, Search } from 'lucide-react';
 
-interface Producto {
-  id: number;
-  codigo?: string;
-  nombre: string;
-  descripcion?: string;
-  precio: number;
-  precio_costo?: number;
-  imagen_url?: string;
+interface Producto extends ProductoCatalogo {
   activo: boolean;
   stock: number;
   cantidad_minima?: number;
-  categoria: { id: number; nombre: string };
-  categoria_id?: number;
+}
+
+/** Campos editables del modal (los valores viajan como texto para poder validarlos). */
+type ProductoForm = {
+  codigo: string;
+  nombre: string;
+  descripcion: string;
+  precio: string;
+  precio_costo: string;
+  categoria_id: string;
+  stock: string;
+  // Opcionales del DTO que hoy no se muestran en el modal; se validan si llegan a enviarse.
+  precio_por_docena?: string;
+  factor_paquete?: string;
+  cantidad?: string;
+};
+
+const FORM_VACIO: ProductoForm = {
+  codigo: '',
+  nombre: '',
+  descripcion: '',
+  precio: '',
+  precio_costo: '',
+  categoria_id: '',
+  stock: '',
+};
+
+/** Deja sólo las claves con mensaje para no arrastrar errores `undefined` al estado. */
+function erroresNoVacios<T extends object>(
+  pares: Array<[keyof T | '_general', string | undefined]>,
+): ErroresFormulario<T> {
+  return pares.reduce<ErroresFormulario<T>>((acc, [campo, mensaje]) => {
+    if (mensaje) acc[campo] = mensaje;
+    return acc;
+  }, {});
 }
 
 /**
@@ -43,17 +86,98 @@ function ordenarProductos(lista: Producto[]): Producto[] {
 
 export default function AdminProductos() {
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [busqueda, setBusqueda] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState<number | 'all' | 'sin'>('all');
   const [modalProducto, setModalProducto] = useState<Producto | null>(null);
   const [creando, setCreando] = useState(false);
-  const [form, setForm] = useState({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '', stock: '' });
+  const [form, setForm] = useState<ProductoForm>(FORM_VACIO);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const validarProducto = useCallback(
+    (valores: ProductoForm): ErroresFormulario<ProductoForm> => {
+      const pares: Array<[keyof ProductoForm | '_general', string | undefined]> = [
+        ['nombre', requerido(valores.nombre, 'El nombre es obligatorio')],
+        [
+          'precio',
+          primero(
+            requerido(valores.precio, 'El precio es obligatorio'),
+            numero(valores.precio, 'El precio debe ser un número'),
+            numeroMinimo(valores.precio, 0, 'El precio no puede ser negativo'),
+          ),
+        ],
+        [
+          'codigo',
+          longitudMaxima(valores.codigo, 50, 'El código no puede superar los 50 caracteres'),
+        ],
+        [
+          'precio_costo',
+          primero(
+            numero(valores.precio_costo, 'El precio de costo debe ser un número'),
+            numeroMinimo(valores.precio_costo, 0, 'El precio de costo no puede ser negativo'),
+          ),
+        ],
+        [
+          'precio_por_docena',
+          primero(
+            numero(valores.precio_por_docena, 'El precio por docena debe ser un número'),
+            numeroMinimo(valores.precio_por_docena, 0, 'El precio por docena no puede ser negativo'),
+          ),
+        ],
+        [
+          'categoria_id',
+          enteroMinimo(valores.categoria_id, 1, 'Seleccioná una categoría válida'),
+        ],
+        [
+          'factor_paquete',
+          enteroMinimo(valores.factor_paquete, 1, 'El factor de paquete debe ser un entero mayor o igual a 1'),
+        ],
+        creando
+          ? ['stock', undefined]
+          : [
+              'stock',
+              primero(
+                requerido(valores.stock, 'El stock es obligatorio'),
+                enteroMinimo(valores.stock, 0, 'El stock debe ser un número entero mayor o igual a 0'),
+              ),
+            ],
+        [
+          'cantidad',
+          primero(
+            numero(valores.cantidad, 'La cantidad debe ser un número'),
+            numeroMinimo(valores.cantidad, 0, 'La cantidad no puede ser negativa'),
+          ),
+        ],
+      ];
+      return erroresNoVacios<ProductoForm>(pares);
+    },
+    [creando],
+  );
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+    reiniciar,
+  } = useValidacionFormulario<ProductoForm>(validarProducto);
+
+  const mensajeError = (campo: keyof ProductoForm) =>
+    enviado || tocados[campo] ? errores[campo] : undefined;
+
+  const actualizarCampo = (campo: keyof ProductoForm, valor: string) => {
+    const nuevo: ProductoForm = { ...form, [campo]: valor };
+    setForm(nuevo);
+    validarCampo(campo, nuevo);
+  };
 
   const cargarDatos = async () => {
     const [prods, cats] = await Promise.all([
       api.get('/productos/admin'),
-      api.get('/categorias'),
+      api.get('/categorias', { params: { limit: 100 } }),
     ]);
     setProductos(ordenarProductos(prods.data));
     setCategorias(cats.data);
@@ -63,7 +187,7 @@ export default function AdminProductos() {
     let activo = true;
     Promise.all([
       api.get('/productos/admin'),
-      api.get('/categorias'),
+      api.get('/categorias', { params: { limit: 100 } }),
     ])
       .then(([prods, cats]) => {
         if (!activo) return;
@@ -84,13 +208,15 @@ export default function AdminProductos() {
     setModalProducto(null);
     setCreando(false);
     limpiarArchivo();
+    reiniciar();
   };
 
   const abrirNuevo = () => {
     setCreando(true);
     setModalProducto(null);
-    setForm({ codigo: '', nombre: '', descripcion: '', precio: '', precio_costo: '', categoria_id: '', stock: '' });
+    setForm({ ...FORM_VACIO });
     limpiarArchivo();
+    reiniciar();
   };
 
   const abrirEditar = (p: Producto) => {
@@ -102,31 +228,29 @@ export default function AdminProductos() {
       descripcion: p.descripcion || '',
       precio: String(parseCurrency(p.precio)),
       precio_costo: p.precio_costo ? String(parseCurrency(p.precio_costo)) : '',
-      categoria_id: String(p.categoria_id || ''),
+      categoria_id: String(idCategoriaProducto(p) ?? ''),
       stock: String(p.stock ?? 0),
     });
     limpiarArchivo();
+    reiniciar();
   };
 
   const guardar = async () => {
+    if (!validarTodo(form)) return;
     try {
-      const { stock, ...campos } = form;
       const payload: Record<string, unknown> = {
-        ...campos,
-        codigo: campos.codigo.trim() || undefined,
-        precio: parseCurrency(campos.precio),
-        precio_costo: campos.precio_costo ? parseCurrency(campos.precio_costo) : undefined,
-        categoria_id: +campos.categoria_id || undefined,
+        codigo: form.codigo.trim() || undefined,
+        nombre: form.nombre,
+        descripcion: form.descripcion,
+        precio: parseCurrency(form.precio),
+        precio_costo: form.precio_costo ? parseCurrency(form.precio_costo) : undefined,
+        // '' = sin categoría (null explícito para poder desasociar).
+        categoria_id: form.categoria_id === '' ? null : Number(form.categoria_id),
       };
 
       if (!creando && modalProducto) {
-        const stockNuevo = Number(stock);
-        if (!Number.isInteger(stockNuevo) || stockNuevo < 0) {
-          alert('El stock debe ser un número entero mayor o igual a 0.');
-          return;
-        }
         // El backend valida, ajusta inventario y escribe el Kardex en una transacción.
-        payload.stock = stockNuevo;
+        payload.stock = Number(form.stock);
         await api.put(`/productos/${modalProducto.id}`, payload);
         if (fileRef.current?.files?.[0]) {
           const fd = new FormData();
@@ -142,13 +266,33 @@ export default function AdminProductos() {
         }
       }
 
-      setModalProducto(null);
-      setCreando(false);
-      limpiarArchivo();
+      cerrarModal();
       await cargarDatos();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al guardar';
-      alert(msg);
+      aplicarErroresBackend(
+        err,
+        [
+          'nombre', 'precio', 'codigo', 'precio_costo', 'precio_por_docena',
+          'categoria_id', 'factor_paquete', 'stock', '_general',
+        ],
+        {
+          codigo: 'codigo',
+          'código': 'codigo',
+          nombre: 'nombre',
+          precio_costo: 'precio_costo',
+          'precio de costo': 'precio_costo',
+          precio_por_docena: 'precio_por_docena',
+          'precio por docena': 'precio_por_docena',
+          categoria_id: 'categoria_id',
+          categoria: 'categoria_id',
+          'categoría': 'categoria_id',
+          factor_paquete: 'factor_paquete',
+          'factor de paquete': 'factor_paquete',
+          stock: 'stock',
+          cantidad: 'stock',
+        },
+        'No se pudo guardar el producto. Revisá los campos marcados.',
+      );
     }
   };
 
@@ -169,14 +313,28 @@ export default function AdminProductos() {
 
   const q = busqueda.trim().toLowerCase();
   const visibles = ordenarProductos(
-    q
-      ? productos.filter(p =>
-          p.nombre.toLowerCase().includes(q) ||
-          (p.codigo || '').toLowerCase().includes(q) ||
-          (p.categoria?.nombre || '').toLowerCase().includes(q),
-        )
-      : productos,
+    productos.filter(p => {
+      const coincideBusqueda =
+        !q ||
+        p.nombre.toLowerCase().includes(q) ||
+        (p.codigo || '').toLowerCase().includes(q) ||
+        (p.categoria?.nombre || '').toLowerCase().includes(q);
+      const idCategoria = idCategoriaProducto(p);
+      const coincideCategoria =
+        categoriaFiltro === 'all' ||
+        (categoriaFiltro === SIN_CATEGORIA
+          ? idCategoria === null
+          : idCategoria === categoriaFiltro);
+      return coincideBusqueda && coincideCategoria;
+    }),
   );
+
+  const errorCodigo = mensajeError('codigo');
+  const errorNombre = mensajeError('nombre');
+  const errorPrecio = mensajeError('precio');
+  const errorPrecioCosto = mensajeError('precio_costo');
+  const errorStock = mensajeError('stock');
+  const errorCategoria = mensajeError('categoria_id');
 
   return (
     <div className="pb-10">
@@ -201,6 +359,25 @@ export default function AdminProductos() {
               className="prolimal-search-input"
             />
           </div>
+          <select
+            aria-label="Filtrar por categoría"
+            value={categoriaFiltro}
+            onChange={e => {
+              const valor = e.target.value;
+              setCategoriaFiltro(
+                valor === 'all' || valor === SIN_CATEGORIA
+                  ? valor
+                  : Number(valor),
+              );
+            }}
+            className="prolimal-input sm:w-56"
+          >
+            <option value="all">Todas las categorías</option>
+            {categorias.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+            ))}
+            <option value={SIN_CATEGORIA}>Sin categoría</option>
+          </select>
           <button onClick={abrirNuevo} className="prolimal-btn-primary whitespace-nowrap">
             <Plus className="h-4 w-4" />
             Nuevo producto
@@ -300,20 +477,63 @@ export default function AdminProductos() {
                   {creando ? 'Nuevo producto' : 'Editar producto'}
                 </h2>
               </div>
+              <AvisoErrorFormulario mensaje={errorGeneral} />
               <div className="space-y-3">
-                <input placeholder="Código (opcional, se usa en el POS)" value={form.codigo}
-                  onChange={e => setForm({ ...form, codigo: e.target.value })}
-                  className="prolimal-input" />
-                <input placeholder="Nombre" value={form.nombre}
-                  onChange={e => setForm({ ...form, nombre: e.target.value })}
-                  className="prolimal-input" />
+                <div>
+                  <input
+                    id="codigo-producto"
+                    placeholder="Código (opcional, se usa en el POS)"
+                    value={form.codigo}
+                    onChange={e => actualizarCampo('codigo', e.target.value)}
+                    className={claseCampo(Boolean(errorCodigo), 'prolimal-input')}
+                    aria-invalid={Boolean(errorCodigo)}
+                    aria-describedby={errorCodigo ? 'error-codigo-producto' : undefined}
+                  />
+                  <CampoError id="error-codigo-producto" mensaje={errorCodigo} />
+                </div>
+                <div>
+                  <input
+                    id="nombre-producto"
+                    placeholder="Nombre"
+                    value={form.nombre}
+                    onChange={e => actualizarCampo('nombre', e.target.value)}
+                    className={claseCampo(Boolean(errorNombre), 'prolimal-input')}
+                    aria-invalid={Boolean(errorNombre)}
+                    aria-describedby={errorNombre ? 'error-nombre-producto' : undefined}
+                  />
+                  <CampoError id="error-nombre-producto" mensaje={errorNombre} />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <input placeholder="Precio venta" type="number" step="0.01" value={form.precio}
-                    onChange={e => setForm({ ...form, precio: e.target.value })}
-                    className="prolimal-input" />
-                  <input placeholder="Precio costo" type="number" step="0.01" value={form.precio_costo}
-                    onChange={e => setForm({ ...form, precio_costo: e.target.value })}
-                    className="prolimal-input" />
+                  <div>
+                    <input
+                      id="precio-producto"
+                      placeholder="Precio venta"
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={form.precio}
+                      onChange={e => actualizarCampo('precio', e.target.value)}
+                      className={claseCampo(Boolean(errorPrecio), 'prolimal-input')}
+                      aria-invalid={Boolean(errorPrecio)}
+                      aria-describedby={errorPrecio ? 'error-precio-producto' : undefined}
+                    />
+                    <CampoError id="error-precio-producto" mensaje={errorPrecio} />
+                  </div>
+                  <div>
+                    <input
+                      id="precio-costo-producto"
+                      placeholder="Precio costo"
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={form.precio_costo}
+                      onChange={e => actualizarCampo('precio_costo', e.target.value)}
+                      className={claseCampo(Boolean(errorPrecioCosto), 'prolimal-input')}
+                      aria-invalid={Boolean(errorPrecioCosto)}
+                      aria-describedby={errorPrecioCosto ? 'error-precio-costo-producto' : undefined}
+                    />
+                    <CampoError id="error-precio-costo-producto" mensaje={errorPrecioCosto} />
+                  </div>
                 </div>
                 {!creando && (
                   <div>
@@ -327,24 +547,35 @@ export default function AdminProductos() {
                       step={1}
                       placeholder="Stock actual"
                       value={form.stock}
-                      onChange={e => setForm({ ...form, stock: e.target.value })}
-                      className="prolimal-input"
+                      onChange={e => actualizarCampo('stock', e.target.value)}
+                      className={claseCampo(Boolean(errorStock), 'prolimal-input')}
+                      aria-invalid={Boolean(errorStock)}
+                      aria-describedby={errorStock ? 'error-stock-producto ayuda-stock-producto' : 'ayuda-stock-producto'}
                     />
-                    <p className="mt-1 text-[11px] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    <CampoError id="error-stock-producto" mensaje={errorStock} />
+                    <p id="ayuda-stock-producto" className="mt-1 text-[11px] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                       Al guardar un valor distinto se registra un ajuste en el Kardex.
                     </p>
                   </div>
                 )}
-                <select value={form.categoria_id}
-                  onChange={e => setForm({ ...form, categoria_id: e.target.value })}
-                  className="prolimal-input">
-                  <option value="">Sin categoría</option>
-                  {categorias.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                  ))}
-                </select>
+                <div>
+                  <select
+                    id="categoria-producto"
+                    value={form.categoria_id}
+                    onChange={e => actualizarCampo('categoria_id', e.target.value)}
+                    className={claseCampo(Boolean(errorCategoria), 'prolimal-input')}
+                    aria-invalid={Boolean(errorCategoria)}
+                    aria-describedby={errorCategoria ? 'error-categoria-producto' : undefined}
+                  >
+                    <option value="">Sin categoría</option>
+                    {categorias.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                    ))}
+                  </select>
+                  <CampoError id="error-categoria-producto" mensaje={errorCategoria} />
+                </div>
                 <textarea placeholder="Descripción" value={form.descripcion}
-                  onChange={e => setForm({ ...form, descripcion: e.target.value })}
+                  onChange={e => actualizarCampo('descripcion', e.target.value)}
                   className="prolimal-input" rows={3} />
                 <div>
                   <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Imagen</label>

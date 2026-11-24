@@ -4,10 +4,13 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
+  ArrowLeftRight,
   ArrowUpRight,
   BarChart3,
+  BellRing,
   Boxes,
   ClipboardList,
+  List,
   MapPin,
   Package,
   Store,
@@ -63,7 +66,10 @@ function obtenerUsuarioServidor() {
 const seccionesAdmin: SeccionAdmin[] = [
   { href: '/admin/productos', titulo: 'Productos', desc: 'Crear, editar y desactivar productos del catálogo', roles: ['admin', 'inventario'], Icono: Package },
   { href: '/admin/inventario', titulo: 'Inventario', desc: 'Controlar stock y cantidades mínimas', roles: ['admin', 'inventario'], Icono: Boxes },
+  { href: '/admin/kardex', titulo: 'Kardex', desc: 'Entradas, salidas y saldos de inventario', roles: ['admin', 'inventario'], Icono: ArrowLeftRight },
+  { href: '/admin/notificaciones', titulo: 'Notificaciones', desc: 'Avisos activos e historial de envíos', roles: ['admin', 'inventario', 'ventas'], Icono: BellRing },
   { href: '/admin/pedidos', titulo: 'Pedidos', desc: 'Administrar pedidos de clientes', roles: ['admin', 'inventario'], Icono: ClipboardList },
+  { href: '/admin/listado-pedidos', titulo: 'Listado de pedidos', desc: 'Ver fecha, monto y estado de todos los pedidos', roles: ['admin', 'inventario'], Icono: List },
   { href: '/admin/ubicaciones', titulo: 'Ubicaciones', desc: 'Seguimiento de vendedores en el mapa', roles: ['admin', 'inventario'], Icono: MapPin },
   { href: '/admin/clientes', titulo: 'Clientes', desc: 'Registrar y administrar clientes', roles: ['admin'], Icono: Users },
   { href: '/admin/usuarios', titulo: 'Usuarios', desc: 'Gestionar empleados y asignar roles', roles: ['admin'], Icono: UserCog },

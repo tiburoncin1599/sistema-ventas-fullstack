@@ -55,7 +55,7 @@ export default function VentasLayout({
       <header className="sticky top-0 z-30 border-b border-prolimal-ink-900/10 bg-prolimal-sand-50/85 backdrop-blur-xl dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-900/85">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <Link href="/ventas" className="flex min-w-0 items-center gap-3">
+            <Link href="/ventas" prefetch={false} className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-prolimal-ink-900 text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900">
                 <Store className="h-4 w-4" />
               </span>
@@ -86,6 +86,7 @@ export default function VentasLayout({
                   <Link
                     key={seccion.href}
                     href={seccion.href}
+                    prefetch={false}
                     className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
                       esActivo
                         ? 'bg-prolimal-ink-900 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
@@ -122,6 +123,7 @@ export default function VentasLayout({
         <div className="flex h-[5.5rem] items-center justify-between gap-3 border-b border-white/10 px-5">
           <Link
             href="/"
+            prefetch={false}
             className="flex min-w-0 cursor-pointer items-center gap-3 transition-opacity hover:opacity-80"
             onClick={() => setMenuOpen(false)}
           >
@@ -178,6 +180,7 @@ export default function VentasLayout({
                 <Link
                   key={seccion.href}
                   href={seccion.href}
+                  prefetch={false}
                   onClick={() => {
                     setSeccionActual(seccion.href);
                     setMenuOpen(false);

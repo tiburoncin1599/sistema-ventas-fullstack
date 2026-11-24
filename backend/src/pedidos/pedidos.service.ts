@@ -985,6 +985,24 @@ export class PedidosService {
     return fin;
   }
 
+  /**
+   * Proyección aditiva de datos del cliente ya cargados en la relación.
+   * Solo campos incluidos en la lista blanca: nunca se hace spread de la
+   * entidad `Usuario`, porque eso omitiría el `@Exclude()` de `password_hash`.
+   */
+  private datosClientePedido(pedido: Pedido) {
+    const cliente = pedido.usuario;
+    return {
+      cliente_carnet: cliente?.carnet?.trim() || null,
+      cliente_telefono: cliente?.telefono?.trim() || null,
+      cliente_email: cliente?.email?.trim() || null,
+      cliente_ubicacion: cliente?.ubicacion?.trim() || null,
+      direccion_entrega: pedido.direccion_entrega?.trim() || null,
+      notas: pedido.notas?.trim() || null,
+      tipo_pago: pedido.tipo_pago ?? 'CONTADO',
+    };
+  }
+
   async ventasPersonal(desde?: Date, hasta?: Date, usuarioId?: number) {
     const query = this.pedidosRepo
       .createQueryBuilder('pedido')
@@ -1059,6 +1077,7 @@ export class PedidosService {
           estado: p.estado,
           fecha: p.creado_en,
           cliente: p.usuario?.nombre || '',
+          ...this.datosClientePedido(p),
           productos: itemsPorPedido.get(p.id) || [],
         });
         pedidosPorUsuario.set(p.procesado_por, arr);

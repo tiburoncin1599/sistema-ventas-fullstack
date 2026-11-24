@@ -5,7 +5,7 @@ export class CrearDeudaDto {
   usuarioId!: number;
 
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   monto!: number;
 
   @IsOptional()

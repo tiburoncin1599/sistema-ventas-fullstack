@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, CheckCircle2, MessageCircle, Package, ShieldCheck } from 'lucide-react';
@@ -9,10 +9,18 @@ import {
   claveLinea,
   presentacionDe,
   CANTIDAD_MINIMA,
+  type ProductoCarrito,
 } from '@/store/carrito';
 import { api } from '@/lib/api';
 import { formatCurrency, parseCurrency } from '@/lib/utils';
 import { unidadesDe } from '@/lib/conversion';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  enteroMinimo,
+  mensajeGeneral,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError } from '@/components/ui/CampoError';
 
 const WHATSAPP_NUMERO = process.env.NEXT_PUBLIC_WHATSAPP || '59170000000';
 
@@ -21,13 +29,112 @@ const etiquetaPresentacion = (tipo: string, cantidad = 2) =>
     ? cantidad === 1 ? 'unidad' : 'unidades'
     : cantidad === 1 ? 'paquete' : 'paquetes';
 
+/** Claves dinámicas para los mensajes de cada línea del carrito. */
+type ClaveErrorItem = `item:${string}`;
+type ItemValidacion = ProductoCarrito & { cantidad: number };
+type FormularioCheckout = {
+  items: ItemValidacion[];
+} & Partial<Record<ClaveErrorItem, ItemValidacion>>;
+
+const CAMPOS_CHECKOUT: Array<keyof FormularioCheckout | '_general'> = [
+  'items',
+  '_general',
+];
+
+const ALIAS_CHECKOUT: Partial<Record<string, keyof FormularioCheckout | '_general'>> = {
+  usuarioId: '_general',
+  cliente: '_general',
+  items: 'items',
+  productos: 'items',
+};
+
+const claveErrorItem = (item: ItemValidacion): ClaveErrorItem =>
+  `item:${claveLinea(item.id, presentacionDe(item))}`;
+
+const formCheckout = (actuales: ItemValidacion[]): FormularioCheckout => {
+  const form: FormularioCheckout = { items: actuales };
+  for (const item of actuales) form[claveErrorItem(item)] = item;
+  return form;
+};
+
 export default function CheckoutPage() {
   const { items, total, vaciar } = useCarrito();
   const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState('');
   const [pedidoCreado, setPedidoCreado] = useState(false);
   const [pedidoId, setPedidoId] = useState<number | null>(null);
   const router = useRouter();
+
+  const validar = useCallback(
+    (form: FormularioCheckout): ErroresFormulario<FormularioCheckout> => {
+      const errores: ErroresFormulario<FormularioCheckout> = {};
+
+      if (form.items.length === 0) {
+        errores.items =
+          'Agregá al menos un producto al carrito antes de confirmar el pedido.';
+        return errores;
+      }
+
+      for (const item of form.items) {
+        const tipo = presentacionDe(item);
+        const minimo = CANTIDAD_MINIMA[tipo];
+        const errorCantidad = enteroMinimo(
+          item.cantidad,
+          minimo,
+          `"${item.nombre}": el pedido mínimo es de ${minimo} ${etiquetaPresentacion(tipo, minimo)}. Ajustá la cantidad en el carrito.`,
+        );
+        if (errorCantidad) errores[claveErrorItem(item)] = errorCantidad;
+      }
+
+      // El stock se mide en unidades físicas y se comparte entre las líneas
+      // UNIDAD y PAQUETE del mismo producto, así que se agrupa por producto.
+      const porProducto = new Map<
+        number,
+        { nombre: string; unidades: number; stock?: number }
+      >();
+      for (const item of form.items) {
+        const grupo = porProducto.get(item.id) ?? {
+          nombre: item.nombre,
+          unidades: 0,
+          stock: item.stock,
+        };
+        grupo.unidades += unidadesDe(item);
+        if (typeof item.stock === 'number') grupo.stock = item.stock;
+        porProducto.set(item.id, grupo);
+      }
+      for (const [id, grupo] of porProducto.entries()) {
+        if (grupo.stock === undefined || grupo.unidades <= grupo.stock) continue;
+        const mensaje = `"${grupo.nombre}": stock insuficiente. Se necesitan ${grupo.unidades} unidades en total y solo hay ${grupo.stock} disponibles.`;
+        errores.items = mensaje;
+        for (const item of form.items.filter(i => i.id === id)) {
+          if (!errores[claveErrorItem(item)]) {
+            errores[claveErrorItem(item)] = mensaje;
+          }
+        }
+      }
+
+      return errores;
+    },
+    [],
+  );
+
+  const {
+    errores,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+  } = useValidacionFormulario<FormularioCheckout>(validar);
+
+  // El carrito puede cambiar fuera de esta página (store persistido/otra
+  // pestaña): cada cambio recalcula los mensajes en vivo.
+  useEffect(() => {
+    const form = formCheckout(items);
+    validarCampo('items', form);
+    for (const item of items) validarCampo(claveErrorItem(item), form);
+    setErrorGeneral('');
+  }, [items, validarCampo, setErrorGeneral]);
 
   const confirmar = async () => {
     let usuario: { id?: number } = {};
@@ -39,54 +146,10 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Sin carrito, mínimo por presentación o stock: no se llama a api.post.
+    if (!validarTodo(formCheckout(items))) return;
+
     setCargando(true);
-    setError('');
-
-    // El stock se mide en unidades físicas y se comparte entre las líneas
-    // UNIDAD y PAQUETE del mismo producto, así que se agrupa por producto.
-    const porProducto = new Map<
-      number,
-      { nombre: string; unidades: number; stock?: number }
-    >();
-    for (const i of items) {
-      const grupo = porProducto.get(i.id) ?? {
-        nombre: i.nombre,
-        unidades: 0,
-        stock: i.stock,
-      };
-      grupo.unidades += unidadesDe(i);
-      if (typeof i.stock === 'number') grupo.stock = i.stock;
-      porProducto.set(i.id, grupo);
-    }
-    let sinStock: { nombre: string; unidades: number; stock: number } | null = null;
-    for (const grupo of porProducto.values()) {
-      if (grupo.stock !== undefined && grupo.unidades > grupo.stock) {
-        sinStock = {
-          nombre: grupo.nombre,
-          unidades: grupo.unidades,
-          stock: grupo.stock,
-        };
-        break;
-      }
-    }
-    if (sinStock) {
-      setError(`Stock insuficiente de "${sinStock.nombre}". Se necesitan ${sinStock.unidades} unidades en total y solo hay ${sinStock.stock} disponibles.`);
-      setCargando(false);
-      return;
-    }
-
-    const bajoMinimo = items.find(
-      i => i.cantidad < CANTIDAD_MINIMA[presentacionDe(i)],
-    );
-    if (bajoMinimo) {
-      const tipo = presentacionDe(bajoMinimo);
-      setError(
-        `"${bajoMinimo.nombre}": el pedido mínimo es de ${CANTIDAD_MINIMA[tipo]} ${etiquetaPresentacion(tipo, CANTIDAD_MINIMA[tipo])}. Ajustá la cantidad en el carrito.`,
-      );
-      setCargando(false);
-      return;
-    }
-
     try {
       const res = await api.post('/pedidos', {
         usuarioId: usuario.id,
@@ -104,8 +167,8 @@ export default function CheckoutPage() {
       vaciar();
       setPedidoCreado(true);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al confirmar el pedido';
-      setError(msg);
+      aplicarErroresBackend(err, CAMPOS_CHECKOUT, ALIAS_CHECKOUT);
+      setErrorGeneral(mensajeGeneral(err, 'Error al confirmar el pedido.'));
     } finally {
       setCargando(false);
     }
@@ -115,6 +178,7 @@ export default function CheckoutPage() {
     return (
       <main className="prolimal-page flex min-h-[70vh] items-center justify-center px-4">
         <div className="max-w-md text-center">
+          <AvisoErrorFormulario mensaje={errorGeneral || (enviado ? errores.items : undefined)} />
           <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-prolimal-sand-200 dark:bg-prolimal-ink-800">
             <Package className="h-10 w-10 text-prolimal-ink-500 dark:text-prolimal-ink-300" />
           </div>
@@ -182,6 +246,10 @@ export default function CheckoutPage() {
           Revisá tu selección. Después de confirmar, coordinamos la entrega por WhatsApp.
         </p>
 
+        <div className="mt-8">
+          <AvisoErrorFormulario mensaje={errorGeneral || (enviado ? errores.items : undefined)} />
+        </div>
+
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.12fr_0.88fr]">
           <section className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-5 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-6">
             <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
@@ -190,24 +258,33 @@ export default function CheckoutPage() {
             <div className="mt-4 divide-y divide-prolimal-ink-900/10 dark:divide-prolimal-sand-100/10">
               {items.map(item => {
                 const unidades = unidadesDe(item);
-                const esPaquete = presentacionDe(item) === 'PAQUETE';
+                const tipo = presentacionDe(item);
+                const esPaquete = tipo === 'PAQUETE';
+                const mensajeItem = enviado ? errores[claveErrorItem(item)] : undefined;
                 return (
                   <div
-                    key={claveLinea(item.id, presentacionDe(item))}
-                    className="flex items-center justify-between gap-4 py-4 first:pt-0"
+                    key={claveLinea(item.id, tipo)}
+                    className={`py-4 first:pt-0 ${
+                      mensajeItem
+                        ? 'rounded-2xl border border-red-500 bg-red-50/60 px-3 dark:border-red-500/60 dark:bg-red-500/10'
+                        : ''
+                    }`}
                   >
-                    <div className="min-w-0">
-                      <p className="break-words font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
-                        {item.nombre}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
-                        x{item.cantidad} · {esPaquete ? 'paquetes' : 'unidades'}
-                        {esPaquete && ` · ${unidades} unid.`}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="break-words font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
+                          {item.nombre}
+                        </p>
+                        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                          x{item.cantidad} · {esPaquete ? 'paquetes' : 'unidades'}
+                          {esPaquete && ` · ${unidades} unid.`}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">
+                        {formatCurrency(parseCurrency(item.precio) * unidades)}
                       </p>
                     </div>
-                    <p className="shrink-0 font-extrabold text-prolimal-ink-900 dark:text-prolimal-sand-50">
-                      {formatCurrency(parseCurrency(item.precio) * unidades)}
-                    </p>
+                    <CampoError mensaje={mensajeItem} />
                   </div>
                 );
               })}
@@ -241,12 +318,6 @@ export default function CheckoutPage() {
             </div>
 
             <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-prolimal-ink-900 p-6 text-prolimal-sand-50 dark:border-prolimal-sand-100/10">
-              {error && (
-                <p className="mb-4 rounded-2xl border border-prolimal-red-400/30 bg-prolimal-red-500/15 px-4 py-3 text-sm font-medium text-prolimal-red-100">
-                  {error}
-                </p>
-              )}
-
               <button
                 type="button"
                 onClick={confirmar}

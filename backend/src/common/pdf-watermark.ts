@@ -14,7 +14,7 @@ type DocumentoPDF = typeof import('pdfkit');
  * se usa un texto tenue como respaldo.
  */
 
-let logoCache: Buffer | null | undefined;
+let logoCache: Buffer | undefined;
 
 function rutasCandidate(): string[] {
   const nombres = ['logo.png', 'logo.jpg'];
@@ -28,22 +28,40 @@ function rutasCandidate(): string[] {
   );
 }
 
-function obtenerLogo(): Buffer | null {
-  if (logoCache !== undefined) return logoCache;
+/**
+ * Resuelve el logo PROLIMAC para la marca de agua y para los encabezados.
+ * `PDF_LOGO_PATH`/`LOGO_PATH` permiten montarlo por volumen en Docker;
+ * después se prueban las rutas del repositorio (local, dist y contenedor).
+ * No se cachea un resultado negativo: si el archivo se agrega después,
+ * la siguiente petición lo encuentra sin reiniciar el proceso.
+ */
+export function rutaLogoLocal(): string | null {
+  const candidatos = [
+    process.env.PDF_LOGO_PATH,
+    process.env.LOGO_PATH,
+    ...rutasCandidate(),
+  ].filter((ruta): ruta is string => Boolean(ruta));
 
-  for (const ruta of rutasCandidate()) {
+  for (const ruta of candidatos) {
     try {
-      if (existsSync(ruta)) {
-        logoCache = readFileSync(ruta);
-        return logoCache;
-      }
+      if (existsSync(ruta)) return ruta;
     } catch {
       // Se prueba la siguiente ruta candidata.
     }
   }
-
-  logoCache = null;
   return null;
+}
+
+function obtenerLogo(): Buffer | null {
+  if (logoCache) return logoCache;
+  const ruta = rutaLogoLocal();
+  if (!ruta) return null;
+  try {
+    logoCache = readFileSync(ruta);
+    return logoCache;
+  } catch {
+    return null;
+  }
 }
 
 export function instalarMarcaAgua(

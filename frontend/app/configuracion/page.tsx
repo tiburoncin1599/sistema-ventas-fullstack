@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Save, Edit, Settings, X } from 'lucide-react';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
+import { email, mensajeGeneral, numeroMinimo, requerido } from '@/lib/validacion';
 
 interface Configuracion {
   id: number;
@@ -52,7 +55,35 @@ export default function ConfiguracionPage() {
   });
   const [cargando, setCargando] = useState(true);
   const [editando, setEditando] = useState(false);
-  const [error, setError] = useState('');
+
+  const validar = (form: Configuracion) => ({
+    nombre_empresa: requerido(form.nombre_empresa, 'El nombre de la empresa es obligatorio'),
+    moneda: requerido(form.moneda, 'La moneda es obligatoria'),
+    impuesto_porcentaje: numeroMinimo(form.impuesto_porcentaje, 0, 'El impuesto no puede ser negativo'),
+    email_empresa: email(form.email_empresa, 'Ingresá un correo corporativo válido'),
+    stock_minimo_alerta: numeroMinimo(form.stock_minimo_alerta, 1, 'El stock mínimo debe ser al menos 1'),
+  });
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    marcarTocado,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+  } = useValidacionFormulario<Configuracion>(validar);
+
+  const errorDe = (campo: keyof Configuracion) =>
+    enviado || tocados[campo] ? errores[campo] : undefined;
+
+  const actualizar = <K extends keyof Configuracion>(campo: K, valor: Configuracion[K]) => {
+    const nuevo = { ...config, [campo]: valor };
+    setConfig(nuevo);
+    validarCampo(campo, nuevo);
+  };
 
   useEffect(() => {
     api.get('/configuracion').then(res => {
@@ -64,13 +95,22 @@ export default function ConfiguracionPage() {
   }, []);
 
   const guardar = async () => {
+    if (!validarTodo(config)) {
+      setErrorGeneral('Revisá los campos marcados en rojo antes de guardar.');
+      return;
+    }
     try {
-      setError('');
+      setErrorGeneral('');
       await api.put('/configuracion', config);
       setEditando(false);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al guardar configuración';
-      setError(msg);
+      aplicarErroresBackend(
+        err,
+        ['nombre_empresa', 'moneda', 'impuesto_porcentaje', 'email_empresa', 'stock_minimo_alerta'],
+        { correo: 'email_empresa' },
+        'No se pudo guardar la configuración.',
+      );
+      setErrorGeneral(mensajeGeneral(err, 'No se pudo guardar la configuración.'));
     }
   };
 
@@ -85,50 +125,61 @@ export default function ConfiguracionPage() {
         </p>
       </div>
 
-      {error && (
-        <div className="mb-6 rounded-2xl border border-prolimal-red-300/60 bg-prolimal-red-50 px-5 py-3 text-sm font-semibold text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
-          {error}
-        </div>
-      )}
+      <AvisoErrorFormulario mensaje={errorGeneral} />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
           <h2 className="prolimal-display text-xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50 mb-4">Datos de la empresa</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
+              <label htmlFor="config-nombre-empresa" className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
                 Nombre de la empresa
               </label>
               <input
+                id="config-nombre-empresa"
                 value={config.nombre_empresa || ''}
-                onChange={e => setConfig(m => ({ ...m, nombre_empresa: e.target.value }))}
-                className="prolimal-input"
+                onChange={e => actualizar('nombre_empresa', e.target.value)}
+                onBlur={() => marcarTocado('nombre_empresa')}
+                aria-invalid={Boolean(errorDe('nombre_empresa'))}
+                aria-describedby={errorDe('nombre_empresa') ? 'config-nombre-empresa-error' : undefined}
+                className={claseCampo(Boolean(errorDe('nombre_empresa')), 'prolimal-input')}
                 placeholder="Prolimac SRL"
               />
+              <CampoError mensaje={errorDe('nombre_empresa')} id="config-nombre-empresa-error" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
+              <label htmlFor="config-moneda" className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
                 Moneda
               </label>
               <input
+                id="config-moneda"
                 value={config.moneda || 'Bs'}
-                onChange={e => setConfig(m => ({ ...m, moneda: e.target.value }))}
-                className="prolimal-input"
+                onChange={e => actualizar('moneda', e.target.value)}
+                onBlur={() => marcarTocado('moneda')}
+                aria-invalid={Boolean(errorDe('moneda'))}
+                aria-describedby={errorDe('moneda') ? 'config-moneda-error' : undefined}
+                className={claseCampo(Boolean(errorDe('moneda')), 'prolimal-input')}
                 placeholder="Bs"
               />
+              <CampoError mensaje={errorDe('moneda')} id="config-moneda-error" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
+              <label htmlFor="config-impuesto" className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
                 Porcentaje de impuesto
               </label>
               <input
+                id="config-impuesto"
                 type="number"
                 min={0}
                 value={config.impuesto_porcentaje ?? 0}
-                onChange={e => setConfig(m => ({ ...m, impuesto_porcentaje: Number(e.target.value) }))}
-                className="prolimal-input"
+                onChange={e => actualizar('impuesto_porcentaje', e.target.value === '' ? 0 : Number(e.target.value))}
+                onBlur={() => marcarTocado('impuesto_porcentaje')}
+                aria-invalid={Boolean(errorDe('impuesto_porcentaje'))}
+                aria-describedby={errorDe('impuesto_porcentaje') ? 'config-impuesto-error' : undefined}
+                className={claseCampo(Boolean(errorDe('impuesto_porcentaje')), 'prolimal-input')}
                 placeholder="0"
               />
+              <CampoError mensaje={errorDe('impuesto_porcentaje')} id="config-impuesto-error" />
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
@@ -175,15 +226,21 @@ export default function ConfiguracionPage() {
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
+              <label htmlFor="config-email" className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
                 Email corporativo
               </label>
               <input
+                id="config-email"
+                type="email"
                 value={config.email_empresa || ''}
-                onChange={e => setConfig(m => ({ ...m, email_empresa: e.target.value }))}
-                className="prolimal-input"
+                onChange={e => actualizar('email_empresa', e.target.value)}
+                onBlur={() => marcarTocado('email_empresa')}
+                aria-invalid={Boolean(errorDe('email_empresa'))}
+                aria-describedby={errorDe('email_empresa') ? 'config-email-error' : undefined}
+                className={claseCampo(Boolean(errorDe('email_empresa')), 'prolimal-input')}
                 placeholder="contacto@prolimac.com"
               />
+              <CampoError mensaje={errorDe('email_empresa')} id="config-email-error" />
             </div>
           </div>
         </div>
@@ -229,17 +286,22 @@ export default function ConfiguracionPage() {
               </label>
             </div>
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
+              <label htmlFor="config-stock-minimo" className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
                 Stock mínimo de alerta
               </label>
               <input
+                id="config-stock-minimo"
                 type="number"
                 min={1}
                 value={config.stock_minimo_alerta ?? 5}
-                onChange={e => setConfig(m => ({ ...m, stock_minimo_alerta: Number(e.target.value) }))}
-                className="prolimal-input"
+                onChange={e => actualizar('stock_minimo_alerta', e.target.value === '' ? 0 : Number(e.target.value))}
+                onBlur={() => marcarTocado('stock_minimo_alerta')}
+                aria-invalid={Boolean(errorDe('stock_minimo_alerta'))}
+                aria-describedby={errorDe('stock_minimo_alerta') ? 'config-stock-minimo-error' : undefined}
+                className={claseCampo(Boolean(errorDe('stock_minimo_alerta')), 'prolimal-input')}
                 placeholder="5"
               />
+              <CampoError mensaje={errorDe('stock_minimo_alerta')} id="config-stock-minimo-error" />
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300 mb-2">
@@ -272,7 +334,8 @@ export default function ConfiguracionPage() {
               </button>
             </div>
             <div className="mt-6 space-y-3">
-              <button onClick={() => { setEditando(false); guardar(); }} className="prolimal-btn-primary w-full">
+              <AvisoErrorFormulario mensaje={errorGeneral} />
+              <button onClick={guardar} className="prolimal-btn-primary w-full">
                 Guardar cambios
               </button>
               <button onClick={() => setEditando(false)} className="prolimal-btn-secondary w-full">

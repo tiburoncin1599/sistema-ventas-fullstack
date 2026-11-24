@@ -1,17 +1,41 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
-import { Plus, Minus, AlertCircle, CheckCircle, Truck, Search } from 'lucide-react';
+import type { Categoria } from '@/lib/productos';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  enteroMinimo,
+  mensajeGeneral,
+  numero,
+  numeroMinimo,
+  primero,
+  requerido,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
+import { Minus, AlertCircle, CheckCircle, Search } from 'lucide-react';
 
-interface ProductoStock {
+interface FilaInventario {
   id: number;
-  nombre: string;
-  codigo?: string;
-  categoria?: string;
+  producto_id: number;
   cantidad: number;
   cantidad_minima: number;
-  ubicacion?: string;
+  producto?: {
+    nombre?: string;
+    codigo?: string | null;
+    categoria?: { nombre: string } | null;
+    activo?: boolean;
+  } | null;
+}
+
+interface ProductoStock {
+  /** Es el `producto_id`, que es lo que espera `PUT /inventario/:productoId`. */
+  id: number;
+  nombre: string;
+  codigo?: string | null;
+  categoria?: string | null;
+  cantidad: number;
+  cantidad_minima: number;
   activo: boolean;
 }
 
@@ -24,22 +48,88 @@ interface AlertaStock {
   déficit: number;
 }
 
+interface FormStock {
+  producto_id: number;
+  cantidad: string;
+}
+
+const STOCK_INICIAL: FormStock = { producto_id: 0, cantidad: '0' };
+const CAMPOS_STOCK: Array<keyof FormStock | '_general'> = ['producto_id', 'cantidad', '_general'];
+const ALIAS_STOCK = {
+  productoid: 'producto_id',
+  producto_id: 'producto_id',
+  producto: 'producto_id',
+  cantidad: 'cantidad',
+} as const;
+
+/** Espejo de `ActualizarInventarioDto` (cantidad numérica ≥ 0) + producto_id ≥ 1. */
+function validarStock(form: FormStock): ErroresFormulario<FormStock> {
+  const errores: ErroresFormulario<FormStock> = {};
+  const productoId = primero(
+    requerido(form.producto_id || '', 'Seleccioná un producto'),
+    enteroMinimo(form.producto_id, 1, 'El producto debe ser un entero mayor o igual a 1'),
+  );
+  if (productoId) errores.producto_id = productoId;
+
+  const cantidad = primero(
+    requerido(form.cantidad, 'Ingresá la cantidad'),
+    numero(form.cantidad, 'Ingresá una cantidad válida'),
+    numeroMinimo(form.cantidad, 0, 'La cantidad no puede ser negativa'),
+  );
+  if (cantidad) errores.cantidad = cantidad;
+
+  return errores;
+}
+
 export default function InventarioPage() {
   const [items, setItems] = useState<ProductoStock[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [alertas, setAlertas] = useState<AlertaStock[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('all');
   const [error, setError] = useState<string>('');
-  const [modal, setModal] = useState<{ aberto: boolean; modo: 'actualizar' | 'agregar'; producto?: ProductoStock; cantidad?: number } | null>(null);
+  const [modal, setModal] = useState<{ aberto: boolean; modo: 'actualizar' | 'agregar'; producto?: ProductoStock } | null>(null);
+  const [form, setForm] = useState<FormStock>(STOCK_INICIAL);
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+    reiniciar,
+  } = useValidacionFormulario<FormStock>(validarStock);
+
+  const errorDe = (campo: keyof FormStock) =>
+    enviado || tocados[campo] ? errores[campo] : undefined;
 
   const cargar = async () => {
     try {
-      const [resItems, resAlertas] = await Promise.all([
-        api.get('/inventario'),
+      const [resItems, resAlertas, resCategorias] = await Promise.all([
+        api.get('/inventario', { params: { limit: 100 } }),
         api.get('/inventario/alertas'),
+        api.get('/categorias', { params: { limit: 100 } }),
       ]);
-      setItems(resItems.data || []);
+      const filas: FilaInventario[] = Array.isArray(resItems.data)
+        ? resItems.data
+        : [];
+      setItems(
+        filas.map((f) => ({
+          id: f.producto_id,
+          nombre: f.producto?.nombre || `Producto #${f.producto_id}`,
+          codigo: f.producto?.codigo ?? null,
+          categoria: f.producto?.categoria?.nombre ?? null,
+          cantidad: Number(f.cantidad) || 0,
+          cantidad_minima: Number(f.cantidad_minima) || 0,
+          activo: f.producto?.activo ?? true,
+        })),
+      );
       setAlertas(resAlertas.data || []);
+      setCategorias(Array.isArray(resCategorias.data) ? resCategorias.data : []);
     } catch { setError('Error al cargar inventario'); }
     finally { setCargando(false); }
   };
@@ -48,10 +138,15 @@ export default function InventarioPage() {
   }, []);
 
   const abrirModal = (modo: 'actualizar' | 'agregar', producto?: ProductoStock, cantidad?: number) => {
-    setModal({ aberto: true, modo, producto, cantidad: cantidad ?? 0 });
+    reiniciar();
+    setForm({ producto_id: producto?.id ?? 0, cantidad: String(cantidad ?? 0) });
+    setModal({ aberto: true, modo, producto });
   };
 
-  const cerrarModal = () => setModal(null);
+  const cerrarModal = () => {
+    reiniciar();
+    setModal(null);
+  };
 
   // El backend ya aplica `cantidad <= cantidad_minima` al construir las alertas.
   const idsAlerta = useMemo(
@@ -59,20 +154,41 @@ export default function InventarioPage() {
     [alertas],
   );
 
+  const visibles = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    const nombreCategoria = categorias.find(
+      (c) => c.id === Number(categoriaFiltro),
+    )?.nombre;
+    return items.filter((item) => {
+      const coincideTexto =
+        !q ||
+        item.nombre.toLowerCase().includes(q) ||
+        (item.codigo || '').toLowerCase().includes(q) ||
+        (item.categoria || '').toLowerCase().includes(q);
+      const coincideCategoria =
+        categoriaFiltro === 'all' ||
+        (categoriaFiltro === 'sin'
+          ? !item.categoria
+          : item.categoria === nombreCategoria);
+      return coincideTexto && coincideCategoria;
+    });
+  }, [items, categorias, busqueda, categoriaFiltro]);
+
   const guardar = async () => {
     if (!modal?.producto) return;
+    if (!validarTodo(form)) return;
     try {
       if (modal.modo === 'actualizar') {
-        await api.put(`/inventario/${modal.producto.id}`, { cantidad: modal.cantidad });
+        await api.put(`/inventario/${form.producto_id}`, { cantidad: Number(form.cantidad) });
       } else {
         // Agregar stock inicial para un nuevo producto (si no tiene registro en inventario)
-        await api.post(`/inventario`, { producto_id: modal.producto.id, cantidad: modal.cantidad });
+        await api.post('/inventario', { producto_id: form.producto_id, cantidad: Number(form.cantidad) });
       }
       cerrarModal();
       cargar();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al guardar';
-      alert(msg);
+      aplicarErroresBackend(err, CAMPOS_STOCK, ALIAS_STOCK);
+      setErrorGeneral(mensajeGeneral(err, 'No se pudo guardar el stock. Revisá los datos e intentá nuevamente.'));
     }
   };
 
@@ -108,8 +224,26 @@ export default function InventarioPage() {
         />
       </div>
 
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Filtrar por categoría"
+          value={categoriaFiltro}
+          onChange={(e) => setCategoriaFiltro(e.target.value)}
+          className="prolimal-input sm:w-56"
+        >
+          <option value="all">Todas las categorías</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+          <option value="sin">Sin categoría</option>
+        </select>
+        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+          {visibles.length} de {items.length} productos
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => (
+        {visibles.map((item) => (
           <div
             key={item.id}
             className={`rounded-[2rem] border p-4 transition-colors ${
@@ -196,16 +330,44 @@ export default function InventarioPage() {
               </button>
             </div>
 
+            <AvisoErrorFormulario mensaje={errorGeneral} />
             <div className="mt-4 space-y-3">
-              <input
-                type="number"
-                min={0}
-                value={modal.cantidad ?? 0}
-                onChange={e => setModal(m => m ? { ...m, cantidad: Number(e.target.value), aberto: m.aberto, modo: m.modo } : null)}
-                className="prolimal-input"
-                placeholder="Cantidad"
-                required
-              />
+              <div>
+                <label htmlFor="stock-producto" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Producto
+                </label>
+                <input
+                  id="stock-producto"
+                  type="text"
+                  readOnly
+                  value={form.producto_id ? `${modal.producto?.nombre ?? ''} (#${form.producto_id})` : ''}
+                  aria-invalid={Boolean(errorDe('producto_id'))}
+                  aria-describedby={errorDe('producto_id') ? 'stock-producto-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('producto_id')), 'prolimal-input')}
+                />
+                <CampoError id="stock-producto-error" mensaje={errorDe('producto_id')} />
+              </div>
+              <div>
+                <label htmlFor="stock-cantidad" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                  Cantidad *
+                </label>
+                <input
+                  id="stock-cantidad"
+                  type="number"
+                  min={0}
+                  value={form.cantidad}
+                  onChange={e => {
+                    const nuevo = { ...form, cantidad: e.target.value };
+                    setForm(nuevo);
+                    validarCampo('cantidad', nuevo);
+                  }}
+                  aria-invalid={Boolean(errorDe('cantidad'))}
+                  aria-describedby={errorDe('cantidad') ? 'stock-cantidad-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('cantidad')), 'prolimal-input')}
+                  placeholder="Cantidad"
+                />
+                <CampoError id="stock-cantidad-error" mensaje={errorDe('cantidad')} />
+              </div>
               {modal.modo === 'actualizar' && (
                 <p className="text-xs text-prolimal-ink-400 dark:text-prolimal-ink-300">
                   Stock actual: {modal.producto?.cantidad}

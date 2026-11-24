@@ -38,6 +38,8 @@ interface Ganancias {
   utilidad_bruta: number;
   margen_porcentual: number;
   total_pedidos: number;
+  ticket_promedio?: number;
+  promedio_ticket?: number;
 }
 
 interface ProductoRanking {
@@ -246,9 +248,11 @@ export default function AdminReportes() {
     [ventas],
   );
 
-  const ticketPromedio = totales.pedidos
-    ? totales.ingresos / totales.pedidos
-    : 0;
+  // El backend calcula el ticket sobre `pedidos.total` (una fila por pedido).
+  const ticketPromedio =
+    ganancias?.ticket_promedio ??
+    ganancias?.promedio_ticket ??
+    (totales.pedidos ? totales.ingresos / totales.pedidos : 0);
 
   const paginas = Math.max(1, Math.ceil(ventas.length / POR_PAGINA));
   const filaInicio = (pagina - 1) * POR_PAGINA;
@@ -385,7 +389,7 @@ export default function AdminReportes() {
   const kpis = [
     {
       etiqueta: 'Ingresos totales',
-      valor: formatCurrency(totales.ingresos),
+      valor: formatCurrency(ganancias?.ingresos ?? totales.ingresos),
       detalle: `${totales.unidades} unidades vendidas`,
     },
     {
@@ -811,6 +815,15 @@ export default function AdminReportes() {
                 </div>
               </div>
             )}
+            <div className="border-t border-prolimal-ink-900/5 px-6 py-3 dark:border-prolimal-sand-100/10">
+              <Link
+                href="/admin/notificaciones"
+                prefetch={false}
+                className="text-xs font-bold text-prolimal-teal-700 transition-colors hover:underline dark:text-prolimal-teal-300"
+              >
+                Ver centro de notificaciones →
+              </Link>
+            </div>
           </div>
         </>
       )}

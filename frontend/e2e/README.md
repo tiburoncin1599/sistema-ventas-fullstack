@@ -61,6 +61,8 @@ E2E_ALLOW=1 npm run test:e2e
   sin fallar la corrida. Los productos reales y los pedidos mixtos nunca se
   tocan.
 - Limpieza manual equivalente: `scripts/limpiar-e2e.sql` (ver raíz del repo).
+  El script también borra las categorías de prueba `Categ ... <timestamp>` que
+  queden sin productos, para que no aparezcan en el filtro del catálogo.
 - Un solo worker (`workers: 1`) porque las pruebas de venta mutan stock real.
 
 ## Reportes

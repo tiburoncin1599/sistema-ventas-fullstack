@@ -1,28 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api, API_URL, apiFetchBlob } from '@/lib/api';
-import { formatCurrency, parseCurrency } from '@/lib/utils';
+import { useCallback, useEffect, useState } from 'react';
+import { api, apiFetchBlob } from '@/lib/api';
+import { formatCurrency } from '@/lib/utils';
+import { normalizarPedido, type PedidoEditable } from '@/lib/pedidos';
+import { mensajeGeneral } from '@/lib/validacion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QrCode, Search, Trash2, X } from 'lucide-react';
 import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
+import EditorPedido from '@/components/pedidos/EditorPedido';
+import ToastNotificacion, {
+  type ToastDatos,
+} from '@/components/ui/ToastNotificacion';
 
-interface Pedido {
-  id: number;
-  total: number;
-  estado: string;
-  creado_en: string;
-  direccion_entrega: string;
-  usuario: { nombre: string; email: string };
-  detalles?: Detalle[];
-}
-
-interface Detalle {
-  id: number;
-  cantidad: number;
-  precio_unitario: number;
-  producto: { id: number; nombre: string; imagen_url: string };
-}
+type Pedido = PedidoEditable;
 
 const getColorEstado = (estado: string) => {
   const colores: Record<string, string> = {
@@ -58,26 +49,53 @@ export default function AdminPedidos() {
   const [qrImg, setQrImg] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [busqueda, setBusqueda] = useState('');
+  const [toast, setToast] = useState<ToastDatos | null>(null);
+
+  const notificar = useCallback((tipo: ToastDatos['tipo'], mensaje: string) => {
+    setToast({ id: Date.now(), tipo, mensaje });
+  }, []);
+
+  const cargarPedidos = useCallback(async () => {
+    const res = await api.get('/pedidos');
+    setPedidos(Array.isArray(res.data) ? res.data.map(normalizarPedido) : []);
+  }, []);
+
+  const recargarDetalle = useCallback(
+    async (id: number) => {
+      const res = await api.get(`/pedidos/${id}`);
+      setPedidoSel(normalizarPedido(res.data));
+      await cargarPedidos();
+    },
+    [cargarPedidos],
+  );
 
   const q = busqueda.trim().toLowerCase();
   const visibles = pedidos.filter(p =>
-    (!filtroEstado || p.estado === filtroEstado) &&
+    (!filtroEstado ||
+      (filtroEstado === 'sin-vendedor'
+        ? p.procesado_por == null
+        : p.estado === filtroEstado)) &&
     (!q ||
       String(p.id).includes(q) ||
       (p.usuario?.nombre || '').toLowerCase().includes(q) ||
-      (p.usuario?.email || '').toLowerCase().includes(q)),
+      (p.usuario?.email || '').toLowerCase().includes(q) ||
+      (p.usuario?.carnet || '').toLowerCase().includes(q) ||
+      (p.usuario?.telefono || '').toLowerCase().includes(q) ||
+      (p.usuario?.ubicacion || '').toLowerCase().includes(q)),
   );
 
   useEffect(() => {
-    api.get('/pedidos').then(res => setPedidos(res.data)).catch(() => {});
-  }, []);
+    cargarPedidos().catch(() => {}); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [cargarPedidos]);
 
   const cambiarEstado = async (id: number, estado: string) => {
-    await api.put(`/pedidos/${id}/estado`, { estado });
-    const res = await api.get('/pedidos');
-    setPedidos(res.data);
-    if (pedidoSel?.id === id) {
-      setPedidoSel({ ...pedidoSel, estado });
+    try {
+      await api.put(`/pedidos/${id}/estado`, { estado });
+      await cargarPedidos();
+      if (pedidoSel?.id === id) await recargarDetalle(id);
+      notificar('exito', 'Estado del pedido actualizado');
+    } catch (err: unknown) {
+      notificar('error', mensajeGeneral(err, 'No se pudo actualizar el estado.'));
     }
   };
 
@@ -85,8 +103,10 @@ export default function AdminPedidos() {
     setQrImg('');
     try {
       const res = await api.get(`/pedidos/${id}`);
-      setPedidoSel(res.data);
-    } catch {}
+      setPedidoSel(normalizarPedido(res.data));
+    } catch (err: unknown) {
+      notificar('error', mensajeGeneral(err, 'No se pudo cargar el pedido.'));
+    }
   };
 
   const generarQR = async (id: number) => {
@@ -94,7 +114,7 @@ export default function AdminPedidos() {
       const res = await api.get(`/pedidos/${id}/factura/qr`);
       setQrImg(res.data.qr);
     } catch {
-      alert('Error al generar el QR. Verificá que el pedido tenga datos válidos.');
+      notificar('error', 'Error al generar el QR. Verificá que el pedido tenga datos válidos.');
     }
   };
 
@@ -103,9 +123,11 @@ export default function AdminPedidos() {
     try {
       await api.delete(`/pedidos/${id}`);
       setPedidoSel(null);
-      const res = await api.get('/pedidos');
-      setPedidos(res.data);
-    } catch {}
+      await cargarPedidos();
+      notificar('exito', 'Pedido eliminado');
+    } catch (err: unknown) {
+      notificar('error', mensajeGeneral(err, 'No se pudo eliminar el pedido.'));
+    }
   };
 
   return (
@@ -127,6 +149,7 @@ export default function AdminPedidos() {
             className="prolimal-input sm:w-48"
           >
             <option value="">Todos los estados</option>
+            <option value="sin-vendedor">Sin vendedor</option>
             {ESTADOS.map(e => (
               <option key={e} value={e}>
                 {e.charAt(0).toUpperCase() + e.slice(1)}
@@ -187,13 +210,18 @@ export default function AdminPedidos() {
                   <select
                     value={pedido.estado}
                     onChange={e => cambiarEstado(pedido.id, e.target.value)}
+                    aria-label={`Estado del pedido ${pedido.id}`}
                     className="flex-1 rounded-xl border border-prolimal-ink-900/10 bg-white px-2 py-2 text-xs font-semibold text-prolimal-ink-700 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100"
                   >
-                    <option value="pendiente">Pendiente</option>
-                    <option value="confirmado">Confirmado</option>
-                    <option value="enviado">Enviado</option>
-                    <option value="entregado">Entregado</option>
-                    <option value="cancelado">Cancelado</option>
+                    {ESTADOS.map(e => (
+                      <option
+                        key={e}
+                        value={e}
+                        disabled={e !== pedido.estado && !(TRANSICIONES[pedido.estado] || []).includes(e)}
+                      >
+                        {e.charAt(0).toUpperCase() + e.slice(1)}
+                      </option>
+                    ))}
                   </select>
                   <button
                     onClick={() => abrirDetalle(pedido.id)}
@@ -251,16 +279,22 @@ export default function AdminPedidos() {
               <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
                   <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Cliente</p>
-                  <p className="mt-1 truncate text-sm font-extrabold text-prolimal-ink-800 dark:text-prolimal-sand-50">{pedidoSel.usuario?.nombre}</p>
-                  <p className="mt-1 truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{pedidoSel.usuario?.email}</p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-prolimal-ink-800 dark:text-prolimal-sand-50">{pedidoSel.usuario?.nombre || `Cliente #${pedidoSel.id}`}</p>
+                  <p className="mt-1 truncate text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">{pedidoSel.usuario?.email || '—'}</p>
+                  <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">CI: {pedidoSel.usuario?.carnet || '—'}</p>
+                  <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Tel: {pedidoSel.usuario?.telefono || '—'}</p>
+                  <p className="mt-1 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Ubicación: {pedidoSel.usuario?.ubicacion || '—'}</p>
                 </div>
                 <div className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
                   <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Entrega</p>
-                  <p className="mt-1 text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{pedidoSel.direccion_entrega || 'Sin dirección'}</p>
+                  <p className="mt-1 text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{pedidoSel.direccion_entrega || pedidoSel.usuario?.ubicacion || 'Sin dirección'}</p>
+                  <p className="mt-2 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Pago: {pedidoSel.tipo_pago || 'CONTADO'}</p>
+                  <p className="mt-1 break-words text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Notas: {pedidoSel.notas || '—'}</p>
                 </div>
                 <div className="rounded-2xl bg-prolimal-sand-100/70 p-4 dark:bg-prolimal-ink-800/60">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Fecha</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Fecha y atención</p>
                   <p className="mt-1 text-sm font-semibold text-prolimal-ink-700 dark:text-prolimal-sand-100">{new Date(pedidoSel.creado_en).toLocaleDateString()}</p>
+                  <p className="mt-2 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">Atendido por: {pedidoSel.procesador?.nombre || 'Sin asignar'}</p>
                 </div>
               </div>
 
@@ -289,25 +323,13 @@ export default function AdminPedidos() {
                 </button>
               </div>
 
-              <h3 className="mb-3 text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Productos</h3>
-              <div className="mb-6 space-y-2">
-                {pedidoSel.detalles?.map(d => (
-                  <div
-                    key={d.id}
-                    className="flex items-start gap-4 rounded-2xl border border-prolimal-ink-900/5 bg-prolimal-sand-100/60 p-3 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/60">
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 dark:bg-prolimal-ink-900">
-                      {d.producto?.imagen_url
-                        ? <img src={`${API_URL}${d.producto.imagen_url}`} alt={d.producto.nombre} className="h-full w-full object-contain" />
-                        : <span className="text-[10px] font-bold uppercase tracking-wide text-prolimal-ink-400 dark:text-prolimal-ink-300">Sin img</span>
-                      }
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="break-words text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">{d.producto?.nombre}</p>
-                      <p className="mt-0.5 text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">x{d.cantidad} @ {formatCurrency(d.precio_unitario)}</p>
-                    </div>
-                    <p className="shrink-0 text-sm font-extrabold text-prolimal-teal-700 dark:text-prolimal-teal-300">{formatCurrency(d.cantidad * parseCurrency(d.precio_unitario))}</p>
-                  </div>
-                ))}
+              <div className="mb-6">
+                <EditorPedido
+                  pedido={pedidoSel}
+                  permitirAsignar
+                  urlProductos="/productos/admin?limit=100"
+                  onActualizado={() => recargarDetalle(pedidoSel.id)}
+                />
               </div>
 
               <div className="mb-6 flex items-center justify-between rounded-2xl bg-prolimal-ink-900 px-5 py-4 text-prolimal-sand-50 dark:bg-prolimal-ink-800">
@@ -354,6 +376,8 @@ export default function AdminPedidos() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ToastNotificacion toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

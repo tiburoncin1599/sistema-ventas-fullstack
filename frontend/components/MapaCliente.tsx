@@ -37,9 +37,10 @@ export interface PuntoGps {
 interface Props {
   gps: PuntoGps | null;
   onChange: (g: PuntoGps | null) => void;
+  invalido?: boolean;
 }
 
-export default function MapaCliente({ gps, onChange }: Props) {
+export default function MapaCliente({ gps, onChange, invalido = false }: Props) {
   const [estadoGps, setEstadoGps] = useState<EstadoGps>('inactivo');
   const [errorGps, setErrorGps] = useState('');
   const [busquedaMapa, setBusquedaMapa] = useState('');
@@ -213,8 +214,14 @@ export default function MapaCliente({ gps, onChange }: Props) {
   }, [gps]);
 
   return (
-    <div className="border dark:border-prolimal-border/50 rounded-xl p-4">
-      <p className="text-sm font-medium mb-3 dark:text-prolimal-light">Ubicación del cliente *</p>
+    <div className={`border rounded-xl p-4 ${
+      invalido
+        ? 'border-prolimal-red-500 bg-prolimal-red-50/40 dark:border-prolimal-red-400/70 dark:bg-prolimal-red-900/15'
+        : 'dark:border-prolimal-border/50'
+    }`}>
+      <p className={`text-sm font-medium mb-3 ${invalido ? 'text-prolimal-red-700 dark:text-prolimal-red-300' : 'dark:text-prolimal-light'}`}>
+        Ubicación del cliente *
+      </p>
 
       <input
         type="text"

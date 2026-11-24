@@ -35,9 +35,11 @@ export class CrearProductoDto {
   @IsString()
   imagen_url?: string;
 
+  /** Id de categoría; `null` permite crear el producto sin categoría. */
   @IsOptional()
-  @IsNumber()
-  categoria_id?: number;
+  @IsInt()
+  @Min(1)
+  categoria_id?: number | null;
 
   /** Unidades por paquete. Null/ausente = aplicar la regla por nombre. */
   @IsOptional()

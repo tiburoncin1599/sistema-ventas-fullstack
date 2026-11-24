@@ -1,7 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api, apiFetchBlob } from '@/lib/api';
+import { esRol } from '@/lib/roles';
 import { formatCurrency } from '@/lib/utils';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  enteroMinimo,
+  mensajeGeneral,
+  numero,
+  numeroMinimo,
+  primero,
+  requerido,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
 import { AlertTriangle, CheckCircle2, Plus, Wallet } from 'lucide-react';
 
 interface Deuda {
@@ -24,6 +36,70 @@ interface Usuario {
   rol: string;
 }
 
+interface FormDeuda {
+  usuarioId: number;
+  vendedorId: number;
+  monto: string;
+  descripcion: string;
+}
+
+interface FormPago {
+  monto: string;
+}
+
+const DEUDA_INICIAL: FormDeuda = { usuarioId: 0, vendedorId: 0, monto: '', descripcion: '' };
+const PAGO_INICIAL: FormPago = { monto: '' };
+
+const CAMPOS_DEUDA: Array<keyof FormDeuda | '_general'> = [
+  'usuarioId',
+  'vendedorId',
+  'monto',
+  'descripcion',
+  '_general',
+];
+const CAMPOS_PAGO: Array<keyof FormPago | '_general'> = ['monto', '_general'];
+
+const ALIAS_DEUDA = {
+  usuarioid: 'usuarioId',
+  usuario: 'usuarioId',
+  personal: 'usuarioId',
+  vendedorid: 'vendedorId',
+  vendedor: 'vendedorId',
+  monto: 'monto',
+  descripcion: 'descripcion',
+} as const;
+
+/** Espejo del `CrearDeudaDto`: usuarioId entero ≥ 1 y monto ≥ 0.01. */
+function validarDeuda(form: FormDeuda): ErroresFormulario<FormDeuda> {
+  const errores: ErroresFormulario<FormDeuda> = {};
+  const usuarioId = primero(
+    requerido(form.usuarioId || '', 'Seleccioná una persona para la deuda'),
+    enteroMinimo(form.usuarioId, 1, 'Seleccioná una persona válida'),
+  );
+  if (usuarioId) errores.usuarioId = usuarioId;
+
+  const monto = primero(
+    requerido(form.monto, 'Ingresá el monto de la deuda'),
+    numero(form.monto, 'Ingresá un monto válido'),
+    numeroMinimo(form.monto, 0.01, 'El monto debe ser mayor o igual a 0.01'),
+  );
+  if (monto) errores.monto = monto;
+
+  return errores;
+}
+
+/** Espejo del `PagarDeudaDto`: monto ≥ 0.01. */
+function validarPago(form: FormPago): ErroresFormulario<FormPago> {
+  const errores: ErroresFormulario<FormPago> = {};
+  const monto = primero(
+    requerido(form.monto, 'Ingresá el monto a pagar'),
+    numero(form.monto, 'Ingresá un monto válido'),
+    numeroMinimo(form.monto, 0.01, 'El monto a pagar debe ser mayor a 0'),
+  );
+  if (monto) errores.monto = monto;
+  return errores;
+}
+
 export default function AdminDeudas() {
   const [deudas, setDeudas] = useState<Deuda[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -37,11 +113,40 @@ export default function AdminDeudas() {
   } | null>(null);
 
   const [showCrear, setShowCrear] = useState(false);
-  const [formDeuda, setFormDeuda] = useState({ usuarioId: 0, monto: '', descripcion: '', vendedorId: 0 });
+  const [formDeuda, setFormDeuda] = useState<FormDeuda>(DEUDA_INICIAL);
   const [vendedores, setVendedores] = useState<Usuario[]>([]);
 
   const [showPagar, setShowPagar] = useState<Deuda | null>(null);
-  const [montoPago, setMontoPago] = useState('');
+  const [formPago, setFormPago] = useState<FormPago>(PAGO_INICIAL);
+
+  const {
+    errores: erroresDeuda,
+    tocados: tocadosDeuda,
+    enviado: enviadoDeuda,
+    errorGeneral: errorGeneralDeuda,
+    setErrorGeneral: setErrorGeneralDeuda,
+    validarCampo: validarCampoDeuda,
+    validarTodo: validarTodoDeuda,
+    aplicarErroresBackend: aplicarErroresDeuda,
+    reiniciar: reiniciarDeuda,
+  } = useValidacionFormulario<FormDeuda>(validarDeuda);
+
+  const {
+    errores: erroresPago,
+    tocados: tocadosPago,
+    enviado: enviadoPago,
+    errorGeneral: errorGeneralPago,
+    setErrorGeneral: setErrorGeneralPago,
+    validarCampo: validarCampoPago,
+    validarTodo: validarTodoPago,
+    aplicarErroresBackend: aplicarErroresPago,
+    reiniciar: reiniciarPago,
+  } = useValidacionFormulario<FormPago>(validarPago);
+
+  const errorDeuda = (campo: keyof FormDeuda) =>
+    enviadoDeuda || tocadosDeuda[campo] ? erroresDeuda[campo] : undefined;
+  const errorPago = (campo: keyof FormPago) =>
+    enviadoPago || tocadosPago[campo] ? erroresPago[campo] : undefined;
 
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
@@ -51,7 +156,8 @@ export default function AdminDeudas() {
       ? (JSON.parse(localStorage.getItem('usuario') || 'null') as { rol?: string } | null)?.rol
       : undefined,
   );
-  const puedeEditar = rolActual === 'admin' || rolActual === 'inventario';
+  // INVENTARIO y VENTAS consultan deudas; sólo ADMIN registra/cobra/elimina.
+  const puedeEditar = esRol(rolActual, 'admin');
 
   const cargar = async (filtroDesde?: string, filtroHasta?: string) => {
     const params: Record<string, string> = {};
@@ -61,7 +167,7 @@ export default function AdminDeudas() {
     if (h) params.hasta = h;
     const [deudasRes, r] = await Promise.all([
       api.get('/deudas', { params }),
-      api.get('/deudas/resumen'),
+      api.get('/deudas/resumen', { params }),
     ]);
     setDeudas(deudasRes.data);
     setResumen(r.data);
@@ -81,33 +187,36 @@ export default function AdminDeudas() {
   }, []);
 
   const crearDeuda = async () => {
-    if (!formDeuda.usuarioId || !formDeuda.monto) return;
+    if (!validarTodoDeuda(formDeuda)) return;
     try {
       await api.post('/deudas', {
         usuarioId: formDeuda.usuarioId,
-        monto: parseFloat(formDeuda.monto),
-        descripcion: formDeuda.descripcion,
+        monto: Number(formDeuda.monto),
+        descripcion: formDeuda.descripcion.trim(),
         ...(formDeuda.vendedorId ? { vendedorId: formDeuda.vendedorId } : {}),
       });
       setShowCrear(false);
-      setFormDeuda({ usuarioId: 0, monto: '', descripcion: '', vendedorId: 0 });
+      reiniciarDeuda();
+      setFormDeuda(DEUDA_INICIAL);
       cargar(desde, hasta);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al crear la deuda';
-      alert(msg);
+      aplicarErroresDeuda(err, CAMPOS_DEUDA, ALIAS_DEUDA);
+      setErrorGeneralDeuda(mensajeGeneral(err, 'No se pudo crear la deuda. Revisá los datos e intentá nuevamente.'));
     }
   };
 
   const pagarDeuda = async () => {
-    if (!showPagar || !montoPago) return;
+    if (!showPagar) return;
+    if (!validarTodoPago(formPago)) return;
     try {
-      await api.put(`/deudas/${showPagar.id}/pagar`, { monto: parseFloat(montoPago) });
+      await api.put(`/deudas/${showPagar.id}/pagar`, { monto: Number(formPago.monto) });
       setShowPagar(null);
-      setMontoPago('');
+      reiniciarPago();
+      setFormPago(PAGO_INICIAL);
       cargar(desde, hasta);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Error al registrar el pago';
-      alert(msg);
+      aplicarErroresPago(err, CAMPOS_PAGO);
+      setErrorGeneralPago(mensajeGeneral(err, 'No se pudo registrar el pago. Revisá el monto e intentá nuevamente.'));
     }
   };
 
@@ -163,9 +272,21 @@ export default function AdminDeudas() {
           <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-prolimal-ink-500 dark:text-prolimal-ink-200">
             Registro de deudas del personal con la empresa.
           </p>
+          {!puedeEditar && (
+            <span className="mt-3 inline-flex rounded-full bg-prolimal-ink-100 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-200">
+              Solo consulta
+            </span>
+          )}
         </div>
         {puedeEditar && (
-          <button onClick={() => setShowCrear(true)} className="prolimal-btn-primary w-fit whitespace-nowrap">
+          <button
+            onClick={() => {
+              reiniciarDeuda();
+              setFormDeuda(DEUDA_INICIAL);
+              setShowCrear(true);
+            }}
+            className="prolimal-btn-primary w-fit whitespace-nowrap"
+          >
             <Plus className="h-4 w-4" />
             Nueva deuda
           </button>
@@ -297,7 +418,14 @@ export default function AdminDeudas() {
                             <td className="px-6 py-4">
                               <div className="flex flex-wrap gap-2">
                                 {puedeEditar && d.estado !== 'pagado' && (
-                                  <button onClick={() => { setShowPagar(d); setMontoPago(String(saldoPendiente(d))); }} className="text-xs font-bold text-prolimal-teal-700 underline-offset-4 hover:underline dark:text-prolimal-teal-300">
+                                  <button
+                                    onClick={() => {
+                                      reiniciarPago();
+                                      setFormPago({ monto: String(saldoPendiente(d)) });
+                                      setShowPagar(d);
+                                    }}
+                                    className="text-xs font-bold text-prolimal-teal-700 underline-offset-4 hover:underline dark:text-prolimal-teal-300"
+                                  >
                                     Pagar
                                   </button>
                                 )}
@@ -337,7 +465,7 @@ export default function AdminDeudas() {
 
       {/* Modal Crear Deuda */}
       {showCrear && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 dark:bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setShowCrear(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 dark:bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => { reiniciarDeuda(); setShowCrear(false); }}>
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
             onClick={e => e.stopPropagation()}
@@ -346,55 +474,87 @@ export default function AdminDeudas() {
               <p className="prolimal-eyebrow">Nuevo registro</p>
               <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Nueva deuda</h2>
             </div>
+            <AvisoErrorFormulario mensaje={errorGeneralDeuda} />
             <div className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Personal *</label>
+                <label htmlFor="deuda-usuario" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Personal *</label>
                 <select
-                  value={formDeuda.usuarioId}
-                  onChange={e => setFormDeuda({ ...formDeuda, usuarioId: +e.target.value })}
-                  className="prolimal-input">
-                  <option value={0}>Seleccionar...</option>
+                  id="deuda-usuario"
+                  value={formDeuda.usuarioId || ''}
+                  onChange={e => {
+                    const nuevo = { ...formDeuda, usuarioId: e.target.value ? Number(e.target.value) : 0 };
+                    setFormDeuda(nuevo);
+                    validarCampoDeuda('usuarioId', nuevo);
+                  }}
+                  aria-invalid={Boolean(errorDeuda('usuarioId'))}
+                  aria-describedby={errorDeuda('usuarioId') ? 'deuda-usuario-error' : undefined}
+                  className={claseCampo(Boolean(errorDeuda('usuarioId')), 'prolimal-input')}>
+                  <option value="">Seleccionar...</option>
                   {usuarios.map(u => (
                     <option key={u.id} value={u.id}>{u.nombre} ({u.email})</option>
                   ))}
                 </select>
+                <CampoError id="deuda-usuario-error" mensaje={errorDeuda('usuarioId')} />
               </div>
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Vendedor responsable</label>
+                <label htmlFor="deuda-vendedor" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Vendedor responsable</label>
                 <select
+                  id="deuda-vendedor"
                   value={formDeuda.vendedorId}
-                  onChange={e => setFormDeuda({ ...formDeuda, vendedorId: +e.target.value })}
-                  className="prolimal-input">
+                  onChange={e => {
+                    const nuevo = { ...formDeuda, vendedorId: Number(e.target.value) };
+                    setFormDeuda(nuevo);
+                    validarCampoDeuda('vendedorId', nuevo);
+                  }}
+                  className={claseCampo(Boolean(errorDeuda('vendedorId')), 'prolimal-input')}>
                   <option value={0}>— Por defecto: quien registra —</option>
                   {vendedores.map(u => (
                     <option key={u.id} value={u.id}>{u.nombre} ({u.email})</option>
                   ))}
                 </select>
+                <CampoError id="deuda-vendedor-error" mensaje={errorDeuda('vendedorId')} />
               </div>
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Monto *</label>
+                <label htmlFor="deuda-monto" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Monto *</label>
                 <input
+                  id="deuda-monto"
                   type="number"
                   step="0.01"
+                  min={0.01}
                   value={formDeuda.monto}
-                  onChange={e => setFormDeuda({ ...formDeuda, monto: e.target.value })}
-                  className="prolimal-input"
+                  onChange={e => {
+                    const nuevo = { ...formDeuda, monto: e.target.value };
+                    setFormDeuda(nuevo);
+                    validarCampoDeuda('monto', nuevo);
+                  }}
+                  aria-invalid={Boolean(errorDeuda('monto'))}
+                  aria-describedby={errorDeuda('monto') ? 'deuda-monto-error' : undefined}
+                  className={claseCampo(Boolean(errorDeuda('monto')), 'prolimal-input')}
                   placeholder="0.00"
                 />
+                <CampoError id="deuda-monto-error" mensaje={errorDeuda('monto')} />
               </div>
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Descripción</label>
+                <label htmlFor="deuda-descripcion" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Descripción</label>
                 <textarea
+                  id="deuda-descripcion"
                   value={formDeuda.descripcion}
-                  onChange={e => setFormDeuda({ ...formDeuda, descripcion: e.target.value })}
-                  className="prolimal-input"
+                  onChange={e => {
+                    const nuevo = { ...formDeuda, descripcion: e.target.value };
+                    setFormDeuda(nuevo);
+                    validarCampoDeuda('descripcion', nuevo);
+                  }}
+                  aria-invalid={Boolean(errorDeuda('descripcion'))}
+                  aria-describedby={errorDeuda('descripcion') ? 'deuda-descripcion-error' : undefined}
+                  className={claseCampo(Boolean(errorDeuda('descripcion')), 'prolimal-input')}
                   placeholder="Motivo de la deuda..."
                   rows={3}
                 />
+                <CampoError id="deuda-descripcion-error" mensaje={errorDeuda('descripcion')} />
               </div>
             </div>
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
-              <button onClick={() => setShowCrear(false)} className="prolimal-btn-secondary sm:w-auto">Cancelar</button>
+              <button onClick={() => { reiniciarDeuda(); setShowCrear(false); }} className="prolimal-btn-secondary sm:w-auto">Cancelar</button>
               <button onClick={crearDeuda} className="prolimal-btn-primary flex-1">Guardar</button>
             </div>
           </div>
@@ -403,7 +563,7 @@ export default function AdminDeudas() {
 
       {/* Modal Pagar Deuda */}
       {showPagar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 dark:bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => setShowPagar(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-prolimal-ink-900/50 dark:bg-prolimal-ink-900/50 p-4 backdrop-blur-sm" onClick={() => { reiniciarPago(); setShowPagar(null); }}>
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
             onClick={e => e.stopPropagation()}
@@ -427,22 +587,31 @@ export default function AdminDeudas() {
                 <span className="text-lg font-extrabold text-prolimal-coral-600 dark:text-prolimal-coral-300">{formatCurrency(saldoPendiente(showPagar))}</span>
               </div>
             </div>
+            <AvisoErrorFormulario mensaje={errorGeneralPago} />
             <div className="mb-6">
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Monto a pagar</label>
+              <label htmlFor="pago-monto" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">Monto a pagar *</label>
               <input
+                id="pago-monto"
                 type="number"
                 step="0.01"
-                value={montoPago}
-                onChange={e => setMontoPago(e.target.value)}
-                className="prolimal-input text-lg font-bold"
+                min={0.01}
+                value={formPago.monto}
+                onChange={e => {
+                  const nuevo = { ...formPago, monto: e.target.value };
+                  setFormPago(nuevo);
+                  validarCampoPago('monto', nuevo);
+                }}
+                aria-invalid={Boolean(errorPago('monto'))}
+                aria-describedby={errorPago('monto') ? 'pago-monto-error' : undefined}
+                className={claseCampo(Boolean(errorPago('monto')), 'prolimal-input text-lg font-bold')}
                 placeholder="0.00"
               />
+              <CampoError id="pago-monto-error" mensaje={errorPago('monto')} />
             </div>
             <div className="flex flex-col-reverse gap-3 sm:flex-row">
-              <button onClick={() => setShowPagar(null)} className="prolimal-btn-secondary sm:w-auto">Cancelar</button>
+              <button onClick={() => { reiniciarPago(); setShowPagar(null); }} className="prolimal-btn-secondary sm:w-auto">Cancelar</button>
               <button
                 onClick={pagarDeuda}
-                disabled={!montoPago || parseFloat(montoPago) <= 0}
                 className="prolimal-btn-primary flex-1">
                 Registrar pago
               </button>

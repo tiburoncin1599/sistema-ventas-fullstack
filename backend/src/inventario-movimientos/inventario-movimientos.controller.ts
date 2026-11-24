@@ -44,6 +44,11 @@ export class InventarioMovimientosController {
     );
   }
 
+  @Get('kardex')
+  kardexGeneral() {
+    return this.movimientosService.kardexGeneral();
+  }
+
   @Get('kardex/:id')
   kardex(@Param('id') id: string) {
     return this.movimientosService.kardex(+id);

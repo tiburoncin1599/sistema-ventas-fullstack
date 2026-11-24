@@ -7,7 +7,10 @@ import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { Pedido } from '../pedidos/pedido.entity';
 import { DetallePedido } from '../pedidos/detalle-pedido.entity';
 import { Deuda } from '../deudas/deuda.entity';
-import { instalarMarcaAgua } from '../common/pdf-watermark';
+import {
+  instalarMarcaAgua,
+  rutaLogoLocal,
+} from '../common/pdf-watermark';
 import { desglosarMontos } from '../common/impuesto';
 
 const PIE = 'Comprobante comercial interno - No válido como factura fiscal';
@@ -31,6 +34,7 @@ interface DatosComprobante {
     email?: string | null;
     telefono?: string | null;
     direccion?: string | null;
+    ubicacion?: string | null;
   };
   items: ItemComprobante[];
   subtotal: number;
@@ -118,6 +122,7 @@ export class ComprobantesService {
         email: pedido.usuario?.email,
         telefono: pedido.usuario?.telefono,
         direccion: pedido.direccion_entrega || pedido.usuario?.ubicacion,
+        ubicacion: pedido.usuario?.ubicacion,
       },
       items,
       subtotal: desglose.subtotal,
@@ -167,7 +172,9 @@ export class ComprobantesService {
 
         // ---- Encabezado ----
         doc.rect(40, 40, 515, 96).fill('#eef5f1');
-        const logo = cfg.logo_url && existsSync(cfg.logo_url) ? cfg.logo_url : null;
+        const logo =
+          (cfg.logo_url && existsSync(cfg.logo_url) ? cfg.logo_url : null) ??
+          rutaLogoLocal();
         let xTexto = 40;
         if (logo) {
           try {
@@ -231,6 +238,11 @@ export class ComprobantesService {
         if (datos.cliente.direccion) {
           doc.font('Helvetica').fontSize(9).fillColor(gris)
             .text(`Dirección: ${datos.cliente.direccion}`, 40, doc.y, { width: 515 });
+          doc.moveDown(0.6);
+        }
+        if (datos.cliente.ubicacion && datos.cliente.ubicacion !== datos.cliente.direccion) {
+          doc.font('Helvetica').fontSize(9).fillColor(gris)
+            .text(`Ubicación: ${datos.cliente.ubicacion}`, 40, doc.y, { width: 515 });
           doc.moveDown(0.6);
         }
 

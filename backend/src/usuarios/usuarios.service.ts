@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Usuario } from './usuario.entity';
 import { omitPassword } from '../common/utils';
 
@@ -31,8 +31,11 @@ export class UsuariosService {
       .then((lista) => lista.map(omitPassword));
   }
 
+  /** Búsqueda case-insensitive: el correo es único aunque venga en otra capitalización. */
   findByEmail(email: string) {
-    return this.usuariosRepo.findOne({ where: { email } });
+    return this.usuariosRepo.findOne({
+      where: { email: ILike(email.trim()) },
+    });
   }
 
   crear(data: Partial<Usuario>) {

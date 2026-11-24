@@ -43,8 +43,12 @@ export default function BotonComprobantePdf({
       }
       // Se libera el objeto después de dar tiempo al visor a cargarlo.
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch {
-      setError('No se pudo abrir el comprobante. Intentá nuevamente.');
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo abrir el comprobante. Intentá nuevamente.',
+      );
     } finally {
       setCargando(false);
     }

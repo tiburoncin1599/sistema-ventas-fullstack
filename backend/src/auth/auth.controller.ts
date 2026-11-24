@@ -60,7 +60,13 @@ export class AuthController {
   @Post('registro')
   @Throttle({ short: { limit: 2, ttl: 60000 } })
   async registro(@Body() body: RegistroDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.registro(body.nombre, body.email, body.password);
+    const result = await this.authService.registro(
+      body.nombre,
+      body.email,
+      body.password,
+      body.telefono,
+      body.ubicacion,
+    );
     return this.entregarSesion(res, result);
   }
 

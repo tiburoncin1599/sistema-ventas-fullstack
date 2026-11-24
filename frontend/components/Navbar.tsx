@@ -100,11 +100,14 @@ export default function Navbar() {
     // El POS `/ventas` es exclusivo del rol ventas: el admin usa su panel.
     enlaces.push({ href: '/admin/ventas', label: 'Ventas' });
     enlaces.push({ href: '/admin/rendimiento', label: 'Rendimiento' });
+    enlaces.push({ href: '/admin/deudas', label: 'Deudas' });
   } else if (esRol(usuario?.rol, 'inventario')) {
     enlaces.push({ href: '/admin/inventario', label: 'Inventario' });
+    enlaces.push({ href: '/admin/deudas', label: 'Deudas' });
   } else if (esRol(usuario?.rol, 'ventas')) {
     enlaces.push({ href: '/ventas', label: 'Ventas' });
     enlaces.push({ href: '/ventas/rendimiento', label: 'Rendimiento' });
+    enlaces.push({ href: '/ventas/deudas', label: 'Deudas' });
   }
 
   const esRutaActiva = (href: string) =>

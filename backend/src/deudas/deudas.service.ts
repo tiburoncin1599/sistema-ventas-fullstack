@@ -4,8 +4,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  And,
+  FindOptionsWhere,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { Deuda } from './deuda.entity';
+
+/** Extremo inclusive del día para filtros `hasta` enviados como fecha. */
+const finDelDia = (fecha: Date): Date => {
+  const fin = new Date(fecha);
+  fin.setHours(23, 59, 59, 999);
+  return fin;
+};
 
 @Injectable()
 export class DeudasService {
@@ -14,9 +27,36 @@ export class DeudasService {
     private deudasRepo: Repository<Deuda>,
   ) {}
 
-  findAll(page = 1, limit = 50, vendedorId?: number) {
+  /** Un único constructor de filtros para listado, resumen y exportaciones. */
+  private whereDe(
+    vendedorId?: number,
+    desde?: Date,
+    hasta?: Date,
+  ): FindOptionsWhere<Deuda> {
+    const where: FindOptionsWhere<Deuda> = {};
+    if (vendedorId) where.vendedor_id = vendedorId;
+    if (desde && hasta) {
+      where.fecha_creacion = And(
+        MoreThanOrEqual(desde),
+        LessThanOrEqual(finDelDia(hasta)),
+      );
+    } else if (desde) {
+      where.fecha_creacion = MoreThanOrEqual(desde);
+    } else if (hasta) {
+      where.fecha_creacion = LessThanOrEqual(finDelDia(hasta));
+    }
+    return where;
+  }
+
+  findAll(
+    page = 1,
+    limit = 50,
+    vendedorId?: number,
+    desde?: Date,
+    hasta?: Date,
+  ) {
     return this.deudasRepo.find({
-      where: vendedorId ? { vendedor_id: vendedorId } : {},
+      where: this.whereDe(vendedorId, desde, hasta),
       relations: ['usuario', 'vendedor'],
       order: { fecha_creacion: 'DESC' },
       skip: (page - 1) * limit,
@@ -25,19 +65,8 @@ export class DeudasService {
   }
 
   findAllByDateRange(desde?: Date, hasta?: Date, vendedorId?: number) {
-    const where: any = {};
-    if (vendedorId) where.vendedor_id = vendedorId;
-    if (desde || hasta) {
-      where.fecha_creacion = {};
-      if (desde) where.fecha_creacion['>='] = desde;
-      if (hasta) {
-        const hastaFin = new Date(hasta);
-        hastaFin.setHours(23, 59, 59, 999);
-        where.fecha_creacion['<='] = hastaFin;
-      }
-    }
     return this.deudasRepo.find({
-      where,
+      where: this.whereDe(vendedorId, desde, hasta),
       relations: ['usuario', 'vendedor'],
       order: { fecha_creacion: 'DESC' },
     });
@@ -62,7 +91,15 @@ export class DeudasService {
     return deuda;
   }
 
-  async crear(usuarioId: number, monto: number, descripcion?: string, vendedorId?: number) {
+  async crear(
+    usuarioId: number,
+    monto: number,
+    descripcion?: string,
+    vendedorId?: number,
+  ) {
+    if (!(monto > 0)) {
+      throw new BadRequestException('El monto de la deuda debe ser mayor a 0');
+    }
     const deuda = this.deudasRepo.create({
       usuario_id: usuarioId,
       vendedor_id: vendedorId,
@@ -117,22 +154,49 @@ export class DeudasService {
 
   async eliminar(id: number) {
     const deuda = await this.findOne(id);
+    // Las deudas originadas por un pedido se eliminan dentro de la
+    // transacción del pedido. Borrarlas sueltas deja el crédito sin respaldo.
+    if (deuda.pedido_id != null) {
+      throw new BadRequestException(
+        'No se puede eliminar una deuda vinculada a un pedido',
+      );
+    }
     await this.deudasRepo.delete(id);
     return { message: 'Deuda eliminada correctamente' };
   }
 
-  async resumen(vendedorId?: number) {
+  async resumen(vendedorId?: number, desde?: Date, hasta?: Date) {
+    const condiciones: string[] = [];
+    const params: unknown[] = [];
+    if (vendedorId) {
+      params.push(vendedorId);
+      condiciones.push(`vendedor_id = $${params.length}`);
+    }
+    if (desde) {
+      params.push(desde);
+      condiciones.push(`fecha_creacion >= $${params.length}`);
+    }
+    if (hasta) {
+      params.push(finDelDia(hasta));
+      condiciones.push(`fecha_creacion <= $${params.length}`);
+    }
+    const filtro = condiciones.length
+      ? ` WHERE ${condiciones.join(' AND ')}`
+      : '';
+
     // Agregado en BD: no depende del límite de paginación de findAll()
-    const filtro = vendedorId ? ` WHERE vendedor_id = ${Number(vendedorId)}` : '';
-    const rows: Record<string, unknown>[] = await this.deudasRepo.query(`
+    const rows: Record<string, unknown>[] = await this.deudasRepo.query(
+      `
       SELECT
         COUNT(*)::int AS total_deudas,
-        COALESCE(SUM(CASE WHEN estado != 'pagado' THEN monto - monto_pagado ELSE 0 END), 0) AS total_pendiente,
+        COALESCE(SUM(CASE WHEN estado != 'pagado' THEN GREATEST(monto - monto_pagado, 0) ELSE 0 END), 0) AS total_pendiente,
         COALESCE(SUM(CASE WHEN estado = 'pagado' THEN monto_pagado ELSE 0 END), 0) AS total_pagado,
         COUNT(*) FILTER (WHERE estado != 'pagado')::int AS deudas_pendientes,
         COUNT(*) FILTER (WHERE estado = 'pagado')::int AS deudas_pagadas
       FROM deudas${filtro}
-    `);
+    `,
+      params,
+    );
     const r = rows[0];
     return {
       total_deudas: Number(r.total_deudas),

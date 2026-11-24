@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Store,
   User,
+  Wallet,
   X,
 } from 'lucide-react';
 import { etiquetaRol, normalizarRol } from '@/lib/roles';
@@ -49,6 +50,7 @@ function iconoEnlace(href: string) {
   if (href === '/admin/inventario') return Boxes;
   if (href === '/admin/ventas' || href === '/ventas') return Store;
   if (href === '/admin/rendimiento' || href === '/ventas/rendimiento') return BarChart3;
+  if (href === '/admin/deudas' || href === '/ventas/deudas') return Wallet;
   return ArrowRight;
 }
 

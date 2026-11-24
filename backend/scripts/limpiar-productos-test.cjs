@@ -6,6 +6,7 @@
  *   Prod MovInv 1788535717400
  *   Prod ConCategoria 1788535717400
  *   Jabon Test Actualizado 1788535717400
+ * y categorías residuales ("Categ Actualizada 1788535717400").
  *
  * Conserva los productos reales del catálogo (p.ej. "Alcohol en Gel Amare 360ml").
  *
@@ -18,6 +19,8 @@ const { Client } = require('pg');
 
 // ^(Prod|Jabon) + texto sin dígitos + timestamp >= 10 dígitos al final
 const PATRON_NOMBRE = '^(Prod|Jabon)[^0-9]*[0-9]{10,}$';
+// Categorías E2E: "Categ Test <ts>", "Categ Actualizada <ts>", etc.
+const PATRON_CATEGORIA = '^Categ(or[ií]a)? (Test|Actualizada|Prueba) [0-9]{10,}$';
 
 async function main() {
   const confirmar = process.argv.includes('--confirm');
@@ -35,10 +38,17 @@ async function main() {
       [PATRON_NOMBRE],
     );
 
+    const { rows: categoriasEncontradas } = await client.query(
+      `SELECT id, nombre FROM categorias WHERE nombre ~* $1 ORDER BY id`,
+      [PATRON_CATEGORIA],
+    );
+
     console.log(`Productos de prueba detectados: ${encontrados.length}`);
     for (const p of encontrados) console.log(`  - id ${p.id}: ${p.nombre}`);
+    console.log(`Categorías de prueba detectadas: ${categoriasEncontradas.length}`);
+    for (const c of categoriasEncontradas) console.log(`  - id ${c.id}: ${c.nombre}`);
 
-    if (encontrados.length === 0) {
+    if (encontrados.length === 0 && categoriasEncontradas.length === 0) {
       console.log('Nada que limpiar.');
       await client.query('ROLLBACK');
       return;
@@ -86,6 +96,16 @@ async function main() {
     n.productos = await del(
       `DELETE FROM productos WHERE id = ANY($1)`,
       [ids],
+    );
+
+    // Ya sin productos huérfanos, se limpian las categorías de prueba.
+    n.categorias = await del(
+      `DELETE FROM categorias c
+        WHERE c.nombre ~* $1
+          AND NOT EXISTS (
+            SELECT 1 FROM productos p WHERE p.categoria_id = c.id
+          )`,
+      [PATRON_CATEGORIA],
     );
 
     console.log('Eliminado:', JSON.stringify(n));

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Package } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import BotonComprobantePdf from '@/components/ui/BotonComprobantePdf';
 
@@ -13,7 +13,17 @@ interface Pedido {
   total: number;
   estado: string;
   creado_en: string;
-  direccion_entrega: string;
+  direccion_entrega?: string | null;
+  notas?: string | null;
+  tipo_pago?: string | null;
+  usuario?: {
+    nombre?: string;
+    email?: string | null;
+    telefono?: string | null;
+    carnet?: string | null;
+    ubicacion?: string | null;
+  } | null;
+  procesador?: { nombre?: string } | null;
 }
 
 export default function MisPedidos() {
@@ -38,10 +48,9 @@ export default function MisPedidos() {
 
   const descargarFactura = async (id: number) => {
     try {
-      const res = await api.get(`/pedidos/${id}/factura/pdf`, {
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(res.data);
+      // Hereda el refresh de `api` y valida que el blob sea un PDF real.
+      const blob = await apiFetchBlob(`/pedidos/${id}/factura/pdf`);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `factura-${id}.pdf`;
@@ -49,8 +58,10 @@ export default function MisPedidos() {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch {
-      alert('Error al descargar la factura');
+    } catch (err: unknown) {
+      const mensaje =
+        err instanceof Error ? err.message : 'Error al descargar la factura';
+      alert(mensaje);
     }
   };
 
@@ -130,9 +141,24 @@ export default function MisPedidos() {
                   </span>
                 </div>
 
+                <div className="mt-4 grid grid-cols-1 gap-1 rounded-2xl bg-prolimal-sand-100/60 p-4 text-xs font-medium text-prolimal-ink-500 dark:bg-prolimal-ink-800/50 dark:text-prolimal-sand-200 sm:grid-cols-2">
+                  <span>Cliente: {pedido.usuario?.nombre || '—'}</span>
+                  <span>Email: {pedido.usuario?.email || '—'}</span>
+                  <span>CI / Documento: {pedido.usuario?.carnet || '—'}</span>
+                  <span>Teléfono: {pedido.usuario?.telefono || '—'}</span>
+                  <span>Ubicación: {pedido.usuario?.ubicacion || '—'}</span>
+                  <span>Pago: {pedido.tipo_pago || 'CONTADO'}</span>
+                  <span>Atendido por: {pedido.procesador?.nombre || 'Sin asignar'}</span>
+                </div>
+
                 <p className="mt-4 text-sm text-prolimal-ink-500 dark:text-prolimal-ink-200">
-                  {pedido.direccion_entrega || 'Entrega a coordinar'}
+                  Entrega: {pedido.direccion_entrega || pedido.usuario?.ubicacion || 'Entrega a coordinar'}
                 </p>
+                {pedido.notas && (
+                  <p className="mt-1 break-words text-xs font-medium text-prolimal-ink-400 dark:text-prolimal-ink-300">
+                    Notas: {pedido.notas}
+                  </p>
+                )}
 
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-prolimal-ink-900/10 pt-5 dark:border-prolimal-sand-100/10">
                   <p className="text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">

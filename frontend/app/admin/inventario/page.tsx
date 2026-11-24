@@ -1,9 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import type { Categoria } from '@/lib/productos';
 import { formatCurrency } from '@/lib/utils';
+import { useValidacionFormulario } from '@/lib/hooks/use-validacion-formulario';
+import {
+  enteroMinimo,
+  mensajeGeneral,
+  numero,
+  numeroMinimo,
+  primero,
+  requerido,
+  type ErroresFormulario,
+} from '@/lib/validacion';
+import { AvisoErrorFormulario, CampoError, claseCampo } from '@/components/ui/CampoError';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Boxes, ClipboardList, Search, Tags, Wallet, Plus, Minus, CheckCircle, Edit, MessageCircle } from 'lucide-react';
 import ToastNotificacion, { type ToastDatos } from '@/components/ui/ToastNotificacion';
@@ -40,13 +52,64 @@ interface Vendedor {
   email?: string;
 }
 
-// State simple para el modal - sin tipos anidados complejos
-interface ModalState {
-  abierto: boolean;
-  modo: 'entrada' | 'salida' | 'ajuste';
+type TipoMovimiento = 'entrada' | 'salida' | 'ajuste';
+
+interface FormMovimiento {
   producto_id: number;
-  cantidad: number;
-  observacion: string;
+  tipo: TipoMovimiento;
+  cantidad: string;
+  motivo: string;
+}
+
+const MOVIMIENTO_INICIAL: FormMovimiento = {
+  producto_id: 0,
+  tipo: 'ajuste',
+  cantidad: '1',
+  motivo: '',
+};
+
+// Valores aceptados por `RegistrarMovimientoDto` (`IsIn`).
+const TIPOS_PERMITIDOS = ['entrada', 'salida', 'ajuste', 'devolucion'];
+const CAMPOS_MOVIMIENTO: Array<keyof FormMovimiento | '_general'> = [
+  'producto_id',
+  'tipo',
+  'cantidad',
+  'motivo',
+  '_general',
+];
+const ALIAS_MOVIMIENTO = {
+  productoid: 'producto_id',
+  producto_id: 'producto_id',
+  producto: 'producto_id',
+  tipo: 'tipo',
+  cantidad: 'cantidad',
+  motivo: 'motivo',
+  observacion: 'motivo',
+} as const;
+
+/** Espejo de `RegistrarMovimientoDto`: producto_id ≥ 1, tipo permitido, cantidad ≥ 0. */
+function validarMovimiento(form: FormMovimiento): ErroresFormulario<FormMovimiento> {
+  const errores: ErroresFormulario<FormMovimiento> = {};
+  const productoId = primero(
+    requerido(form.producto_id || '', 'Seleccioná un producto desde el listado'),
+    enteroMinimo(form.producto_id, 1, 'El producto debe ser un entero mayor o igual a 1'),
+  );
+  if (productoId) errores.producto_id = productoId;
+
+  const tipo = primero(
+    requerido(form.tipo, 'Seleccioná el tipo de movimiento'),
+    TIPOS_PERMITIDOS.includes(form.tipo) ? undefined : 'Tipo de movimiento no válido',
+  );
+  if (tipo) errores.tipo = tipo;
+
+  const cantidad = primero(
+    requerido(form.cantidad, 'Ingresá la cantidad'),
+    numero(form.cantidad, 'Ingresá una cantidad válida'),
+    numeroMinimo(form.cantidad, 0, 'La cantidad no puede ser negativa'),
+  );
+  if (cantidad) errores.cantidad = cantidad;
+
+  return errores;
 }
 
 /** El umbral es el `cantidad_minima` del producto; el nivel medio es su doble. */
@@ -64,14 +127,28 @@ function getStockLabel(cantidad: number, minimo: number) {
 
 export default function AdminInventario() {
   const [inventario, setInventario] = useState<ItemInventario[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [busqueda, setBusqueda] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('all');
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [modalModo, setModalModo] = useState<'entrada' | 'salida' | 'ajuste'>('ajuste');
-  const [modalProductoId, setModalProductoId] = useState(0);
+  const [formMovimiento, setFormMovimiento] = useState<FormMovimiento>(MOVIMIENTO_INICIAL);
   const [modalProductoNombre, setModalProductoNombre] = useState('');
-  const [modalCantidad, setModalCantidad] = useState(1);
-  const [modalObservacion, setModalObservacion] = useState('');
-  const [modalError, setModalError] = useState<string>('');
   const [modalCargando, setModalCargando] = useState(false);
+
+  const {
+    errores,
+    tocados,
+    enviado,
+    errorGeneral,
+    setErrorGeneral,
+    validarCampo,
+    validarTodo,
+    aplicarErroresBackend,
+    reiniciar,
+  } = useValidacionFormulario<FormMovimiento>(validarMovimiento);
+
+  const errorDe = (campo: keyof FormMovimiento) =>
+    enviado || tocados[campo] ? errores[campo] : undefined;
   const [pendientes, setPendientes] = useState<Pedido[]>([]);
   const [deudas, setDeudas] = useState<Deuda[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
@@ -85,7 +162,8 @@ export default function AdminInventario() {
   const cerrarToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
-    api.get('/inventario').then(res => setInventario(res.data)).catch(() => {});
+    api.get('/inventario', { params: { limit: 100 } }).then(res => setInventario(res.data)).catch(() => {});
+    api.get('/categorias', { params: { limit: 100 } }).then(res => setCategorias(res.data || [])).catch(() => {});
     api.get('/deudas').then(res => setDeudas(res.data)).catch(() => {});
     api.get('/pedidos').then(res => setPendientes(res.data || [])).catch(() => {});
     api.get('/pedidos/ventas/personal').then(res => setVentasPersonal(res.data || [])).catch(() => {});
@@ -107,6 +185,23 @@ export default function AdminInventario() {
     );
   }, [inventario]);
 
+  const inventarioVisible = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    const nombreCategoria = categorias.find(
+      (c) => c.id === Number(categoriaFiltro),
+    )?.nombre;
+    return inventario.filter((item) => {
+      const texto = `${item.producto?.nombre || ''} ${item.producto?.categoria?.nombre || ''}`.toLowerCase();
+      const coincideTexto = !q || texto.includes(q);
+      const coincideCategoria =
+        categoriaFiltro === 'all' ||
+        (categoriaFiltro === 'sin'
+          ? !item.producto?.categoria
+          : item.producto?.categoria?.nombre === nombreCategoria);
+      return coincideTexto && coincideCategoria;
+    });
+  }, [inventario, categorias, busqueda, categoriaFiltro]);
+
   // Contenido del grid de productos - SOLO botón Ajustar
   const productosGrid = (
     <div className="rounded-[2rem] border border-prolimal-innk-900/10 bg-card p-6 shadow-[0_24px_60px_-46px_rgba(11,37,32,0.45)] dark:border-prolimal-sand-100/10 dark:bg-card-dark">
@@ -122,18 +217,30 @@ export default function AdminInventario() {
           {inventario.length} productos
         </span>
       </div>
-      <div className="relative mb-5 sm:max-w-xs">
+      <div className="relative mb-5 flex flex-col gap-3 sm:max-w-md">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-innk-400 dark:text-prolimal-innk-300" />
         <input
           type="text"
-          value={''}
-          onChange={(e) => {}}
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar producto o categoría"
           className="prolimal-search-input"
         />
+        <select
+          aria-label="Filtrar por categoría"
+          value={categoriaFiltro}
+          onChange={(e) => setCategoriaFiltro(e.target.value)}
+          className="prolimal-input sm:w-56"
+        >
+          <option value="all">Todas las categorías</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+          <option value="sin">Sin categoría</option>
+        </select>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {inventario.map(item => {
+        {inventarioVisible.map(item => {
           const minimo = item.cantidad_minima;
           return (
             <motion.div
@@ -185,44 +292,38 @@ export default function AdminInventario() {
 
   // Manejar abrir modal: guardamos el producto de la fila para no enviar id 0.
   const handleModalOpen = (
-    modo: 'entrada' | 'salida' | 'ajuste',
+    modo: TipoMovimiento,
     item?: ItemInventario,
   ) => {
-    setModalAbierto(true);
-    setModalModo(modo);
-    setModalProductoId(item?.producto_id ?? 0);
+    reiniciar();
+    setFormMovimiento({
+      producto_id: item?.producto_id ?? 0,
+      tipo: modo,
+      // En 'ajuste' la cantidad es el NUEVO stock; en entrada/salida es un delta.
+      cantidad: String(modo === 'ajuste' ? Math.max(item?.cantidad ?? 1, 1) : 1),
+      motivo: '',
+    });
     setModalProductoNombre(item?.producto?.nombre ?? '');
-    // En 'ajuste' la cantidad es el NUEVO stock; en entrada/salida es un delta.
-    setModalCantidad(modo === 'ajuste' ? Math.max(item?.cantidad ?? 1, 1) : 1);
-    setModalObservacion('');
-    setModalError('');
+    setModalAbierto(true);
   };
 
   const handleModalClose = () => {
+    reiniciar();
     setModalAbierto(false);
   };
 
   const handleModalSubmit = async () => {
     if (!modalAbierto) return;
-    setModalError('');
-
-    if (!modalProductoId || modalProductoId <= 0) {
-      setModalError('Seleccioná un producto válido desde el listado.');
-      return;
-    }
-    if (!Number.isInteger(modalCantidad) || modalCantidad < 1) {
-      setModalError('La cantidad debe ser un número entero mayor o igual a 1.');
-      return;
-    }
+    if (!validarTodo(formMovimiento)) return;
 
     setModalCargando(true);
 
     try {
       const cuerpo = {
-        producto_id: modalProductoId,
-        tipo: modalModo,
-        cantidad: modalCantidad,
-        motivo: modalObservacion,
+        producto_id: formMovimiento.producto_id,
+        tipo: formMovimiento.tipo,
+        cantidad: Number(formMovimiento.cantidad),
+        motivo: formMovimiento.motivo.trim(),
       };
 
       const rutas = {
@@ -231,19 +332,15 @@ export default function AdminInventario() {
         ajuste: '/inventario-movimientos/ajuste',
       } as const;
 
-      await api.post(rutas[modalModo], cuerpo);
+      await api.post(rutas[formMovimiento.tipo], cuerpo);
 
       // Refrescamos el stock para reflejar el movimiento sin recargar la página.
       const res = await api.get('/inventario');
       setInventario(res.data);
-      setModalAbierto(false);
-    } catch (err: any) {
-      const mensaje = err.response?.data?.message;
-      setModalError(
-        Array.isArray(mensaje)
-          ? mensaje.join('. ')
-          : mensaje || 'Error al procesar el movimiento',
-      );
+      handleModalClose();
+    } catch (err: unknown) {
+      aplicarErroresBackend(err, CAMPOS_MOVIMIENTO, ALIAS_MOVIMIENTO);
+      setErrorGeneral(mensajeGeneral(err, 'No se pudo registrar el movimiento. Revisá los datos e intentá nuevamente.'));
     } finally {
       setModalCargando(false);
     }
@@ -312,6 +409,14 @@ export default function AdminInventario() {
             </button>
           </div>
         )}
+        <Link
+          href="/admin/kardex"
+          prefetch={false}
+          className="inline-flex w-fit items-center gap-2 rounded-full border border-prolimal-innk-900/10 bg-card px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-innk-500 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:bg-card-dark dark:text-prolimal-innk-200"
+        >
+          <ClipboardList className="h-3.5 w-3.5" />
+          Ver Kardex
+        </Link>
       </section>
 
       <div className="mb-8 grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -319,7 +424,12 @@ export default function AdminInventario() {
           { label: 'Productos', value: inventario.length, Icono: Boxes, tono: 'teal' },
           { label: 'Unidades totales', value: inventario.reduce((s, i) => s + i.cantidad, 0), Icono: ClipboardList, tono: 'sand' },
           { label: 'Stock bajo', value: alertasCount, Icono: AlertTriangle, tono: 'coral' },
-          { label: 'Sin categoría', value: 0, Icono: Tags, tono: 'ink' },
+          {
+            label: 'Sin categoría',
+            value: inventario.filter((i) => !i.producto?.categoria).length,
+            Icono: Tags,
+            tono: 'ink',
+          },
         ].map(({ label, value, Icono, tono }) => (
           <div
             key={label}
@@ -392,7 +502,7 @@ export default function AdminInventario() {
               <div>
                 <p className="prolimal-eyebrow">Registrar Movimiento de Stock</p>
                 <h2 className="prolimal-display mt-2 text-xl tracking-[-0.04em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
-                  {modalModo === 'entrada' ? 'Entrada de Stock' : modalModo === 'salida' ? 'Salida de Stock' : 'Ajuste de Stock'}
+                  {formMovimiento.tipo === 'entrada' ? 'Entrada de Stock' : formMovimiento.tipo === 'salida' ? 'Salida de Stock' : 'Ajuste de Stock'}
                 </h2>
                 {modalProductoNombre && (
                   <p className="mt-1 text-xs font-semibold text-prolimal-teal-700 dark:text-prolimal-teal-300">
@@ -405,56 +515,89 @@ export default function AdminInventario() {
               </button>
             </div>
 
+            <AvisoErrorFormulario mensaje={errorGeneral} />
+
             <div className="mt-4 space-y-3">
+              <div>
+                <label htmlFor="movimiento-producto" className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1 block">
+                  Producto *
+                </label>
+                <input
+                  id="movimiento-producto"
+                  type="text"
+                  readOnly
+                  value={formMovimiento.producto_id ? `${modalProductoNombre} (#${formMovimiento.producto_id})` : ''}
+                  aria-invalid={Boolean(errorDe('producto_id'))}
+                  aria-describedby={errorDe('producto_id') ? 'movimiento-producto-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('producto_id')), 'prolimal-input w-full py-2 px-3 focus:outline-none focus:ring-2')}
+                />
+                <CampoError id="movimiento-producto-error" mensaje={errorDe('producto_id')} />
+              </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
-                    Tipo de Movimiento
+                  <label htmlFor="movimiento-tipo" className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1 block">
+                    Tipo de Movimiento *
                   </label>
                   <select
-                    value={modalModo}
-                    onChange={(e) => setModalModo(e.target.value as 'entrada' | 'salida' | 'ajuste')}
-                    className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20"
+                    id="movimiento-tipo"
+                    value={formMovimiento.tipo}
+                    onChange={(e) => {
+                      const nuevo = { ...formMovimiento, tipo: e.target.value as TipoMovimiento };
+                      setFormMovimiento(nuevo);
+                      validarCampo('tipo', nuevo);
+                    }}
+                    aria-invalid={Boolean(errorDe('tipo'))}
+                    aria-describedby={errorDe('tipo') ? 'movimiento-tipo-error' : undefined}
+                    className={claseCampo(Boolean(errorDe('tipo')), 'prolimal-input w-full py-2 px-3 focus:outline-none focus:ring-2')}
                   >
                     <option value="entrada">Entrada</option>
                     <option value="salida">Salida</option>
                     <option value="ajuste">Ajuste</option>
                   </select>
+                  <CampoError id="movimiento-tipo-error" mensaje={errorDe('tipo')} />
                 </div>
                 <div>
-                  <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
-                    {modalModo === 'ajuste' ? 'Nuevo stock' : 'Cantidad'}
+                  <label htmlFor="movimiento-cantidad" className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1 block">
+                    {formMovimiento.tipo === 'ajuste' ? 'Nuevo stock' : 'Cantidad'} *
                   </label>
                   <input
+                    id="movimiento-cantidad"
                     type="number"
-                    min={1}
-                    value={modalCantidad}
-                    onChange={(e) => setModalCantidad(Number(e.target.value))}
-                    className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20"
-                    required
+                    min={0}
+                    value={formMovimiento.cantidad}
+                    onChange={(e) => {
+                      const nuevo = { ...formMovimiento, cantidad: e.target.value };
+                      setFormMovimiento(nuevo);
+                      validarCampo('cantidad', nuevo);
+                    }}
+                    aria-invalid={Boolean(errorDe('cantidad'))}
+                    aria-describedby={errorDe('cantidad') ? 'movimiento-cantidad-error' : undefined}
+                    className={claseCampo(Boolean(errorDe('cantidad')), 'prolimal-input w-full py-2 px-3 focus:outline-none focus:ring-2')}
                   />
+                  <CampoError id="movimiento-cantidad-error" mensaje={errorDe('cantidad')} />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1">
+                <label htmlFor="movimiento-motivo" className="text-xs text-prolimal-innk-500 dark:text-prolimal-innk-300 mb-1 block">
                   Observación / Motivo
                 </label>
                 <textarea
+                  id="movimiento-motivo"
                   rows={3}
-                  value={modalObservacion}
-                  onChange={(e) => setModalObservacion(e.target.value)}
-                  className="prolimal-input w-full rounded-md border border-prolimal-innk-900/15 bg-white/75 text-prolimal-innk-800 dark:border-prolimal-sand-100/10 dark:bg-prolimal-innk-800 dark:text-prolimal-sand-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-prolimal-teal-500/20 resize-none"
+                  value={formMovimiento.motivo}
+                  onChange={(e) => {
+                    const nuevo = { ...formMovimiento, motivo: e.target.value };
+                    setFormMovimiento(nuevo);
+                    validarCampo('motivo', nuevo);
+                  }}
+                  aria-invalid={Boolean(errorDe('motivo'))}
+                  aria-describedby={errorDe('motivo') ? 'movimiento-motivo-error' : undefined}
+                  className={claseCampo(Boolean(errorDe('motivo')), 'prolimal-input w-full py-2 px-3 focus:outline-none focus:ring-2 resize-none')}
                   placeholder="Ej: Recibido proveedor, Ajuste por inventario, Venta No.123"
-                  required
-                ></textarea>
+                />
+                <CampoError id="movimiento-motivo-error" mensaje={errorDe('motivo')} />
               </div>
             </div>
-
-            {modalError && (
-              <p className="mt-4 rounded-xl border border-prolimal-red-300/60 bg-prolimal-red-50 px-4 py-3 text-xs font-semibold text-prolimal-red-700 dark:border-prolimal-red-700/40 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-300">
-                {modalError}
-              </p>
-            )}
 
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               <button onClick={handleModalClose} className="prolimal-btn-secondary flex-1">

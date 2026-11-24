@@ -292,6 +292,13 @@ body {
     @apply w-full rounded-full border border-prolimal-border bg-white py-2.5 pl-10 pr-4 text-sm text-prolimal-ink-900 placeholder:text-prolimal-ink-400 transition-colors focus:border-prolimal-teal-500 focus:outline-none focus:ring-4 focus:ring-prolimal-teal-500/15 dark:border-prolimal-ink-600 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-50 dark:placeholder:text-prolimal-ink-400 dark:focus:ring-prolimal-teal-400/15;
   }
 
+  /* Solo errores explícitos (aria-invalid) pintan el campo de rojo: el
+     :invalid nativo no debe adelantarse a nuestros mensajes personalizados. */
+  .prolimal-input[aria-invalid='true'],
+  .prolimal-search-input[aria-invalid='true'] {
+    @apply border-prolimal-red-500 bg-prolimal-red-50/60 text-prolimal-red-900 placeholder:text-prolimal-red-400 focus:border-prolimal-red-600 focus:ring-prolimal-red-500/20 dark:border-prolimal-red-400/70 dark:bg-prolimal-red-900/20 dark:text-prolimal-red-100 dark:placeholder:text-prolimal-red-300/70 dark:focus:border-prolimal-red-400 dark:focus:ring-prolimal-red-400/20;
+  }
+
   .prolimal-btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-full bg-prolimal-teal-700 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_30px_-16px_rgba(14,138,119,0.75)] transition-all hover:-translate-y-0.5 hover:bg-prolimal-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:hover:bg-prolimal-teal-300 dark:focus-visible:ring-offset-prolimal-ink-900;
   }

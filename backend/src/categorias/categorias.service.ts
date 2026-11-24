@@ -11,7 +11,9 @@ export class CategoriasService {
   ) {}
 
   findAll(page = 1, limit = 50) {
+    // Orden estable para que los chips/filtros del frontend no salten.
     return this.categoriasRepo.find({
+      order: { nombre: 'ASC', id: 'ASC' },
       skip: (page - 1) * limit,
       take: limit,
     });

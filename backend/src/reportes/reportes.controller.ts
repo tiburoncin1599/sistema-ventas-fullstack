@@ -16,6 +16,31 @@ import { Roles } from '../auth/roles.decorator';
 import { ROLES, normalizarRol } from '../auth/roles.constant';
 import { instalarMarcaAgua } from '../common/pdf-watermark';
 
+/** Columnas monetarias que deben llevar el prefijo `Bs` en el PDF. */
+const COLUMNAS_MONTO = new Set([
+  'total_vendido',
+  'total_ingresos',
+  'total_gastado',
+  'ingresos',
+  'costo',
+  'utilidad',
+  'utilidad_bruta',
+  'ganancia',
+  'ticket_promedio',
+  'promedio_ticket',
+  'total',
+  'monto',
+]);
+
+function textoCelda(columna: string, valor: unknown): string {
+  const texto = valor == null ? '' : String(valor);
+  if (!COLUMNAS_MONTO.has(columna) || !texto) return texto;
+  const numero = Number(valor);
+  return Number.isFinite(numero) && !texto.trim().startsWith('Bs')
+    ? `Bs${numero.toFixed(2)}`
+    : texto;
+}
+
 // La nomenclatura real del sistema es `admin` / `ventas`
 // (equivalente a ADMIN / VENDEDOR en la documentación de tesis).
 @Controller('reportes')
@@ -229,8 +254,10 @@ export class ReportesController {
           doc.addPage();
         }
         headers.forEach((h, i) => {
-          const val = row[h]?.toString() || '';
-          doc.text(val, 30 + i * colWidth, yFila, { width: colWidth, align: 'left' });
+          doc.text(textoCelda(h, row[h]), 30 + i * colWidth, yFila, {
+            width: colWidth,
+            align: 'left',
+          });
         });
         if (rowIdx < data.length - 1) doc.moveDown(0.3);
       });

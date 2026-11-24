@@ -46,4 +46,11 @@ DELETE FROM inventario_movimientos WHERE producto_id IN (SELECT id FROM e2e_prod
 DELETE FROM inventario WHERE producto_id IN (SELECT id FROM e2e_productos_eliminables);
 DELETE FROM productos WHERE id IN (SELECT id FROM e2e_productos_eliminables);
 
+-- Categorías creadas por la suite de backend ("Categ Test/Actualizada <ts>").
+-- Se borran solo las que ya no tienen productos: nunca se toca una categoría
+-- real ni una reclasificación hecha a mano.
+DELETE FROM categorias c
+ WHERE c.nombre ~* '^Categ(or[ií]a)? (Test|Actualizada|Prueba) [0-9]{10,}$'
+   AND NOT EXISTS (SELECT 1 FROM productos p WHERE p.categoria_id = c.id);
+
 COMMIT;

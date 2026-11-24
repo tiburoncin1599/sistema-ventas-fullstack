@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 import { normalizarRol } from './roles';
 
 // En desarrollo y producción el frontend habla con el backend por el mismo
@@ -92,10 +92,10 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     const url = (originalRequest?.url as string) || '';
 
-    // 403 = sesión/rol inválido para el recurso: NO se intenta refresh.
-    if (typeof window !== 'undefined' && error.response?.status === 403) {
-      limpiarAuth();
-      redirigirPorSesion();
+    // 403 = sesión válida pero sin permiso para este recurso. NO es un
+    // logout: ocultar la acción en la UI es preferible a cerrar la sesión
+    // de roles que sólo pueden consultar (p. ej. INVENTARIO en deudas).
+    if (error.response?.status === 403) {
       return Promise.reject(error);
     }
 
@@ -163,16 +163,52 @@ async function mensajeDelBlob(data: unknown): Promise<string> {
   return porDefecto;
 }
 
+export interface ErrorDescarga extends Error {
+  status?: number;
+}
+
+const errorConEstado = (mensaje: string, status?: number): ErrorDescarga => {
+  const error = new Error(mensaje) as ErrorDescarga;
+  if (status !== undefined) error.status = status;
+  return error;
+};
+
 /**
  * Descarga un blob usando la instancia `api` para heredar credenciales,
  * Authorization y el refresh de 401. Mantiene la firma `(url) => Promise<Blob>`.
+ * Valida que el cuerpo sea realmente un PDF/CSV: una página HTML de error
+ * guardada como `.pdf` era indistinguible de una descarga correcta.
  */
 export async function apiFetchBlob(url: string): Promise<Blob> {
+  let respuesta: AxiosResponse<Blob>;
   try {
-    const res = await api.get<Blob>(url, { responseType: 'blob' });
-    return res.data as Blob;
+    respuesta = await api.get<Blob>(url, { responseType: 'blob' });
   } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
     const data = (err as { response?: { data?: unknown } })?.response?.data;
-    throw new Error(await mensajeDelBlob(data));
+    throw errorConEstado(await mensajeDelBlob(data), status);
   }
+
+  const blob = respuesta.data as Blob;
+  const tipo = `${blob.type || respuesta.headers['content-type'] || ''}`.toLowerCase();
+  const esPdf = tipo.includes('application/pdf');
+  const esCsv = tipo.includes('text/csv') || url.includes('/exportar/csv');
+  const cabecera = blob.size >= 5
+    ? new Uint8Array(await blob.slice(0, 5).arrayBuffer())
+    : new Uint8Array();
+  const empiezaConPdf =
+    cabecera.length === 5 &&
+    cabecera[0] === 0x25 &&
+    cabecera[1] === 0x50 &&
+    cabecera[2] === 0x44 &&
+    cabecera[3] === 0x46 &&
+    cabecera[4] === 0x2d;
+
+  if (!blob.size || !(esPdf || esCsv) || (esPdf && !empiezaConPdf)) {
+    throw errorConEstado(
+      'El archivo descargado no tiene un formato válido',
+      respuesta.status,
+    );
+  }
+  return blob;
 }
