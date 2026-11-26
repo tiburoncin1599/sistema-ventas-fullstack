@@ -30,7 +30,7 @@ export default function ToastNotificacion({
   return (
     <div
       role="status"
-      className="fixed bottom-6 right-6 z-[60] flex max-w-sm items-start gap-3 rounded-2xl border border-prolimal-ink-900/10 bg-card px-5 py-4 shadow-[0_24px_60px_-30px_rgba(11,37,32,0.55)] dark:border-prolimal-sand-100/10 dark:bg-card-dark"
+      className="fixed bottom-24 left-4 right-4 z-[60] flex max-w-sm items-start gap-3 rounded-2xl border border-prolimal-ink-900/10 bg-card px-5 py-4 shadow-[0_24px_60px_-30px_rgba(11,37,32,0.55)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:bottom-6 sm:left-auto sm:right-6"
     >
       {esExito ? (
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-prolimal-teal-600 dark:text-prolimal-teal-300" />
@@ -43,7 +43,7 @@ export default function ToastNotificacion({
       <button
         onClick={onClose}
         aria-label="Cerrar notificación"
-        className="text-prolimal-ink-400 transition-colors hover:text-prolimal-ink-700 dark:text-prolimal-ink-300"
+        className="shrink-0 rounded-full p-2 text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:text-prolimal-ink-300 dark:hover:bg-prolimal-ink-800"
       >
         <X className="h-4 w-4" />
       </button>

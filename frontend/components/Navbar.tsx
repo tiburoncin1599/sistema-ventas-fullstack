@@ -114,7 +114,7 @@ export default function Navbar() {
     href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
   const claseEnlace = (href: string) =>
-    `inline-flex items-center rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-colors ${
+    `inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors xl:px-3.5 xl:tracking-[0.18em] ${
       esRutaActiva(href)
         ? 'bg-prolimal-ink-900 text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
         : 'text-prolimal-ink-600 hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-teal-900/25 dark:hover:text-prolimal-teal-200'
@@ -123,18 +123,18 @@ export default function Navbar() {
   return (
     <>
       <div className="bg-prolimal-ink-900 text-prolimal-sand-100">
-        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between gap-4 px-4 text-[9px] font-bold uppercase tracking-[0.22em] sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-1.5 text-[9px] font-bold uppercase tracking-[0.22em] sm:h-8 sm:flex-nowrap sm:py-0 sm:px-6 lg:px-8">
           <span className="hidden sm:inline">Cochabamba · Bolivia</span>
           <a
             href={`https://wa.me/${WHATSAPP_NUMERO}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 transition-colors hover:text-prolimal-teal-300"
+            className="inline-flex items-center gap-2 whitespace-nowrap text-[8px] transition-colors hover:text-prolimal-teal-300 sm:text-[9px]"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-prolimal-teal-400" aria-hidden="true" />
             Pedidos por WhatsApp
           </a>
-          <span className="hidden md:inline">Limpieza para hogar, oficina y empresa</span>
+          <span className="hidden lg:inline">Limpieza para hogar, oficina y empresa</span>
         </div>
       </div>
 
@@ -154,7 +154,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label="Navegación principal">
+          <nav className="scrollbar-hide ml-4 hidden min-w-0 items-center gap-1 overflow-x-auto xl:flex" aria-label="Navegación principal">
             {enlaces.map((enlace) => (
               <Link
                 key={enlace.href}
@@ -167,7 +167,7 @@ export default function Navbar() {
             ))}
           </nav>
 
-          <form onSubmit={buscar} className="ml-auto hidden min-w-0 md:block" role="search">
+          <form onSubmit={buscar} className="ml-auto hidden min-w-0 xl:block" role="search">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
               <input
@@ -176,7 +176,7 @@ export default function Navbar() {
                 onChange={(event) => setBusqueda(event.target.value)}
                 placeholder="Buscar en el catálogo"
                 aria-label="Buscar productos"
-                className="prolimal-search-input md:w-48 xl:w-64"
+                className="prolimal-search-input xl:w-40 2xl:w-64"
               />
             </div>
           </form>
@@ -200,7 +200,7 @@ export default function Navbar() {
               </button>
             )}
 
-            <div className="hidden items-center gap-1 lg:flex">
+            <div className="hidden items-center gap-1 xl:flex">
               {usuario ? (
                 <>
                   <Link
@@ -210,7 +210,7 @@ export default function Navbar() {
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-prolimal-ink-900 text-sm font-bold text-prolimal-sand-50 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900">
                       {inicialUsuario}
                     </span>
-                    <span className="hidden max-w-32 flex-col text-left xl:flex">
+                    <span className="hidden max-w-24 flex-col text-left 2xl:flex 2xl:max-w-32">
                       <span className="truncate text-sm font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
                         {usuario.nombre}
                       </span>

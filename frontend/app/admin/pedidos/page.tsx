@@ -256,7 +256,7 @@ export default function AdminPedidos() {
               className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
               onClick={e => e.stopPropagation()}
             >
-              <div className="mb-6 flex items-start justify-between gap-3">
+              <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-start justify-between gap-3 bg-card px-6 pb-3 pt-6 sm:-mx-8 sm:px-8 dark:bg-card-dark">
                 <div>
                   <p className="prolimal-eyebrow">Detalle de pedido</p>
                   <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">

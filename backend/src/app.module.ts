@@ -22,6 +22,7 @@ import { ProveedoresModule } from './proveedores/proveedores.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { POSModule } from './pos/pos.module';
 import { UbicacionesModule } from './ubicaciones/ubicaciones.module';
+import { AsistenteModule } from './asistente/asistente.module';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
 
@@ -104,6 +105,7 @@ const useSsl = dbSslEnv === 'true' ? true : dbSslEnv === 'false' ? false : !isLo
     NotificacionesModule,
     POSModule,
     UbicacionesModule,
+    AsistenteModule,
   ],
   controllers: [AppController],
   providers: [

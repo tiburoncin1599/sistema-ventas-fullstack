@@ -43,6 +43,7 @@ interface DatosComprobante {
   total: number;
   pagado: number;
   saldo: number;
+  referenciaPago?: string | null;
   moneda: string;
   configuracion: Configuracion;
 }
@@ -100,16 +101,16 @@ export class ComprobantesService {
       total,
       impuestoPorcentaje: configuracion.impuesto_porcentaje,
     });
-    const saldo = deuda
-      ? Math.max(Number(deuda.monto) - Number(deuda.monto_pagado), 0)
-      : 0;
-    // Un pedido CONTADO entregado está cobrado. Los pedidos pendientes sin
-    // deuda no tienen pago registrado: no debe afirmarse lo contrario.
-    const pagado = deuda
-      ? Number(deuda.monto_pagado)
-      : pedido.estado === 'entregado' && pedido.tipo_pago === 'CONTADO'
+    // El pago sandbox ya queda en `pedidos.monto_pagado`; las deudas siguen
+    // siendo la fuente de los pedidos a crédito/parciales históricos.
+    const pagadoPedido = Number(pedido.monto_pagado ?? 0) || 0;
+    const pagadoDeuda = deuda ? Number(deuda.monto_pagado) || 0 : 0;
+    const pagadoContadoHistórico =
+      !deuda && pedido.estado === 'entregado' && pedido.tipo_pago === 'CONTADO'
         ? total
         : 0;
+    const pagado = Math.max(pagadoPedido, pagadoDeuda, pagadoContadoHistórico);
+    const saldo = Math.max(total - pagado, 0);
 
     return {
       numero: `CMP-${String(pedido.id).padStart(6, '0')}`,
@@ -131,6 +132,7 @@ export class ComprobantesService {
       total: desglose.total,
       pagado,
       saldo,
+      referenciaPago: pedido.referencia_transaccion,
       moneda: configuracion.moneda_simbolo || configuracion.moneda || 'Bs',
       configuracion,
     };
@@ -318,6 +320,16 @@ export class ComprobantesService {
         fila('TOTAL GENERAL:', money(datos.total), true);
         fila('Monto pagado:', money(datos.pagado));
         if (datos.saldo > 0) fila('Saldo pendiente:', money(datos.saldo), true);
+        if (datos.referenciaPago) {
+          doc.moveDown(0.3);
+          doc.font('Helvetica').fontSize(9).fillColor(gris)
+            .text(
+              `Referencia TXN: ${datos.referenciaPago}`,
+              40,
+              doc.y,
+              { width: 515, align: 'right' },
+            );
+        }
 
         doc.moveDown(1.2);
         const yLinea = Math.min(doc.y, 760);

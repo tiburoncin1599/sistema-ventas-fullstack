@@ -413,7 +413,7 @@ export default function AdminRendimiento() {
               <h2 className="prolimal-display mt-2 text-xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
                 Evolución {ETIQUETA_PERIODO[periodo]}
               </h2>
-              <div className="mt-4 h-64 text-prolimal-ink-800 dark:text-prolimal-sand-50">
+              <div className="mt-4 min-h-64 text-prolimal-ink-800 dark:text-prolimal-sand-50">
                 {puntosLinea.length > 0 ? (
                   <GraficoLineasVentas datos={puntosLinea} />
                 ) : (
@@ -440,8 +440,12 @@ export default function AdminRendimiento() {
                 No hay movimientos para mostrar.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
+              <>
+                <p className="mb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+                  Deslizá para ver más columnas →
+                </p>
+                <div className="scrollbar-hide overflow-x-auto">
+                <table className="w-full min-w-[600px]">
                   <thead className="bg-prolimal-sand-100/70 dark:bg-prolimal-ink-800/70">
                     <tr>
                       <th className={th}>Período</th>
@@ -461,9 +465,10 @@ export default function AdminRendimiento() {
                         <td className={td}>{formatCurrency(punto.ticket_promedio)}</td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
         </>

@@ -213,7 +213,7 @@ export default function InventarioPage() {
         </p>
       </div>
 
-      <div className="mb-6">
+      <div className="relative mb-6">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400 dark:text-prolimal-ink-300" />
         <input
           type="text"
@@ -325,7 +325,7 @@ export default function InventarioPage() {
                   {modal.modo === 'actualizar' ? 'Ajustar stock de' : 'Agregar stock inicial para'} {modal.producto?.nombre}
                 </h2>
               </div>
-              <button onClick={cerrarModal} aria-label="Cerrar" className="prolimal-icon-btn h-6 w-6">
+              <button onClick={cerrarModal} aria-label="Cerrar" className="prolimal-icon-btn h-10 w-10 sm:h-9 sm:w-9">
                 <Minus className="h-3 w-3" />
               </button>
             </div>

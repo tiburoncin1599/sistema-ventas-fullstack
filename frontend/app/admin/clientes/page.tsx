@@ -403,7 +403,7 @@ export default function AdminClientes() {
                   aria-describedby={errorEmail ? 'error-email-cliente-nuevo' : undefined} />
                 <CampoError id="error-email-cliente-nuevo" mensaje={errorEmail} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <input placeholder="Carnet / CI (opcional)" value={form.carnet}
                   onChange={e => actualizarCampo('carnet', e.target.value)}
                   className="prolimal-input" />
@@ -542,7 +542,7 @@ export default function AdminClientes() {
                   aria-describedby={errorEmail ? 'error-email-cliente-editar' : undefined} />
                 <CampoError id="error-email-cliente-editar" mensaje={errorEmail} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <input placeholder="Carnet / CI (opcional)" value={form.carnet}
                   onChange={e => actualizarCampo('carnet', e.target.value)}
                   className="prolimal-input" />

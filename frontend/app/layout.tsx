@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           async
         />
       </head>
-      <body className={`${manrope.variable} ${fraunces.variable} font-sans antialiased`}>
+      <body className={`${manrope.variable} ${fraunces.variable} overflow-x-clip font-sans antialiased`}>
         {children}
       </body>
     </html>

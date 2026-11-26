@@ -165,7 +165,7 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="truncate font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
+                                <p className="line-clamp-2 break-words font-bold text-prolimal-ink-800 dark:text-prolimal-sand-50">
                                   {item.nombre}
                                 </p>
                                 <p className="mt-0.5 text-xs font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200">
@@ -185,7 +185,7 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                                       disabled={cambiandoPresentacion === clave}
                                       aria-pressed={tipo === opcion.valor}
                                       aria-label={`${opcion.titulo} de ${item.nombre}`}
-                                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                      className={`min-h-10 rounded-full px-3 py-1.5 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-2 sm:py-0.5 ${
                                         tipo === opcion.valor
                                           ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                                           : 'text-prolimal-ink-500 dark:text-prolimal-ink-200'
@@ -200,7 +200,7 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                                 type="button"
                                 onClick={() => quitar(clave)}
                                 aria-label={`Quitar ${item.nombre}`}
-                                className="shrink-0 rounded-lg p-1.5 text-prolimal-red-500 transition-colors hover:bg-prolimal-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-red-400 dark:hover:bg-prolimal-red-900/30"
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-prolimal-red-500 transition-colors hover:bg-prolimal-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-red-400 dark:hover:bg-prolimal-red-900/30"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -212,7 +212,7 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                                   type="button"
                                   onClick={() => cambiarCantidad(clave, Math.max(0, item.cantidad - paso))}
                                   aria-label={`Quitar ${paso} ${tipo === 'UNIDAD' ? 'unidades' : 'paquetes'}`}
-                                  className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 bg-card text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
+                                  className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/10 bg-card text-sm font-bold sm:h-8 sm:w-8 text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                                 >
                                   -{paso}
                                 </button>
@@ -224,7 +224,7 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                                   onClick={() => cambiarCantidad(clave, item.cantidad + paso)}
                                   disabled={maxAlcanzado}
                                   aria-label={`Añadir ${paso} ${tipo === 'UNIDAD' ? 'unidades' : 'paquetes'}`}
-                                  className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 bg-card text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
+                                  className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/10 bg-card text-sm font-bold sm:h-8 sm:w-8 text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-ink-700"
                                 >
                                   +{paso}
                                 </button>
@@ -279,7 +279,7 @@ export default function CarritoDrawer({ abierto, onCerrar }: CarritoDrawerProps)
                   <ArrowRight className="h-4 w-4" />
                 </Link>
 
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Link href="/carrito" onClick={onCerrar} className="prolimal-btn-secondary">
                     Ver carrito
                   </Link>

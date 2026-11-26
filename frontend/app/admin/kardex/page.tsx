@@ -39,9 +39,9 @@ const ETIQUETA_TIPO: Record<string, string> = {
 const TIPOS = ['entrada', 'salida', 'venta', 'devolucion', 'ajuste'];
 
 const th =
-  'whitespace-nowrap px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300';
+  'whitespace-nowrap px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 sm:px-5 dark:text-prolimal-ink-300';
 const td =
-  'px-5 py-4 text-sm font-medium text-prolimal-ink-500 dark:text-prolimal-ink-200';
+  'px-3 py-4 text-xs font-medium text-prolimal-ink-500 sm:px-5 sm:text-sm dark:text-prolimal-ink-200';
 
 function esEntrada(tipo: string) {
   const t = tipo.toLowerCase();
@@ -265,8 +265,11 @@ export default function KardexPage() {
         )}
 
         {/* El scroll horizontal evita recortar tipo, cantidad y saldo en pantallas chicas. */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px]" aria-label="Kardex de inventario">
+        <p className="mb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+          Deslizá para ver más columnas →
+        </p>
+        <div className="scrollbar-hide overflow-x-auto">
+          <table className="w-full min-w-[760px] lg:min-w-[1080px]" aria-label="Kardex de inventario">
             <thead>
               <tr className="border-b border-prolimal-innk-900/5 bg-prolimal-sand-50/60 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/40">
                 <th className={`${th} min-w-[175px]`}>Fecha</th>

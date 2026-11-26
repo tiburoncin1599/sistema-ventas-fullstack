@@ -109,7 +109,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Sistema Ventas ERP API')
     .setDescription(
-      'API completa del sistema de ventas — módulos: auth, productos, pedidos, inventario, clientes, deudas, categorías, usuarios, dashboard, reportes, proveedores, auditoría, configuración, notificaciones, movimientos de inventario',
+      'API completa del sistema de ventas — módulos: auth, productos, pedidos, inventario, clientes, deudas, categorías, usuarios, dashboard, reportes, proveedores, auditoría, configuración, notificaciones, movimientos de inventario, asistente virtual',
     )
     .setVersion('1.0')
     .addBearerAuth()
@@ -130,6 +130,7 @@ async function bootstrap() {
     .addTag('Auditoría', 'Registro de actividades del sistema')
     .addTag('Notificaciones', 'Alertas y notificaciones')
     .addTag('Ubicaciones', 'Seguimiento en tiempo real de vendedores')
+    .addTag('Asistente', 'Consultas del asistente virtual PROLIMAC SRL')
     .addTag('Health', 'Estado del servidor')
     .build();
 

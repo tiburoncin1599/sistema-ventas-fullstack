@@ -471,7 +471,7 @@ export default function AdminProductos() {
               className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-prolimal-ink-900/10 bg-card p-6 shadow-[0_40px_90px_-40px_rgba(11,37,32,0.6)] dark:border-prolimal-sand-100/10 dark:bg-card-dark sm:p-8"
               onClick={e => e.stopPropagation()}
             >
-              <div className="mb-6">
+              <div className="sticky top-0 z-10 -mx-6 mb-6 bg-card px-6 pb-3 pt-6 sm:-mx-8 sm:px-8 dark:bg-card-dark">
                 <p className="prolimal-eyebrow">{creando ? 'Nuevo registro' : 'Editar registro'}</p>
                 <h2 className="prolimal-display mt-2 text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
                   {creando ? 'Nuevo producto' : 'Editar producto'}
@@ -503,7 +503,7 @@ export default function AdminProductos() {
                   />
                   <CampoError id="error-nombre-producto" mensaje={errorNombre} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <input
                       id="precio-producto"
@@ -582,7 +582,7 @@ export default function AdminProductos() {
                   <input ref={fileRef} type="file" accept="image/*" className="prolimal-input file:mr-3 file:rounded-full file:border-0 file:bg-prolimal-teal-100 file:px-4 file:py-1.5 file:text-xs file:font-bold file:text-prolimal-teal-800 dark:file:bg-prolimal-teal-900/30 dark:file:text-prolimal-teal-200" />
                 </div>
               </div>
-              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+              <div className="sticky bottom-0 z-10 -mx-6 mt-6 flex flex-col-reverse gap-3 bg-card px-6 pb-6 pt-3 sm:-mx-8 sm:flex-row sm:px-8 dark:bg-card-dark">
                 <button onClick={cerrarModal}
                   className="prolimal-btn-secondary sm:w-auto">
                   Cancelar

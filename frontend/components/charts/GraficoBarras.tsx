@@ -22,7 +22,8 @@ export default function GraficoBarras({ datos }: { datos: DatosGrafico[] }) {
   const lineasY = 4;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Gráfica de ventas por día">
+    <div className="scrollbar-hide w-full overflow-x-auto pb-1">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[560px]" role="img" aria-label="Gráfica de ventas por día">
       <defs>
         <linearGradient id="barraGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#00b84c" />
@@ -97,6 +98,7 @@ export default function GraficoBarras({ datos }: { datos: DatosGrafico[] }) {
           </g>
         );
       })}
-    </svg>
+      </svg>
+    </div>
   );
 }

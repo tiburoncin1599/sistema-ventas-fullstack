@@ -116,8 +116,12 @@ export default function VentasDeudas() {
             No tenés deudas registradas.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
+          <>
+            <p className="mb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+              Deslizá para ver más columnas →
+            </p>
+            <div className="scrollbar-hide overflow-x-auto">
+            <table className="w-full min-w-[700px] lg:min-w-[760px]">
               <thead>
                 <tr className="border-b border-prolimal-ink-900/10 dark:border-prolimal-sand-100/10">
                   {['Cliente', 'Descripción', 'Monto', 'Pagado', 'Saldo', 'Estado', 'Fecha'].map(h => (
@@ -158,7 +162,8 @@ export default function VentasDeudas() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </main>

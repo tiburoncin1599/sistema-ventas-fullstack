@@ -62,4 +62,8 @@ export class Deuda {
 
   @Column({ nullable: true })
   factura_url?: string;
+
+  /** Referencia del pago que saldó (o abonó) esta deuda. */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  referencia_transaccion?: string | null;
 }

@@ -542,7 +542,7 @@ export default function VentasNuevoPedidoPage() {
             <button
               type="button"
               onClick={() => setCategoriaFiltro(TODAS_CATEGORIAS)}
-              className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+              className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors sm:min-h-0 sm:px-3 sm:py-1.5 ${
                 categoriaFiltro === TODAS_CATEGORIAS
                   ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-prolimal-sand-50 dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                   : 'border-prolimal-ink-900/10 text-prolimal-ink-500 dark:text-prolimal-ink-200'
@@ -555,7 +555,7 @@ export default function VentasNuevoPedidoPage() {
                 key={cat.id}
                 type="button"
                 onClick={() => setCategoriaFiltro(cat.id)}
-                className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors sm:min-h-0 sm:px-3 sm:py-1.5 ${
                   categoriaFiltro === cat.id
                     ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-prolimal-sand-50 dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                     : 'border-prolimal-ink-900/10 text-prolimal-ink-500 dark:text-prolimal-ink-200'
@@ -567,7 +567,7 @@ export default function VentasNuevoPedidoPage() {
             <button
               type="button"
               onClick={() => setCategoriaFiltro(SIN_CATEGORIA)}
-              className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+              className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors sm:min-h-0 sm:px-3 sm:py-1.5 ${
                 categoriaFiltro === SIN_CATEGORIA
                   ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-prolimal-sand-50 dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                   : 'border-prolimal-ink-900/10 text-prolimal-ink-500 dark:text-prolimal-ink-200'
@@ -588,7 +588,7 @@ export default function VentasNuevoPedidoPage() {
               No hay productos que coincidan.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="scrollbar-hide grid max-h-[55vh] grid-cols-1 gap-3 overflow-y-auto overscroll-contain pr-1 sm:grid-cols-2 lg:max-h-none">
               {visibles.map(p => {
                 const s = stock[p.id] ?? 0;
                 const tipo = presentacionDe(p.id);
@@ -637,7 +637,7 @@ export default function VentasNuevoPedidoPage() {
                               onClick={() => setPresentacion(p.id, opcion.valor)}
                               aria-pressed={activo}
                               aria-label={`${opcion.titulo} de ${p.nombre}`}
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                              className={`min-h-10 rounded-full px-3.5 py-2 text-[10px] font-bold transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 ${
                                 activo
                                   ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                                   : 'text-prolimal-ink-500 hover:text-prolimal-teal-700 dark:text-prolimal-ink-200'
@@ -694,7 +694,7 @@ export default function VentasNuevoPedidoPage() {
                             )
                           }
                           disabled={c === 0}
-                          className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
+                          className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 sm:h-8 sm:w-8 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
                           aria-label="Restar"
                         >
                           <Minus className="h-3.5 w-3.5" />
@@ -733,7 +733,7 @@ export default function VentasNuevoPedidoPage() {
                             )
                           }
                           disabled={s === 0 || tope < minimo || c >= tope}
-                          className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
+                          className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/15 text-prolimal-ink-600 transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-30 sm:h-8 sm:w-8 dark:border-prolimal-sand-100/15 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-700"
                           aria-label="Sumar"
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -781,7 +781,7 @@ export default function VentasNuevoPedidoPage() {
               <CampoError mensaje={errores.lineas} />
             </>
           ) : (
-            <ul className="mb-4 mt-4 space-y-3">
+            <ul className="scrollbar-hide mb-4 mt-4 max-h-48 space-y-3 overflow-y-auto pr-1 lg:max-h-64">
               {lineas.map(l => {
                 const p = productos.find(x => x.id === l.producto_id);
                 if (!p) return null;
@@ -817,7 +817,7 @@ export default function VentasNuevoPedidoPage() {
                           onClick={() =>
                             setCantidad(l.producto_id, l.tipo_presentacion, 0)
                           }
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-prolimal-coral-600 transition-colors hover:bg-prolimal-coral-50 dark:text-prolimal-coral-400 dark:hover:bg-prolimal-coral-900/25"
+                          className="flex h-10 w-10 items-center justify-center rounded-full text-prolimal-coral-600 transition-colors hover:bg-prolimal-coral-50 sm:h-8 sm:w-8 dark:text-prolimal-coral-400 dark:hover:bg-prolimal-coral-900/25"
                           aria-label="Quitar producto"
                         >
                           <X className="h-3.5 w-3.5" />
@@ -905,29 +905,31 @@ export default function VentasNuevoPedidoPage() {
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={guardar}
-            disabled={guardando}
-            className="prolimal-btn-primary mt-5 w-full"
-          >
-            {guardando ? 'Guardando...' : 'Guardar Pedido'}
-          </button>
-          {lineas.length > 0 && (
+          <div className="sticky bottom-0 z-10 -mx-5 mt-5 bg-card px-5 pb-1 pt-3 sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:p-0 dark:bg-card-dark">
             <button
               type="button"
-              onClick={() => {
-                setLineas([]);
-                setPresentaciones({});
-                setStockMsg('');
-                reiniciar();
-              }}
-              className="prolimal-btn-ghost-danger mt-2 w-full"
+              onClick={guardar}
+              disabled={guardando}
+              className="prolimal-btn-primary w-full"
             >
-              <Trash2 className="h-4 w-4" />
-              Vaciar carrito
+              {guardando ? 'Guardando...' : 'Guardar Pedido'}
             </button>
-          )}
+            {lineas.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLineas([]);
+                  setPresentaciones({});
+                  setStockMsg('');
+                  reiniciar();
+                }}
+                className="prolimal-btn-ghost-danger mt-2 w-full"
+              >
+                <Trash2 className="h-4 w-4" />
+                Vaciar carrito
+              </button>
+            )}
+          </div>
         </section>
       </div>
 
@@ -938,7 +940,7 @@ export default function VentasNuevoPedidoPage() {
           aria-modal="true"
           aria-labelledby="titulo-comprobante"
         >
-          <div className="prolimal-surface w-full max-w-md rounded-[2rem] p-7 text-center shadow-2xl">
+          <div className="prolimal-surface max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] p-7 text-center shadow-2xl">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-prolimal-green-100 text-2xl dark:bg-prolimal-green-900/40">
               ✅
             </div>

@@ -217,15 +217,17 @@ export default function AdminInventario() {
           {inventario.length} productos
         </span>
       </div>
-      <div className="relative mb-5 flex flex-col gap-3 sm:max-w-md">
-        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-innk-400 dark:text-prolimal-innk-300" />
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar producto o categoría"
-          className="prolimal-search-input"
-        />
+      <div className="mb-5 flex flex-col gap-3 sm:max-w-md">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-innk-400 dark:text-prolimal-innk-300" />
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar producto o categoría"
+            className="prolimal-search-input"
+          />
+        </div>
         <select
           aria-label="Filtrar por categoría"
           value={categoriaFiltro}
@@ -419,7 +421,7 @@ export default function AdminInventario() {
         </Link>
       </section>
 
-      <div className="mb-8 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Productos', value: inventario.length, Icono: Boxes, tono: 'teal' },
           { label: 'Unidades totales', value: inventario.reduce((s, i) => s + i.cantidad, 0), Icono: ClipboardList, tono: 'sand' },
@@ -451,7 +453,7 @@ export default function AdminInventario() {
             <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-innk-400 dark:text-prolimal-innk-300">
               {label}
             </p>
-            <p className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-prolimal-innk-900 dark:text-prolimal-sand-50">
+            <p className="mt-1 text-2xl font-extrabold tracking-[-0.05em] tabular-nums text-prolimal-innk-900 dark:text-prolimal-sand-50 sm:text-3xl">
               {value}
             </p>
           </div>
@@ -510,7 +512,7 @@ export default function AdminInventario() {
                   </p>
                 )}
               </div>
-              <button onClick={handleModalClose} aria-label="Cerrar" className="prolimal-icon-btn h-6 w-6">
+              <button onClick={handleModalClose} aria-label="Cerrar" className="prolimal-icon-btn h-10 w-10 sm:h-9 sm:w-9">
                 <Minus className="h-3 w-3" />
               </button>
             </div>

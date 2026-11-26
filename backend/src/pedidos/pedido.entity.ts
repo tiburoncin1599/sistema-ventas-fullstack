@@ -38,6 +38,27 @@ export class Pedido {
   @Column({ type: 'decimal', precision: 10, scale: 2, transformer: decimal() })
   total!: number;
 
+  /** Abono registrado (contado, parcial o pago digital sandbox). */
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: decimal(),
+  })
+  monto_pagado!: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  fecha_pago?: Date | null;
+
+  /** TXN-SANDBOX-... : clave de idempotencia y referencia en facturas/PDF. */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  referencia_transaccion?: string | null;
+
+  /** Descriptivo: 'QR_SIMPLE', 'TARJETA', etc. No altera `tipo_pago`. */
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  metodo_pago?: string | null;
+
   @Column({ default: 'pendiente' })
   estado!: string;
 

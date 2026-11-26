@@ -16,6 +16,7 @@ interface Pedido {
   direccion_entrega?: string | null;
   notas?: string | null;
   tipo_pago?: string | null;
+  referencia_transaccion?: string | null;
   usuario?: {
     nombre?: string;
     email?: string | null;
@@ -142,13 +143,18 @@ export default function MisPedidos() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-1 rounded-2xl bg-prolimal-sand-100/60 p-4 text-xs font-medium text-prolimal-ink-500 dark:bg-prolimal-ink-800/50 dark:text-prolimal-sand-200 sm:grid-cols-2">
-                  <span>Cliente: {pedido.usuario?.nombre || '—'}</span>
-                  <span>Email: {pedido.usuario?.email || '—'}</span>
-                  <span>CI / Documento: {pedido.usuario?.carnet || '—'}</span>
-                  <span>Teléfono: {pedido.usuario?.telefono || '—'}</span>
-                  <span>Ubicación: {pedido.usuario?.ubicacion || '—'}</span>
-                  <span>Pago: {pedido.tipo_pago || 'CONTADO'}</span>
-                  <span>Atendido por: {pedido.procesador?.nombre || 'Sin asignar'}</span>
+                  <span className="min-w-0 break-words">Cliente: {pedido.usuario?.nombre || '—'}</span>
+                  <span className="min-w-0 break-words">Email: {pedido.usuario?.email || '—'}</span>
+                  <span className="min-w-0 break-words">CI / Documento: {pedido.usuario?.carnet || '—'}</span>
+                  <span className="min-w-0 break-words">Teléfono: {pedido.usuario?.telefono || '—'}</span>
+                  <span className="min-w-0 break-words">Ubicación: {pedido.usuario?.ubicacion || '—'}</span>
+                  <span className="min-w-0 break-words">Pago: {pedido.tipo_pago || 'CONTADO'}</span>
+                  <span className="min-w-0 break-words">Atendido por: {pedido.procesador?.nombre || 'Sin asignar'}</span>
+                   {pedido.referencia_transaccion && (
+                     <span className="sm:col-span-2 break-all">
+                       Referencia de pago: {pedido.referencia_transaccion}
+                     </span>
+                   )}
                 </div>
 
                 <p className="mt-4 text-sm text-prolimal-ink-500 dark:text-prolimal-ink-200">

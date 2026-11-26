@@ -36,7 +36,7 @@ export default function ProductCard({ producto }: { producto: ProductoCardData }
         )}
 
         {producto.categoria?.nombre && (
-          <span className="absolute left-3 top-3 max-w-[70%] truncate rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-500 shadow-sm backdrop-blur dark:bg-prolimal-ink-900/80 dark:text-prolimal-sand-100">
+          <span className="absolute left-3 top-3 max-w-[55%] truncate rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-500 shadow-sm backdrop-blur dark:bg-prolimal-ink-900/80 dark:text-prolimal-sand-100 sm:max-w-[70%]">
             {producto.categoria.nombre}
           </span>
         )}
@@ -74,7 +74,7 @@ export default function ProductCard({ producto }: { producto: ProductoCardData }
           <p className="text-xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">
             {formatCurrency(producto.precio)}
           </p>
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-prolimal-ink-900 text-prolimal-sand-50 transition-all duration-300 group-hover:bg-prolimal-teal-600 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:group-hover:bg-prolimal-teal-300">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-prolimal-ink-900 text-prolimal-sand-50 transition-all duration-300 group-hover:bg-prolimal-teal-600 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900 dark:group-hover:bg-prolimal-teal-300" aria-hidden="true">
             <ArrowUpRight className="h-4 w-4 transition-transform group-hover:rotate-45" />
           </span>
         </div>

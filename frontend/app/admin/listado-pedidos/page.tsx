@@ -37,9 +37,9 @@ const getColorEstado = (estado: string) => {
 };
 
 const th =
-  'whitespace-nowrap px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 dark:text-prolimal-ink-300';
+  'whitespace-nowrap px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-prolimal-ink-400 sm:px-5 dark:text-prolimal-ink-300';
 const td =
-  'px-5 py-4 text-sm font-medium align-top text-prolimal-ink-500 dark:text-prolimal-ink-200';
+  'px-3 py-4 text-xs font-medium align-top text-prolimal-ink-500 sm:px-5 sm:text-sm dark:text-prolimal-ink-200';
 
 type CampoOrden = 'id' | 'fecha' | 'monto' | 'estado';
 
@@ -254,9 +254,12 @@ export default function ListadoPedidosPage() {
             </p>
           )}
 
-          <div className="overflow-x-auto">
+          <p className="mb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+            Deslizá para ver más columnas →
+          </p>
+          <div className="scrollbar-hide overflow-x-auto">
             <table
-              className="w-full min-w-[820px]"
+              className="w-full min-w-[720px] lg:min-w-[820px]"
               aria-label="Listado de pedidos con fecha, monto y estado"
             >
               <thead>

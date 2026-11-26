@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cerrarSesion } from '@/lib/api';
 import { esRol, normalizarRol } from '@/lib/roles';
+import { useDrawerAccesible } from '@/lib/useDrawerAccesible';
 import DarkModeToggle from '@/components/DarkModeToggle';
 import { LogOut, Store, ChevronLeft, Menu, X } from 'lucide-react';
 
@@ -47,6 +48,10 @@ export default function VentasLayout({
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [seccionActual, setSeccionActual] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const cerrarMenu = useCallback(() => setMenuOpen(false), []);
+
+  useDrawerAccesible({ abierto: menuOpen, onCerrar: cerrarMenu, panelRef });
 
   const visibleSecciones = ventasSecciones.filter(s => esRol(usuario?.rol, s.rol));
 
@@ -70,24 +75,26 @@ export default function VentasLayout({
                 )}
               </span>
             </Link>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap">
               <button
                 type="button"
-                className="rounded-full p-2 text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 md:hidden flex items-center gap-2"
+                className="flex items-center gap-2 rounded-full p-2 text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 md:hidden"
                 onClick={() => router.push('/ventas')}
                 aria-label="Volver al menú principal"
               >
                 <ChevronLeft className="h-4 w-4" />
                 <span className="text-xs font-medium">Menú</span>
               </button>
-              {visibleSecciones.map((seccion) => {
+              {visibleSecciones.map((seccion, indice) => {
                 const esActivo = pathname === seccion.href || pathname.startsWith(seccion.href + '/');
                 return (
                   <Link
                     key={seccion.href}
                     href={seccion.href}
                     prefetch={false}
-                    className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
+                    className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-2 text-[11px] font-bold transition-colors sm:px-3.5 sm:text-xs ${
+                      indice >= 2 ? 'hidden sm:inline-flex' : ''
+                    } ${
                       esActivo
                         ? 'bg-prolimal-ink-900 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                         : 'text-prolimal-ink-500 hover:bg-prolimal-sand-100 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800'
@@ -101,54 +108,54 @@ export default function VentasLayout({
           </div>
         </div>
       </header>
-{menuOpen && (
+      {(menuOpen || sidebarColapsado) && (
         <div
           className="fixed inset-0 z-40 bg-prolimal-ink-900/55 dark:bg-prolimal-ink-900/55 backdrop-blur-sm md:hidden"
-          onClick={() => setMenuOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-      {sidebarColapsado && (
-        <div
-          className="fixed inset-0 z-40 bg-prolimal-ink-900/55 dark:bg-prolimal-ink-900/55 backdrop-blur-sm md:hidden"
-          onClick={() => setMenuOpen(false)}
+          onClick={() => {
+            setMenuOpen(false);
+            setSidebarColapsado(false);
+          }}
           aria-hidden="true"
         />
       )}
       <aside
-        className={`fixed bottom-0 left-0 top-0 z-50 flex w-[17rem] flex-col bg-prolimal-ink-900 text-prolimal-sand-50 shadow-[20px_0_60px_-40px_rgba(11,37,32,0.8)] transition-transform duration-300 ${
+        ref={panelRef}
+        tabIndex={-1}
+        className={`fixed bottom-0 left-0 top-0 z-50 flex w-[min(17rem,85vw)] flex-col bg-prolimal-ink-900 text-prolimal-sand-50 shadow-[20px_0_60px_-40px_rgba(11,37,32,0.8)] transition-transform duration-300 ${
           sidebarColapsado ? 'md:-translate-x-full' : 'md:translate-x-0'
-        } ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        } ${menuOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}`}
       >
         <div className="flex h-[5.5rem] items-center justify-between gap-3 border-b border-white/10 px-5">
-          <Link
-            href="/"
-            prefetch={false}
-            className="flex min-w-0 cursor-pointer items-center gap-3 transition-opacity hover:opacity-80"
-            onClick={() => setMenuOpen(false)}
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-prolimal-sand-50 p-1.5">
-              <img src="/logo.png" alt="Logo PROLIMAC" className="h-full w-full object-contain" />
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-extrabold tracking-[-0.03em]">PROLIMAC</span>
-              <span className="prolimal-display truncate text-xs italic text-prolimal-teal-300">
-                panel ventas
+          <div className="flex min-w-0 items-center gap-2">
+            <Link
+              href="/"
+              prefetch={false}
+              className="flex min-w-0 cursor-pointer items-center gap-3 transition-opacity hover:opacity-80"
+              onClick={() => setMenuOpen(false)}
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-prolimal-sand-50 p-1.5">
+                <img src="/logo.png" alt="Logo PROLIMAC" className="h-full w-full object-contain" />
               </span>
-              {seccionActual && (
-                <button
-                  type="button"
-                  className="rounded-full p-2 text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 md:hidden flex items-center gap-2"
-                  onClick={() => setSeccionActual(null)}
-                  aria-label="Volver al panel principal"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  <span className="text-xs font-medium">Volver</span>
-                </button>
-              )}
-            </span>
-          </Link>
-          <div className="flex items-center gap-1">
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-extrabold tracking-[-0.03em]">PROLIMAC</span>
+                <span className="prolimal-display truncate text-xs italic text-prolimal-teal-300">
+                  panel ventas
+                </span>
+              </span>
+            </Link>
+            {seccionActual && (
+              <button
+                type="button"
+                className="flex shrink-0 items-center gap-2 rounded-full p-2 text-prolimal-sand-100/70 transition-colors hover:bg-white/10 md:hidden"
+                onClick={() => setSeccionActual(null)}
+                aria-label="Volver al panel principal"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="text-xs font-medium">Volver</span>
+              </button>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               className="rounded-full p-2 text-prolimal-sand-100/70 transition-colors hover:bg-white/10 hover:text-white md:hidden"
@@ -210,8 +217,8 @@ export default function VentasLayout({
         </nav>
       </aside>
 
-      <main className={`min-h-screen px-4 py-6 transition-[margin-left] duration-300 sm:px-6 lg:px-10 lg:py-8 ${sidebarColapsado ? 'md:ml-0' : 'md:ml-[17rem]'}`}>
-        <header className="mb-8 flex items-center justify-between gap-4">
+      <main className={`min-h-screen min-w-0 px-4 py-6 transition-[margin-left] duration-300 sm:px-6 lg:px-10 lg:py-8 ${sidebarColapsado ? 'md:ml-0' : 'md:ml-[17rem]'}`}>
+        <header className="mb-8 flex flex-wrap items-center gap-2 sm:gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -233,7 +240,7 @@ export default function VentasLayout({
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-prolimal-ink-400 dark:text-prolimal-ink-300">
                 PROLIMAC SRL
               </p>
-              <h1 className="prolimal-display truncate text-2xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50 sm:text-3xl">
+              <h1 className="prolimal-display text-xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50 sm:text-2xl lg:text-3xl">
                 Portal de Ventas
               </h1>
             </div>
@@ -241,11 +248,11 @@ export default function VentasLayout({
 
           <div className="flex shrink-0 items-center gap-3">
             <DarkModeToggle />
-            <div className="hidden items-center gap-2 rounded-full border border-prolimal-ink-900/10 bg-card px-3 py-1.5 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 sm:flex">
+            <div className="hidden items-center gap-2 rounded-full border border-prolimal-ink-900/10 bg-card px-3 py-1.5 dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800 lg:flex">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-prolimal-teal-100 text-xs font-extrabold text-prolimal-teal-800 dark:bg-prolimal-teal-900/40 dark:text-prolimal-teal-200">
                 {usuario?.nombre?.charAt(0).toUpperCase() || '?'}
               </span>
-              <span className="max-w-32 truncate text-xs font-bold text-prolimal-ink-600 dark:text-prolimal-sand-100">
+              <span className="max-w-24 truncate text-xs font-bold text-prolimal-ink-600 dark:text-prolimal-sand-100 lg:max-w-32">
                 {usuario?.nombre || 'Bienvenido'}
               </span>
             </div>

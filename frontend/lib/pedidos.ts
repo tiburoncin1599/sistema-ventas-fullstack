@@ -28,6 +28,11 @@ export interface PedidoEditable {
   direccion_entrega?: string | null;
   notas?: string | null;
   tipo_pago?: string | null;
+  /** Datos del pago (incluye la referencia Sandbox) cuando ya fue confirmado. */
+  monto_pagado?: number | null;
+  fecha_pago?: string | null;
+  referencia_transaccion?: string | null;
+  metodo_pago?: string | null;
   /** Columna `procesado_por` del pedido; null cuando aún no hay vendedor. */
   procesado_por?: number | null;
   usuario?: {

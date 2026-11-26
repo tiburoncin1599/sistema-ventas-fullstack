@@ -71,7 +71,7 @@ export default function CarritoPage() {
   }
 
   return (
-    <main className="prolimal-page min-h-screen">
+    <main className="prolimal-page min-h-screen pb-24 lg:pb-14">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
         <div className="mb-8">
           <Link
@@ -143,7 +143,7 @@ export default function CarritoPage() {
                         type="button"
                         onClick={() => quitar(clave)}
                         aria-label={`Quitar ${item.nombre}`}
-                        className="shrink-0 rounded-full p-2 text-prolimal-red-500 transition-colors hover:bg-prolimal-red-50 dark:hover:bg-prolimal-red-900/30"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-prolimal-red-500 transition-colors hover:bg-prolimal-red-50 dark:hover:bg-prolimal-red-900/30"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -164,7 +164,7 @@ export default function CarritoPage() {
                               disabled={cambiandoPresentacion === clave}
                               aria-pressed={activo}
                               aria-label={`${opcion.titulo} de ${item.nombre}`}
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                              className={`min-h-10 rounded-full px-3.5 py-2 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[10px] ${
                                 activo
                                   ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                                   : 'text-prolimal-ink-500 hover:text-prolimal-teal-700 dark:text-prolimal-ink-200'
@@ -192,14 +192,14 @@ export default function CarritoPage() {
                           <button
                             type="button"
                             onClick={() => cambiarCantidad(clave, Math.max(0, item.cantidad - pasosDe(tipo)[0]))}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold sm:h-8 sm:w-8 text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
                           >
                             -{pasosDe(tipo)[0]}
                           </button>
                           <button
                             type="button"
                             onClick={() => cambiarCantidad(clave, Math.max(0, item.cantidad - pasosDe(tipo)[1]))}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold sm:h-8 sm:w-8 text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
                           >
                             -{pasosDe(tipo)[1]}
                           </button>
@@ -213,7 +213,7 @@ export default function CarritoPage() {
                               if (!Number.isNaN(n)) cambiarCantidad(clave, n);
                             }}
                             aria-label={`Cantidad de ${item.nombre}`}
-                            className="w-14 rounded-lg border border-prolimal-ink-900/10 bg-transparent py-1 text-center text-base font-extrabold text-prolimal-ink-900 outline-none dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-50"
+                            className="min-h-10 w-14 rounded-lg border border-prolimal-ink-900/10 bg-transparent py-1 text-center text-base font-extrabold text-prolimal-ink-900 outline-none dark:border-prolimal-sand-100/10 dark:text-prolimal-sand-50"
                           />
                           {pasosDe(tipo).map(paso => (
                             <button
@@ -221,7 +221,7 @@ export default function CarritoPage() {
                               type="button"
                               onClick={() => cambiarCantidad(clave, item.cantidad + paso)}
                               disabled={tope !== undefined && item.cantidad >= tope}
-                              className="flex h-8 w-8 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
+                              className="flex h-10 w-10 items-center justify-center rounded-full border border-prolimal-ink-900/10 text-xs font-bold sm:h-8 sm:w-8 text-prolimal-ink-600 transition-colors hover:bg-prolimal-sand-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-prolimal-sand-100/10 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800"
                             >
                               +{paso}
                             </button>
@@ -272,7 +272,7 @@ export default function CarritoPage() {
             })}
           </div>
 
-          <aside className="lg:sticky lg:top-28 lg:self-start">
+          <aside className="order-first lg:order-none lg:sticky lg:top-28 lg:self-start">
             <div className="rounded-[2rem] border border-prolimal-ink-900/10 bg-prolimal-ink-900 p-6 text-prolimal-sand-50 shadow-[0_34px_90px_-56px_rgba(11,37,32,0.55)] dark:border-prolimal-sand-100/10 sm:p-7">
               <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-prolimal-teal-300">Resumen</p>
               <h2 className="prolimal-display mt-3 text-3xl tracking-[-0.04em]">Tu pedido.</h2>

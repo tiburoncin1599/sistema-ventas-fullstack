@@ -96,7 +96,7 @@ export default function Hero() {
             </div>
           </div>
 
-          <div className="absolute -bottom-5 -right-2 z-10 flex items-center gap-3 rounded-full border border-white/70 bg-white/90 py-2 pl-2 pr-5 shadow-[0_24px_60px_-32px_rgba(11,37,32,0.5)] backdrop-blur-md dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/90 sm:-right-4">
+          <div className="absolute bottom-4 right-4 z-10 flex items-center gap-3 rounded-full border border-white/70 bg-white/90 py-2 pl-2 pr-5 shadow-[0_24px_60px_-32px_rgba(11,37,32,0.5)] backdrop-blur-md dark:border-prolimal-sand-100/10 dark:bg-prolimal-ink-800/90 sm:-bottom-5 sm:-right-4">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-prolimal-coral-100 text-prolimal-coral-700 dark:bg-prolimal-coral-900/30 dark:text-prolimal-coral-300">
               <Sparkles className="h-4 w-4" />
             </span>

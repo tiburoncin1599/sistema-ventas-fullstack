@@ -329,7 +329,7 @@ export default function ConfiguracionPage() {
                 <p className="prolimal-eyebrow">Guardar cambios</p>
                 <h2 className="prolimal-display mt-2 text-xl tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">Guardar configuración</h2>
               </div>
-              <button onClick={() => setEditando(false)} aria-label="Cerrar" className="prolimal-icon-btn h-6 w-6">
+              <button onClick={() => setEditando(false)} aria-label="Cerrar" className="prolimal-icon-btn h-10 w-10 sm:h-9 sm:w-9">
                 <X className="h-4 w-4" />
               </button>
             </div>

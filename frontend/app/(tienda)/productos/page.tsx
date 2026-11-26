@@ -135,8 +135,8 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
 
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
         <div className="prolimal-surface p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
-            <div className="relative w-full lg:max-w-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6 lg:gap-8">
+            <div className="relative w-full md:w-64 lg:w-full lg:max-w-sm">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-prolimal-ink-400" />
               <input
                 type="text"
@@ -151,7 +151,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
                   type="button"
                   onClick={() => setBusqueda('')}
                   aria-label="Limpiar búsqueda"
-                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:hover:bg-prolimal-ink-800 dark:hover:text-prolimal-sand-100"
+                  className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:hover:bg-prolimal-ink-800 dark:hover:text-prolimal-sand-100"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -166,7 +166,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
               <div
                 role="group"
                 aria-label="Filtrar productos por categoría"
-                className="scrollbar-hide -mx-1 flex min-w-0 flex-1 snap-x scroll-smooth items-center gap-2 overflow-x-auto px-1 pb-1 sm:pb-0"
+                className="scrollbar-hide -mx-1 -my-2 flex min-w-0 flex-1 snap-x snap-mandatory scroll-smooth items-center gap-2 overflow-x-auto px-1 py-2"
               >
                 {chips.map(cat => {
                   const activo = categoriaFiltro === cat.valor;
@@ -177,7 +177,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
                       type="button"
                       onClick={() => seleccionarCategoria(cat.valor)}
                       aria-pressed={activo}
-                      className={`snap-start shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                      className={`inline-flex min-h-11 snap-start shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prolimal-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-h-10 sm:px-3.5 sm:py-2 ${
                         activo
                           ? 'border-prolimal-ink-900 bg-prolimal-ink-900 text-white shadow-sm dark:border-prolimal-teal-400 dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                           : esTodo
@@ -202,7 +202,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
             <button
               type="button"
               onClick={limpiarFiltros}
-              className="text-[11px] font-bold uppercase tracking-[0.16em] text-prolimal-teal-700 transition-colors hover:text-prolimal-ink-900 dark:text-prolimal-teal-300 dark:hover:text-prolimal-sand-50"
+              className="inline-flex min-h-10 items-center text-[11px] font-bold uppercase tracking-[0.16em] text-prolimal-teal-700 transition-colors hover:text-prolimal-ink-900 dark:text-prolimal-teal-300 dark:hover:text-prolimal-sand-50"
             >
               Limpiar filtros
             </button>
@@ -259,7 +259,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
                     )}
 
                     {producto.categoria && (
-                      <span className="absolute left-3 top-3 max-w-[70%] truncate rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-500 shadow-sm backdrop-blur dark:bg-prolimal-ink-900/80 dark:text-prolimal-sand-100">
+                      <span className="absolute left-3 top-3 max-w-[55%] truncate rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-500 shadow-sm backdrop-blur dark:bg-prolimal-ink-900/80 dark:text-prolimal-sand-100 sm:max-w-[70%]">
                         {producto.categoria.nombre}
                       </span>
                     )}
@@ -268,7 +268,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
                         Agotado
                       </span>
                     )}
-                    <span className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-prolimal-ink-800 opacity-0 shadow-sm backdrop-blur transition-all duration-300 group-hover:opacity-100 dark:bg-prolimal-ink-900/85 dark:text-prolimal-sand-50">
+                    <span className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-prolimal-ink-800 opacity-100 shadow-sm backdrop-blur transition-all duration-300 sm:opacity-0 sm:group-hover:opacity-100 dark:bg-prolimal-ink-900/85 dark:text-prolimal-sand-50">
                       <ArrowUpRight className="h-4 w-4" />
                     </span>
                   </Link>
@@ -308,7 +308,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
                             type="button"
                             disabled={stock < cant}
                             onClick={() => agregarRapido(producto, cant, `+${cant} agregado`)}
-                            className="flex-1 rounded-full border border-prolimal-ink-900/12 bg-transparent py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-prolimal-ink-700 transition-colors hover:border-prolimal-teal-500/50 hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 disabled:cursor-not-allowed disabled:opacity-35 dark:border-prolimal-sand-100/12 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-teal-900/20 dark:hover:text-prolimal-teal-300"
+                            className="min-h-11 flex-1 rounded-full border border-prolimal-ink-900/12 bg-transparent py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-prolimal-ink-700 transition-colors hover:border-prolimal-teal-500/50 hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 disabled:cursor-not-allowed disabled:opacity-35 sm:min-h-10 dark:border-prolimal-sand-100/12 dark:text-prolimal-sand-100 dark:hover:bg-prolimal-teal-900/20 dark:hover:text-prolimal-teal-300"
                           >
                             +{cant}
                           </button>
@@ -318,7 +318,7 @@ function ProductosContent({ inicial }: { inicial: FiltrosIniciales }) {
                         type="button"
                         disabled={stock < 12}
                         onClick={() => agregarRapido(producto, 12, 'Docena agregada')}
-                        className="w-full rounded-full bg-prolimal-coral-500 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-white transition-colors hover:bg-prolimal-coral-600 disabled:cursor-not-allowed disabled:opacity-35"
+                        className="min-h-11 w-full rounded-full bg-prolimal-coral-500 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-white transition-colors hover:bg-prolimal-coral-600 disabled:cursor-not-allowed disabled:opacity-35 sm:min-h-10"
                       >
                         + Docena
                       </button>

@@ -318,7 +318,7 @@ export default function AdminDeudas() {
       </div>
 
       {resumen && (
-        <div className="mb-8 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Total deudas', value: resumen.total_deudas, Icono: Wallet, tono: 'ink' },
             { label: 'Pendientes', value: resumen.deudas_pendientes, Icono: AlertTriangle, tono: 'coral' },
@@ -343,7 +343,7 @@ export default function AdminDeudas() {
                 <Icono className="h-4 w-4" />
               </span>
               <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-prolimal-ink-400 dark:text-prolimal-ink-300">{label}</p>
-              <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
+              <p className="mt-1 break-words text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-prolimal-ink-900 dark:text-prolimal-sand-50">{value}</p>
             </div>
           ))}
         </div>
@@ -392,8 +392,11 @@ export default function AdminDeudas() {
                       </div>
                     </div>
                   </summary>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px]">
+                  <p className="px-3 pt-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+                    Deslizá para ver más columnas →
+                  </p>
+                  <div className="scrollbar-hide overflow-x-auto">
+                    <table className="w-full min-w-[680px] lg:min-w-[760px]">
                       <thead>
                         <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                           {['ID', 'Descripción', 'Vendedor', 'Monto', 'Pagado', 'Saldo', 'Estado', 'Acciones'].map((h) => (

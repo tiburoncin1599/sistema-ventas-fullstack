@@ -27,6 +27,7 @@ import { factorConversion } from './conversion-paquetes';
 import { Producto } from '../productos/producto.entity';
 import { Usuario } from '../usuarios/usuario.entity';
 import { Deuda } from '../deudas/deuda.entity';
+import { ConfirmarPagoSandboxDto } from './dto/confirmar-pago-sandbox.dto';
 import { InventarioService } from '../inventario/inventario.service';
 import { InventarioMovimientosService } from '../inventario-movimientos/inventario-movimientos.service';
 import { InventarioMovimiento } from '../inventario-movimientos/inventario-movimiento.entity';
@@ -619,6 +620,183 @@ export class PedidosService {
 
       await queryRunner.commitTransaction();
       return this.findOne(pedidoGuardado.id);
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Confirma un pago simulado (QR o tarjeta de prueba) en una sola transacción.
+   * El total se recalcula desde los detalles, se contabiliza como CONTADO y se
+   * liquida la deuda del pedido si existía. NUNCA toca stock: ese ya se descontó
+   * al crear el pedido. Repetir la misma referencia es idempotente.
+   */
+  async confirmarPagoSandbox(
+    pedidoId: number,
+    dto: ConfirmarPagoSandboxDto,
+    auditor?: AuditorPedido,
+  ) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    const manager = queryRunner.manager;
+    try {
+      const pedido = await this.findPedidoBloqueado(manager, pedidoId);
+      if (pedido.estado === 'cancelado') {
+        throw new BadRequestException(
+          'No se puede confirmar el pago de un pedido cancelado',
+        );
+      }
+
+      const referencia = dto.referencia_transaccion.trim();
+      const pagadoAnterior = Number(pedido.monto_pagado ?? 0) || 0;
+      const detalles = await this.findDetallesConManager(manager, pedidoId);
+      const total = this.totalDesdeDetalles(detalles);
+
+      if (pedido.referencia_transaccion) {
+        if (pedido.referencia_transaccion !== referencia) {
+          throw new BadRequestException(
+            'El pedido ya tiene una referencia de pago distinta',
+          );
+        }
+      } else {
+        const referenciaEnOtro = await manager.findOne(Pedido, {
+          where: { referencia_transaccion: referencia },
+        });
+        if (referenciaEnOtro && referenciaEnOtro.id !== pedidoId) {
+          throw new BadRequestException(
+            'La referencia de transacción ya está asociada a otro pedido',
+          );
+        }
+
+        const abono = dto.monto === undefined
+          ? Math.max(total - pagadoAnterior, 0)
+          : Number(dto.monto);
+        if (!Number.isFinite(abono) || abono < 0) {
+          throw new BadRequestException('El monto del pago no es válido');
+        }
+        if (pagadoAnterior + abono > total + 0.01) {
+          throw new BadRequestException(
+            'El monto del pago supera el total del pedido',
+          );
+        }
+
+        const nuevoPagado = Math.min(pagadoAnterior + abono, total);
+        const completo = nuevoPagado >= total - 0.005;
+        const ahora = new Date();
+        const metodo = dto.metodo_pago ?? 'SANDBOX';
+        const estadoFinal = dto.avanzar_estado && pedido.estado === 'pendiente'
+          ? 'confirmado'
+          : pedido.estado;
+
+        await manager.update(Pedido, pedidoId, {
+          monto_pagado: nuevoPagado,
+          tipo_pago: completo ? 'CONTADO' : pedido.tipo_pago,
+          metodo_pago: metodo,
+          referencia_transaccion: referencia,
+          ...(completo ? { fecha_pago: ahora } : {}),
+          ...(estadoFinal !== pedido.estado
+            ? {
+                estado: estadoFinal,
+                historial_estados: [
+                  ...(pedido.historial_estados || []),
+                  {
+                    estado: estadoFinal,
+                    fecha: ahora,
+                    ...(auditor?.usuario_id
+                      ? { usuario: auditor.usuario_id }
+                      : {}),
+                    observacion: 'Pago sandbox aprobado',
+                  },
+                ],
+              }
+            : {}),
+        });
+
+        const deuda = await manager.findOne(Deuda, {
+          where: { pedido_id: pedidoId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (deuda) {
+          const montoDeuda = Number(deuda.monto) || 0;
+          const pagadoDeuda = Number(deuda.monto_pagado) || 0;
+          const abonoDeuda = Math.min(
+            abono,
+            Math.max(montoDeuda - pagadoDeuda, 0),
+          );
+          const nuevoPagadoDeuda = Math.min(
+            pagadoDeuda + abonoDeuda,
+            montoDeuda,
+          );
+          const estadoDeudaFinal = this.estadoDeuda(
+            montoDeuda,
+            nuevoPagadoDeuda,
+          );
+          await manager.update(Deuda, deuda.id, {
+            monto_pagado: nuevoPagadoDeuda,
+            estado: estadoDeudaFinal,
+            referencia_transaccion: referencia,
+            ...(estadoDeudaFinal === 'pagado' && !deuda.fecha_pago
+              ? { fecha_pago: ahora }
+              : {}),
+          });
+        } else if (!completo) {
+          await manager.save(
+            manager.create(Deuda, {
+              usuario_id: pedido.usuario_id,
+              vendedor_id: pedido.procesado_por,
+              pedido_id: pedidoId,
+              monto: total,
+              monto_pagado: nuevoPagado,
+              descripcion: `Pago parcial sandbox · Pedido #${pedidoId}`,
+              estado: this.estadoDeuda(total, nuevoPagado),
+              referencia_transaccion: referencia,
+            }),
+          );
+        }
+
+        await this.auditar(manager, {
+          accion: 'confirmar_pago_sandbox',
+          entidad_id: pedidoId,
+          valor_anterior: {
+            tipo_pago: pedido.tipo_pago,
+            estado: pedido.estado,
+            monto_pagado: pagadoAnterior,
+          },
+          valor_nuevo: {
+            tipo_pago: completo ? 'CONTADO' : pedido.tipo_pago,
+            estado: estadoFinal,
+            monto_pagado: nuevoPagado,
+            metodo_pago: metodo,
+            referencia_transaccion: referencia,
+          },
+          auditor,
+        });
+      }
+
+      const deudaActual = await manager.findOne(Deuda, {
+        where: { pedido_id: pedidoId },
+      });
+      await queryRunner.commitTransaction();
+
+      const actualizado = await this.findOne(pedidoId);
+      return {
+        pedidoId,
+        referencia_transaccion: referencia,
+        tipo_pago: actualizado.tipo_pago,
+        metodo_pago: actualizado.metodo_pago ?? dto.metodo_pago ?? 'SANDBOX',
+        monto_pagado: Number(actualizado.monto_pagado ?? 0),
+        total: Number(actualizado.total),
+        saldo: Math.max(
+          Number(actualizado.total) - Number(actualizado.monto_pagado ?? 0),
+          0,
+        ),
+        estado: actualizado.estado,
+        deuda_id: deudaActual?.id ?? null,
+      };
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;

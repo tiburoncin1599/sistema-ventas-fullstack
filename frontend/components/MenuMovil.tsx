@@ -106,7 +106,7 @@ export default function MenuMovil({
     href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
   const claseEnlace = (href: string) =>
-    `prolimal-nav-link w-full ${esRutaActiva(href) ? 'bg-prolimal-teal-50 text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200' : ''}`;
+    `prolimal-nav-link min-h-11 w-full justify-start py-3 ${esRutaActiva(href) ? 'bg-prolimal-teal-50 text-prolimal-teal-800 dark:bg-prolimal-teal-900/30 dark:text-prolimal-teal-200' : ''}`;
 
   return (
     <AnimatePresence>
@@ -236,7 +236,7 @@ export default function MenuMovil({
                   <button
                     type="button"
                     onClick={abrirCarrito}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800 dark:hover:text-prolimal-teal-200"
+                    className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-prolimal-ink-600 transition-colors hover:bg-prolimal-teal-50 hover:text-prolimal-teal-800 dark:text-prolimal-ink-200 dark:hover:bg-prolimal-ink-800 dark:hover:text-prolimal-teal-200"
                   >
                     <ShoppingCart className="h-4 w-4" />
                     Mi carrito

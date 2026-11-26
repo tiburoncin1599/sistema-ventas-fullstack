@@ -171,7 +171,7 @@ export default function DetalleProducto() {
                       onClick={() => seleccionarTipo(opcion.valor)}
                       aria-pressed={tipo === opcion.valor}
                       aria-label={`${opcion.titulo} de ${producto.nombre}`}
-                      className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+                      className={`min-h-11 rounded-full px-4 py-2.5 text-xs font-bold transition-colors sm:min-h-10 ${
                         tipo === opcion.valor
                           ? 'bg-prolimal-teal-700 text-white dark:bg-prolimal-teal-400 dark:text-prolimal-ink-900'
                           : 'text-prolimal-ink-500 hover:text-prolimal-teal-700 dark:text-prolimal-ink-200'

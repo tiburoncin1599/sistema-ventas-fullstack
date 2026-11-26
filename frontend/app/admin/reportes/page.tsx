@@ -646,8 +646,11 @@ export default function AdminReportes() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px]">
+            <p className="mb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+              Deslizá para ver más columnas →
+            </p>
+            <div className="scrollbar-hide overflow-x-auto">
+              <table className="w-full min-w-[620px] lg:min-w-[700px]">
                 <thead>
                   <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                     <th className={th}>Fecha</th>
@@ -731,8 +734,11 @@ export default function AdminReportes() {
 
             {historialAbierto && (
               <div className="border-t border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px]">
+                <p className="mb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden dark:text-prolimal-ink-300">
+                  Deslizá para ver más columnas →
+                </p>
+                <div className="scrollbar-hide overflow-x-auto">
+                  <table className="w-full min-w-[680px] lg:min-w-[760px]">
                     <thead>
                       <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                         <th className={th}>Fecha</th>

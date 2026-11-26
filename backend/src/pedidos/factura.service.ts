@@ -205,6 +205,15 @@ export class FacturaService {
         doc.fillColor(gray).font('Helvetica').fontSize(10);
         doc.text(`Estado: ${data.pedido.estado}`, { align: 'center' });
 
+        if (data.pedido.referencia_transaccion) {
+          doc.moveDown(0.4);
+          doc.fillColor(gray).font('Helvetica').fontSize(9);
+          doc.text(
+            `Referencia de pago: ${data.pedido.referencia_transaccion}`,
+            { align: 'center' },
+          );
+        }
+
         // Términos y condiciones
         if (cfg.terminos_condiciones) {
           doc.moveDown(1);

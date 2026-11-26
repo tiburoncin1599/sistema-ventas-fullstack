@@ -195,8 +195,11 @@ export default function AdminVentas() {
         <div className="border-b border-prolimal-ink-900/5 px-6 py-4 dark:border-prolimal-sand-100/10">
           <h2 className="text-sm font-extrabold uppercase tracking-[0.14em] text-prolimal-ink-600 dark:text-prolimal-ink-200">Detalle por vendedor</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+        <p className="px-3 pb-2 text-[11px] font-medium text-prolimal-ink-400 md:hidden sm:px-6 dark:text-prolimal-ink-300">
+          Deslizá para ver más columnas →
+        </p>
+        <div className="scrollbar-hide overflow-x-auto">
+          <table className="w-full min-w-[600px] lg:min-w-[640px]">
             <thead>
               <tr className="border-b border-prolimal-ink-900/5 dark:border-prolimal-sand-100/10">
                 {['Personal', 'Pedidos', 'Total vendido', 'Promedio', 'Detalle'].map((h) => (

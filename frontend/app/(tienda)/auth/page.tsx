@@ -443,7 +443,7 @@ function AuthContent() {
                       type="button"
                       onClick={() => setVerPassword(!verPassword)}
                       aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:hover:bg-prolimal-ink-700 dark:hover:text-prolimal-sand-100"
+                      className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-prolimal-ink-400 transition-colors hover:bg-prolimal-sand-100 hover:text-prolimal-ink-700 dark:hover:bg-prolimal-ink-700 dark:hover:text-prolimal-sand-100"
                     >
                       {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>

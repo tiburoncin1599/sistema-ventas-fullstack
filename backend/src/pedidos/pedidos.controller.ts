@@ -20,6 +20,7 @@ import { ActualizarEstadoDto } from './dto/actualizar-estado.dto';
 import { AgregarItemsDto } from './dto/agregar-items.dto';
 import { ActualizarItemDto } from './dto/actualizar-item.dto';
 import { AsignarVendedorDto } from './dto/asignar-vendedor.dto';
+import { ConfirmarPagoSandboxDto } from './dto/confirmar-pago-sandbox.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -257,6 +258,28 @@ export class PedidosController {
       id: pedido.id,
       pedidoId: pedido.id,
     };
+  }
+
+  /**
+   * Simulación de pasarela: el cliente confirma su propio pedido después de
+   * "escanear" el QR o rellenar la tarjeta de prueba. La operación es atómica,
+   * no descuenta stock dos veces y es idempotente por referencia.
+   */
+  @Post(':id/confirmar-pago-sandbox')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.ADMIN, ROLES.INVENTARIO, ROLES.VENTAS, ROLES.CLIENTE)
+  async confirmarPagoSandbox(
+    @Param('id') id: string,
+    @Body() body: ConfirmarPagoSandboxDto,
+    @Req() req: Request,
+  ) {
+    await this.verificarAcceso(+id, req.user as { id: number; rol: string });
+    const resultado = await this.pedidosService.confirmarPagoSandbox(
+      +id,
+      body,
+      this.auditor(req),
+    );
+    return { mensaje: 'Pago sandbox confirmado correctamente', ...resultado };
   }
 
   /** Parsea fechas de query y las rechaza explícitamente cuando no son válidas. */

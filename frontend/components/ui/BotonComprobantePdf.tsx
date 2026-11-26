@@ -57,7 +57,7 @@ export default function BotonComprobantePdf({
   const clases =
     className ??
     (compacta
-      ? 'inline-flex items-center justify-center gap-1.5 rounded-full border border-prolimal-teal-500/40 bg-prolimal-teal-50 px-3 py-1.5 text-xs font-bold text-prolimal-teal-700 transition-colors hover:bg-prolimal-teal-100 disabled:opacity-50 dark:border-prolimal-teal-400/30 dark:bg-prolimal-teal-900/20 dark:text-prolimal-teal-300 dark:hover:bg-prolimal-teal-900/40'
+      ? 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-prolimal-teal-500/40 bg-prolimal-teal-50 px-3 py-2 text-xs font-bold text-prolimal-teal-700 transition-colors hover:bg-prolimal-teal-100 disabled:opacity-50 dark:border-prolimal-teal-400/30 dark:bg-prolimal-teal-900/20 dark:text-prolimal-teal-300 dark:hover:bg-prolimal-teal-900/40'
       : 'prolimal-btn-secondary');
 
   return (
